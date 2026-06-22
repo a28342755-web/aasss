@@ -17,7 +17,13 @@ jobs:
       - name: Prepare Astra Local AI project
         shell: bash
         run: |
-          if [ -f astra-project.b64 ]; then
+          if compgen -G "astra-project.part*" > /dev/null; then
+            cat astra-project.part* | base64 --decode > astra-project.zip
+            rm -rf .astra-build
+            mkdir .astra-build
+            unzip -q astra-project.zip -d .astra-build
+            echo "PROJECT_DIR=$GITHUB_WORKSPACE/.astra-build/AstraLocalAI" >> "$GITHUB_ENV"
+          elif [ -f astra-project.b64 ]; then
             base64 --decode astra-project.b64 > astra-project.zip
             rm -rf .astra-build
             mkdir .astra-build
