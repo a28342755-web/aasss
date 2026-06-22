@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Astra Local AI APK
 
 on:
   push:
@@ -10,8 +10,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare Astra Local AI project
+        shell: bash
+        run: |
+          if [ -f astra-project.b64 ]; then
+            base64 --decode astra-project.b64 > astra-project.zip
+            rm -rf .astra-build
+            mkdir .astra-build
+            unzip -q astra-project.zip -d .astra-build
+            echo "PROJECT_DIR=$GITHUB_WORKSPACE/.astra-build/AstraLocalAI" >> "$GITHUB_ENV"
+          else
+            echo "PROJECT_DIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -20,19 +34,25 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses >/dev/null || true
+
+      - name: Install Android native toolchain
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.13113456" "cmake;3.31.6"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
 
       - name: Build installable APK
-        run: |
-          gradle :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk AsterAI.apk
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" AstraLocalAI.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AsterAI-Android
-          path: AsterAI.apk
+          name: AstraLocalAI-Android
+          path: AstraLocalAI.apk
+          if-no-files-found: error
