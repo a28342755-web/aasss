@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Aster AI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="settings" id="settingsPanel" aria-hidden="true">
+      <div class="sheet-grabber"></div>
+      <div class="sheet-title-row">
+        <div>
+          <strong>연결 및 모델 설정</strong>
+          <p>같은 와이파이의 Ollama PC에 연결합니다.</p>
+        </div>
+        <button id="closeSettings" class="plain-button" type="button">닫기</button>
+      </div>
+
+      <label for="serverUrl">Ollama 서버 주소</label>
+      <div class="input-row">
+        <input id="serverUrl" inputmode="url" value="http://192.168.0.2:11434" spellcheck="false" />
+        <button id="testConnection" type="button">확인</button>
+      </div>
+      <small>예: http://192.168.0.2:11434</small>
+
+      <label for="modelInput">모델</label>
+      <input id="modelInput" list="modelList" value="qwen3:8b" spellcheck="false" />
+      <datalist id="modelList"></datalist>
+
+      <label for="systemPrompt">시스템 프롬프트</label>
+      <textarea id="systemPrompt" rows="5">당신은 정확하고 논리적인 한국어 AI 어시스턴트입니다. 핵심부터 설명하고 사실과 추측을 구분합니다.</textarea>
+
+      <div class="split-row">
+        <label for="temperature">창의성 <output id="temperatureValue">0.6</output></label>
+        <label for="maxTokens">최대 출력</label>
+      </div>
+      <div class="split-row controls-row">
+        <input id="temperature" type="range" min="0" max="1.5" step="0.1" value="0.6" />
+        <select id="maxTokens">
+          <option value="1024">1,024</option>
+          <option value="2048" selected>2,048</option>
+          <option value="4096">4,096</option>
+          <option value="8192">8,192</option>
+        </select>
+      </div>
+
+      <div class="connection-status" id="connectionStatus">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">서버 주소를 확인하세요.</span>
+      </div>
+    </aside>
+    <div class="backdrop" id="backdrop"></div>
+
+    <header class="topbar">
+      <div class="brand-mark">A</div>
+      <div class="title-block">
+        <strong>Aster AI</strong>
+        <span id="modelSubtitle">qwen3:8b</span>
+      </div>
+      <button id="newChatButton" class="header-button" type="button" aria-label="새 대화">＋</button>
+      <button id="settingsButton" class="header-button" type="button" aria-label="설정">⚙</button>
+    </header>
+
+    <main class="conversation" id="conversation" aria-live="polite">
+      <section class="welcome" id="welcome">
+        <div class="welcome-orb">A</div>
+        <h1>무엇을 도와드릴까요?</h1>
+        <p>PC의 Ollama 모델을 휴대폰에서 사용할 수 있습니다.</p>
+        <div class="suggestions">
+          <button type="button" data-prompt="이 내용을 핵심부터 구조적으로 설명해줘: 인공지능의 작동 원리">개념 설명</button>
+          <button type="button" data-prompt="파이썬으로 간단한 할 일 관리 프로그램을 만들어줘.">코드 작성</button>
+          <button type="button" data-prompt="3D 프린터 출력 품질을 개선하는 점검 순서를 알려줘.">3D 프린터 점검</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="composer-area">
+      <form class="composer" id="chatForm">
+        <textarea id="messageInput" rows="1" maxlength="30000" placeholder="메시지를 입력하세요"></textarea>
+        <button class="send-button" id="sendButton" type="submit" aria-label="보내기">↑</button>
+        <button class="stop-button hidden" id="stopButton" type="button" aria-label="중지">■</button>
+      </form>
+      <div class="composer-note">AI의 답변은 부정확할 수 있습니다.</div>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
