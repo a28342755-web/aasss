@@ -1,0 +1,1 @@
+Build the offline Astra Local AI Android application from the uploaded project chunks.
