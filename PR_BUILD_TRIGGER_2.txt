@@ -1,0 +1,1 @@
+Trigger the pull request APK workflow after PR creation.
