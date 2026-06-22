@@ -1,0 +1,1 @@
+Close pull request 2 after successful artifact creation.
