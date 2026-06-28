@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Click Sprint</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="game">
+      <header class="game__header">
+        <div>
+          <p class="game__label">Score</p>
+          <p class="game__value" id="score">0</p>
+        </div>
+        <div>
+          <p class="game__label">Time</p>
+          <p class="game__value" id="time">30</p>
+        </div>
+        <div>
+          <p class="game__label">Best</p>
+          <p class="game__value" id="best">0</p>
+        </div>
+      </header>
+
+      <section class="arena" id="arena" aria-live="polite">
+        <button class="target" id="target" type="button">Hit!</button>
+      </section>
+
+      <section class="controls">
+        <button class="primary" id="start" type="button">Start Game</button>
+        <button class="ghost" id="reset" type="button">Reset Best</button>
+      </section>
+
+      <section class="rules">
+        <h2>How to Play</h2>
+        <ul>
+          <li>Press start and click the target as fast as you can.</li>
+          <li>The target moves after every hit.</li>
+          <li>Try to beat your best score before time runs out.</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
