@@ -3,8 +3,8 @@
 A full-length (2:36.65) motion-graphics music video for **"I'm Upping My P(Doom)"**, lyrics by osmarks et al.
 
 **Deliverables**
-- [`pdoom_motion_full.mp4`](pdoom_motion_full.mp4): the full song, 1920×1080, 60 fps, H.264. Encoded under 100 MB so it fits a normal git push.
-- `pdoom_motion_full_hq.mp4`: the same video at 16 Mbps (Git LFS), for editing and uploading.
+- [`pdoom_motion_full.mp4`](pdoom_motion_full.mp4): the full song, 1920×1080, 60 fps, H.264. Encoded under 100 MB (2-pass, about 4.8 Mbps) so it fits a normal git push.
+- A 16 Mbps high-quality encode is produced by `finish_full.sh` (`out/pdoom_motion_full_hq.mp4`). It is not committed because it exceeds GitHub's 100 MB per-file limit.
 - [`pdoom_motion.mp4`](pdoom_motion.mp4): the original 20-second chorus cut (0:16.57 → 0:36.57).
 
 Every frame is generated procedurally by code. There is no footage and no template, and nothing sits on the frame borders. Every lyric cue is locked to its vocal onset on the song's 132 BPM grid. The audio-reactive parts (pulses, the ECG, the polygraph, the iris spectrum, the finale cut flashes) are driven by the song's real per-frame spectrum.
