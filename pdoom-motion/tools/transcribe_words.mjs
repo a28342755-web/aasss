@@ -1,0 +1,12 @@
+import { pipeline, env } from '@huggingface/transformers';
+import fs from 'fs';
+env.allowRemoteModels = false;
+env.localModelPath = new URL('./models/', import.meta.url).pathname;
+const mode = process.argv[2] || 'seg';
+const file = process.argv[3] || 'audio16k.f32';
+const buf = fs.readFileSync(new URL(file, import.meta.url));
+const audio = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength/4);
+const asr = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small', { dtype: 'q8' });
+const out = await asr(audio, { chunk_length_s: 30, stride_length_s: 5, return_timestamps: mode==='word' ? 'word' : true, language: 'english', task: 'transcribe' });
+fs.writeFileSync(new URL(`asr_${mode}.json`, import.meta.url), JSON.stringify(out, null, 1));
+for (const c of out.chunks) console.log(`[${c.timestamp[0]?.toFixed(2)} - ${c.timestamp[1]?.toFixed(2)}] ${c.text}`);
