@@ -112,22 +112,24 @@ export function noise3(x, y, z) {
 export const noise2 = (x, y) => noise3(x, y, 0.5);
 
 // ---------- music time ----------
-export const BPM = 132, SPB = 60 / BPM, T0 = 0.0503; // first downbeat in video time
-export const beatAt = (n) => T0 + n * SPB;         // n in beats (fractional ok)
-export const beatPos = (t) => (t - T0) / SPB;
-export const barAt = (k) => T0 + k * 4 * SPB;
+// Scenes run in their own local clock; AF.off maps local time -> song time (song = local + off).
+export const BPM = 132, SPB = 60 / BPM, T0S = 0.2575;     // first downbeat of the song (song time)
+export const AF = { data: null, off: 0 };
+export const T0 = T0S;                                     // kept for compatibility
+export const beatPos = (t) => (t + AF.off - T0S) / SPB;
+export const beatAt = (n) => T0S + n * SPB - AF.off;
+export const barAt = (k) => T0S + k * 4 * SPB - AF.off;
 
-// audio features (60 fps), interpolated
-export const AF = { data: null };
+// audio features (60 fps, song time), interpolated
 export function feat(name, t) {
   const d = AF.data; if (!d) return 0;
-  const arr = d[name]; const f = clamp(t * d.fps, 0, d.n - 1.001);
+  const arr = d[name]; const f = clamp((t + AF.off) * d.fps, 0, d.n - 1.001);
   const i = Math.floor(f), k = f - i;
   return lerp(arr[i], arr[i + 1], k);
 }
 export function band(t, b) {
   const d = AF.data; if (!d) return 0;
-  const f = clamp(t * d.fps, 0, d.n - 1.001); const i = Math.floor(f), k = f - i;
+  const f = clamp((t + AF.off) * d.fps, 0, d.n - 1.001); const i = Math.floor(f), k = f - i;
   return lerp(d.bands[i][b], d.bands[i + 1][b], k);
 }
 

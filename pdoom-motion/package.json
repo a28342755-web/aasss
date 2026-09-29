@@ -2,12 +2,13 @@
   "name": "pdoom-motion",
   "version": "1.0.0",
   "private": true,
-  "description": "20-second kinetic-typography / animated-infographic music video for \"I'm Upping My P(Doom)\", rendered frame-by-frame in headless Chromium (WebGL2 + Canvas2D).",
+  "description": "Full-length (2:36) kinetic-typography / animated-infographic music video for \"I'm Upping My P(Doom)\", rendered frame-by-frame in headless Chromium (WebGL2 + Canvas2D).",
   "type": "module",
   "scripts": {
     "build:fontkit": "esbuild fk_entry.js --bundle --format=iife --platform=browser --outfile=fontkit.bundle.js --define:process.env.NODE_ENV='\"production\"'",
-    "stills": "node render.mjs --stills=0.5,3.7,7.7,9.2,11.3,12.9,15.6,18.8",
-    "render": "SUB=4 ./render_all.sh"
+    "stills": "node render.mjs --stills=4.6,24.2,43.5,63.9,98.5,112.9,127.9,151.5",
+    "render": "mkdir -p out/full && WORKERS=4 SUB=3 node render_pool.mjs && ./finish_full.sh",
+    "render:chorus": "SUB=4 ./render_all.sh"
   },
   "dependencies": {
     "esbuild": "^0.28.2",

@@ -167,7 +167,7 @@ export default {
     p.uZoomBlur = 1.2 * pulse(t, Q.eyes, 0.16); p.uZoomC = [EX / 1920, EY / 1080];
     p.uBloomAmt = 0.65 + 0.6 * pulse(t, Q.eyes, 0.5);
     p.uGlitch = t > Q.eyes && t < Q.eyes + 0.06 ? 0.5 : 0; p.uGlitchSeed = Math.floor(t * 40);
-    p.uFade = E.inQuad(inv(19.9, 20.0, t));
+    p.uFade = S.full ? 0 : E.inQuad(inv(19.9, 20.0, t));
     p.uVig = 0.6 + 0.3 * inv(19.4, 19.9, t);
   },
 };

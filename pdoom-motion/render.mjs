@@ -14,6 +14,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[page]', m.text()); });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+if (args.cut) await page.addInitScript((c) => { window.CUT = c; }, String(args.cut));
 await page.goto(`http://localhost:${port}/index.html`);
 await page.waitForFunction(() => window.ready === true);
 await page.evaluate(() => window.setup());
@@ -28,7 +29,7 @@ if (args.stills) {
     await new Promise((r) => p.on('close', r)); console.log('still', ts, Date.now() - t0, 'ms');
   }
 } else {
-  const from = +(args.from || 0), to = +(args.to || 20);
+  const from = +(args.from || 0), to = +(args.to || (args.cut === 'chorus' ? 20 : 156.65));
   const f0 = Math.round(from * FPS), f1 = Math.round(to * FPS);
   const out = args.out || 'out/video.mp4';
   const enc = ff(['-c:v', 'libx264', '-preset', args.preset || 'slow', '-crf', String(args.crf || 12), '-pix_fmt', 'yuv420p', '-x264-params', 'aq-mode=3', out]);

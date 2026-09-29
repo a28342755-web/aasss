@@ -2,3 +2,4 @@ node_modules/
 out/
 fontkit.bundle.js
 data/master.wav
+data/master_full.wav

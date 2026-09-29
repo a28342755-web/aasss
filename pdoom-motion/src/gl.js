@@ -310,5 +310,5 @@ export const POST_DEFAULT = () => ({
   uKal: 0, uKalN: 6, uKalRot: 0, uKalZoom: 1, uWarp: 0, uZoomBlur: 0, uZoomC: [0.5, 0.5], uGlitch: 0, uGlitchSeed: 0,
   uCA: 0.0015, uBarrel: 0, uRipple: 0, uRippleC: [0.5, 0.5], uRippleT: 0,
   uBloomAmt: 0.55, uBloomThr: 0.88, uBloomTint: [1, 1, 1], uFlash: 0, uFlashCol: [1, 1, 1], uInvert: 0, uVig: 0.55,
-  uGrain: 0.045, uExposure: 1, uSat: 1, uFade: 0, uScanl: 0,
+  uGrain: 0.032, uExposure: 1, uSat: 1, uFade: 0, uScanl: 0,
 });
