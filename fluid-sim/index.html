@@ -817,7 +817,7 @@ void main() {
 function visFS(defs, bc) {
   // visualisation-only fields; gradients use central differences with 1-2-1 transverse smoothing (3D Sobel)
   // so the Q-criterion, a squared-gradient quantity, does not light up grid-scale acoustic noise
-  return header(defs) + `
+  return header(defs) + SCENE_GLSL + `
 uniform sampler2D uM, uG;
 uniform float uU, uL;
 layout(location = 0) out vec4 o0;
@@ -849,7 +849,10 @@ void main() {
   float w2 = dot(O[0], O[0]) + dot(O[1], O[1]) + dot(O[2], O[2]);
   vec3 w = vec3(gy.z - gz.y, gz.x - gx.z, gx.y - gy.x);
   float tU = uL / uU;
-  o0 = vec4(0.5 * (w2 - s2) * tU * tU, length(w) * tU, uc.x / uU, (2.0 / 3.0) * m.x / (uU * uU));
+  // the stencil straddles the wall within ~2 cells and would paint a false vortex shell on the body
+  float qv = 0.5 * (w2 - s2) * tU * tU;
+  if (qv > 0.0) qv *= smoothstep(1.0, 2.5, sceneF(vec3(p)));
+  o0 = vec4(qv, length(w) * tU, uc.x / uU, (2.0 / 3.0) * m.x / (uU * uU));
   o1 = vec4(length(uc) / uU, uc.y / uU, uc.z / uU, 1.0);
 }
 `;
@@ -1564,6 +1567,7 @@ function computeFields(fp) {
   run(sim.progs.vis, sim.visFbo, sim.AW, sim.AH, (u, bind) => {
     bind('uM', sim.macro); bind('uG', sim.geom);
     gl.uniform1f(u.uU, fp.U); gl.uniform1f(u.uL, sim.L);
+    sceneUniforms(u);
   });
 }
 
