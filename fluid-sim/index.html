@@ -1,0 +1,2136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LBM 3D 풍동</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: full-bleed WebGL test section; instrument readout pinned top-left, control rack on the right (bottom sheet on phones). */
+:root {
+  color-scheme: dark;
+  --ground: #070b10;
+  --panel: rgba(11, 17, 24, 0.86);
+  --well: #131c26;
+  --line: #233140;
+  --text: #dbe4ec;
+  --muted: #8597a9;
+  --amber: #f2b13e;
+  --amber-ink: #1b1406;
+  --cyan: #67c4d8;
+  --ok: #72cf8f;
+  --warn: #f19a4b;
+  --bad: #ee6a5c;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 6px;
+  --gap: 12px;
+  --panel-w: 300px;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--ground); color: var(--text); font: 13px/1.45 var(--font-ui); overflow: hidden; -webkit-font-smoothing: antialiased; }
+#app { position: fixed; inset: 0; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#view.dragging { cursor: grabbing; }
+
+.overlay { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+
+/* ── readout ── */
+.readout { top: calc(var(--gap) + env(safe-area-inset-top, 0px)); left: var(--gap); width: 320px; padding: 12px 14px; display: grid; gap: 10px; max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; box-sizing: border-box; }
+.ro-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.eyebrow { font: 500 10.5px/1.2 var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 3px 0 0; font: 600 18px/1.2 var(--font-ui); letter-spacing: -0.01em; text-wrap: balance; }
+.chip { font: 500 11px/1 var(--font-data); padding: 5px 8px; border-radius: 999px; border: 1px solid currentColor; color: var(--ok); white-space: nowrap; }
+.chip[data-s="pause"] { color: var(--muted); }
+.chip[data-s="warm"] { color: var(--amber); }
+.chip[data-s="steady"] { color: var(--cyan); }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.metric { display: grid; gap: 2px; align-content: start; padding: 7px 8px; background: var(--well); border-radius: 4px; min-width: 0; }
+.metric .k { font: 500 11px/1.2 var(--font-data); color: var(--muted); }
+.metric .v { font: 500 19px/1.15 var(--font-data); color: var(--amber); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric .r { font: 400 10.5px/1.35 var(--font-data); color: var(--muted); min-height: 2.7em; overflow-wrap: anywhere; }
+.metric .r .good { color: var(--ok); }
+.metric .r .off { color: var(--warn); }
+.chart-wrap { display: grid; gap: 4px; }
+#chart { width: 100%; height: 92px; display: block; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font: 400 10.5px/1.2 var(--font-data); color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; background: var(--amber); }
+.legend .lg-cl::before { background: var(--cyan); }
+.legend .lg-x::before { display: none; }
+.legend .lg-ref::before { background: repeating-linear-gradient(90deg, var(--text) 0 3px, transparent 3px 6px); }
+details summary { cursor: pointer; font: 500 10.5px/1.2 var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸ "; }
+details[open] summary::before { content: "▾ "; }
+dl.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 14px; margin: 8px 0 0; }
+dl.grid div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border-bottom: 1px dotted var(--line); padding: 2px 0; min-width: 0; }
+dt { color: var(--muted); font: 400 11px/1.3 var(--font-data); white-space: nowrap; }
+dd { margin: 0; font: 500 11.5px/1.3 var(--font-data); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.regime { margin: 0; font-size: 12.5px; }
+.regime b { font-weight: 500; color: var(--cyan); }
+.flags { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.flags:empty { display: none; }
+.flags li { font-size: 11.5px; line-height: 1.4; padding: 4px 8px 4px 10px; border-left: 2px solid var(--warn); background: rgba(241, 154, 75, 0.08); }
+.flags li[data-l="bad"] { border-color: var(--bad); background: rgba(238, 106, 92, 0.1); }
+.flags li[data-l="info"] { border-color: var(--cyan); background: rgba(103, 196, 216, 0.08); }
+
+/* ── control rack ── */
+.panel { top: calc(var(--gap) + env(safe-area-inset-top, 0px)); right: var(--gap); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px)); width: var(--panel-w); display: flex; flex-direction: column; box-sizing: border-box; }
+.panel-body { overflow-y: auto; padding: 2px 14px 14px; display: grid; gap: 14px; align-content: start; }
+.group { display: grid; gap: 10px; }
+.group h2 { margin: 12px 0 0; font: 500 10.5px/1.2 var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.field { display: grid; gap: 5px; min-width: 0; }
+.field > .lbl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.field b { font: 500 12px/1 var(--font-data); color: var(--amber); }
+.field small { color: var(--muted); font: 400 10.5px/1.35 var(--font-data); }
+select { appearance: none; -webkit-appearance: none; width: 100%; background: var(--well) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238597a9' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 9px center; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 7px 26px 7px 9px; font: 12.5px/1.3 var(--font-ui); }
+input[type="range"] { width: 100%; margin: 2px 0; accent-color: var(--amber); }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+.seg label { flex: 1; text-align: center; padding: 6px 4px; font-size: 12px; cursor: pointer; color: var(--muted); background: var(--well); border-right: 1px solid var(--line); white-space: nowrap; }
+.seg label:last-of-type { border-right: 0; }
+.seg input:checked + label { background: var(--amber); color: var(--amber-ink); font-weight: 600; }
+.seg input:focus-visible + label { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.picks { display: flex; gap: 4px; flex-wrap: wrap; }
+.picks button { padding: 3px 7px; font: 500 11px/1.2 var(--font-data); color: var(--muted); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; cursor: pointer; }
+.check input { accent-color: var(--amber); width: 15px; height: 15px; margin: 0; }
+.actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding-top: 4px; }
+button { font: 500 12px/1.2 var(--font-ui); color: var(--text); background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 8px 6px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); font-weight: 600; }
+button:focus-visible, select:focus-visible, input[type="range"]:focus-visible, .check input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.note { font-size: 11.5px; line-height: 1.55; color: var(--muted); margin: 0; }
+.note b { color: var(--text); font-weight: 500; }
+.sheet-handle { display: none; }
+
+/* ── colour scale ── */
+.scales { right: calc(var(--panel-w) + 2 * var(--gap)); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px)); padding: 8px 12px; display: grid; gap: 8px; width: 250px; box-sizing: border-box; }
+.scale { display: grid; gap: 3px; }
+.scale .nm { font: 500 10.5px/1.2 var(--font-data); color: var(--muted); }
+.scale .bar { height: 7px; border-radius: 2px; }
+.scale .ends { display: flex; justify-content: space-between; font: 400 10.5px/1 var(--font-data); color: var(--text); font-variant-numeric: tabular-nums; }
+
+.toast { left: 50%; top: calc(var(--gap) + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 8px 14px; font-size: 12.5px; border-color: var(--warn); max-width: min(520px, calc(100% - 32px)); box-sizing: border-box; }
+.fatal { inset: 0; display: grid; place-items: center; padding: 24px; background: var(--ground); z-index: 5; border: 0; border-radius: 0; }
+.fatal div { max-width: 520px; display: grid; gap: 10px; }
+.fatal h2 { margin: 0; font: 600 18px/1.3 var(--font-ui); }
+.fatal p { margin: 0; color: var(--muted); }
+
+@media (max-width: 1100px) {
+  .scales { right: auto; left: calc(320px + 2 * var(--gap)); }
+}
+@media (max-width: 760px) {
+  :root { --gap: 8px; }
+  .readout { left: var(--gap); right: var(--gap); width: auto; padding: 10px 12px; gap: 8px; max-height: 46%; }
+  h1 { font-size: 16px; }
+  .metric .v { font-size: 17px; }
+  #chart { height: 64px; }
+  .legend, .flags li[data-l="info"] { display: none; }
+  .metric .r { min-height: 0; }
+  .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 72%; border-radius: 12px 12px 0 0; border-bottom: 0; transform: translateY(calc(100% - 46px - env(safe-area-inset-bottom, 0px))); transition: transform 0.25s ease; }
+  .panel.open { transform: translateY(0); }
+  .panel-body { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .sheet-handle { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; border: 0; border-radius: 12px 12px 0 0; background: transparent; padding: 8px 0 10px; font: 500 12.5px/1 var(--font-ui); color: var(--text); }
+  .sheet-handle::before { content: ""; width: 38px; height: 4px; border-radius: 2px; background: var(--line); }
+  .scales { left: var(--gap); right: var(--gap); width: auto; bottom: calc(54px + env(safe-area-inset-bottom, 0px)); padding: 6px 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { .panel { transition: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="view" aria-label="3차원 유동장 시각화. 드래그로 회전, 휠 또는 두 손가락으로 확대"></canvas>
+
+  <section class="overlay readout" id="readout" aria-label="측정값">
+    <div class="ro-head">
+      <div>
+        <div class="eyebrow">D3Q19 격자 볼츠만 · GPU</div>
+        <h1 id="title">LBM 3D 풍동</h1>
+      </div>
+      <span class="chip" id="runChip" data-s="warm">준비 중</span>
+    </div>
+    <div class="metrics">
+      <div class="metric"><span class="k">⟨C<sub>D</sub>⟩</span><span class="v" id="mCd">—</span><span class="r" id="mCdRef">—</span></div>
+      <div class="metric"><span class="k" id="mClK">C<sub>L</sub></span><span class="v" id="mCl">—</span><span class="r" id="mClRef">—</span></div>
+      <div class="metric"><span class="k">St</span><span class="v" id="mSt">—</span><span class="r" id="mStRef">—</span></div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chart" aria-label="항력·양력 계수 시간 이력"></canvas>
+      <div class="legend"><span>C<sub>D</sub>(t)</span><span class="lg-cl">C<sub>L</sub>(t)</span><span class="lg-ref">기준 C<sub>D</sub></span><span class="lg-x" id="chartX">가로축 t·U/L</span></div>
+    </div>
+    <p class="regime" id="regime"></p>
+    <details id="roDetails" open>
+      <summary>수치 상태</summary>
+      <dl class="grid">
+        <div><dt>Re</dt><dd id="dRe">—</dd></div>
+        <div><dt>t·U/L</dt><dd id="dT">—</dd></div>
+        <div><dt>τ</dt><dd id="dTau">—</dd></div>
+        <div><dt>스텝</dt><dd id="dStep">—</dd></div>
+        <div><dt>ν 격자</dt><dd id="dNu">—</dd></div>
+        <div><dt>MLUPS</dt><dd id="dPerf">—</dd></div>
+        <div><dt>Ma 최대</dt><dd id="dMa">—</dd></div>
+        <div><dt>|Δρ| 최대</dt><dd id="dDr">—</dd></div>
+        <div><dt>⟨ρ⟩−1</dt><dd id="dRho">—</dd></div>
+        <div><dt>스텝/프레임</dt><dd id="dSpf">—</dd></div>
+      </dl>
+    </details>
+    <ul class="flags" id="flags"></ul>
+  </section>
+
+  <aside class="overlay panel" id="panel" aria-label="시뮬레이션 제어">
+    <button class="sheet-handle" id="sheetHandle" type="button" aria-expanded="false" aria-controls="panelBody">제어판</button>
+    <div class="panel-body" id="panelBody">
+      <section class="group">
+        <h2>실험 조건</h2>
+        <label class="field" for="scene"><span class="lbl">형상</span>
+          <select id="scene">
+            <option value="sphere">구 — 항력 곡선 검증</option>
+            <option value="cylinder">원기둥 — 카르만 와열</option>
+            <option value="wing">NACA 0012 날개 — 익단 와류</option>
+            <option value="ahmed">Ahmed 차체 (후면 25°)</option>
+          </select>
+        </label>
+        <div class="field"><span class="lbl">격자 해상도</span>
+          <div class="seg" role="radiogroup" aria-label="격자 해상도">
+            <input type="radio" name="res" id="resLow" value="low"><label for="resLow">저</label>
+            <input type="radio" name="res" id="resMid" value="mid"><label for="resMid">중</label>
+            <input type="radio" name="res" id="resHigh" value="high"><label for="resHigh">고</label>
+          </div>
+          <small id="resInfo">—</small>
+        </div>
+        <label class="field" for="re"><span class="lbl">레이놀즈 수 Re <b id="reVal">—</b></span>
+          <input type="range" id="re" min="0" max="1000" step="1">
+        </label>
+        <div class="picks" id="rePicks" aria-label="대표 레이놀즈 수"></div>
+        <label class="field" for="ma"><span class="lbl"><span>격자 마하수 U/c<sub>s</sub></span> <b id="maVal">—</b></span>
+          <input type="range" id="ma" min="0.04" max="0.2" step="0.01">
+          <small>낮을수록 압축성 오차(∝Ma²)가 작고 계산은 느려집니다. 바꾸면 초기화됩니다.</small>
+        </label>
+        <label class="field" for="aoa" id="aoaField"><span class="lbl">받음각 α <b id="aoaVal">—</b></span>
+          <input type="range" id="aoa" min="-6" max="20" step="1">
+        </label>
+      </section>
+
+      <section class="group">
+        <h2>수치 기법</h2>
+        <label class="field" for="model"><span class="lbl">충돌 연산자</span>
+          <select id="model">
+            <option value="trt">TRT, 마법 매개변수 Λ = 3/16</option>
+            <option value="reg">정규화 BGK (고차 모드 필터)</option>
+            <option value="bgk">BGK 단일 이완</option>
+          </select>
+        </label>
+        <div class="field"><span class="lbl">Smagorinsky LES</span>
+          <div class="seg" role="radiogroup" aria-label="난류 모델">
+            <input type="radio" name="les" id="lesAuto" value="auto"><label for="lesAuto">자동</label>
+            <input type="radio" name="les" id="lesOn" value="on"><label for="lesOn">켜기</label>
+            <input type="radio" name="les" id="lesOff" value="off"><label for="lesOff">끄기</label>
+          </div>
+        </div>
+        <label class="field" for="cs"><span class="lbl"><span>Smagorinsky 상수 C<sub>s</sub></span> <b id="csVal">—</b></span>
+          <input type="range" id="cs" min="0.05" max="0.2" step="0.01">
+        </label>
+        <div class="field"><span class="lbl">곡면 경계</span>
+          <div class="seg" role="radiogroup" aria-label="곡면 경계 처리">
+            <input type="radio" name="bnd" id="bndBz" value="1"><label for="bndBz">Bouzidi 보간</label>
+            <input type="radio" name="bnd" id="bndBb" value="0"><label for="bndBb">계단 반사</label>
+          </div>
+          <small>보간: 부호거리함수 근으로 셀 이하 벽 위치 반영(2차). 계단: 반셀 반사(1차).</small>
+        </div>
+        <div class="field"><span class="lbl">분포함수 저장 정밀도</span>
+          <div class="seg" role="radiogroup" aria-label="저장 정밀도">
+            <input type="radio" name="prec" id="precF32" value="0"><label for="precF32">FP32</label>
+            <input type="radio" name="prec" id="precF16" value="1"><label for="precF16">FP16 (메모리 ½)</label>
+          </div>
+        </div>
+        <label class="field" for="spf"><span class="lbl">프레임당 스텝 <b id="spfVal">자동</b></span>
+          <input type="range" id="spf" min="0" max="48" step="1">
+        </label>
+      </section>
+
+      <section class="group">
+        <h2>시각화</h2>
+        <label class="field" for="vis"><span class="lbl">유동 구조</span>
+          <select id="vis">
+            <option value="q">Q-criterion 와류 등위면</option>
+            <option value="vort">와도 크기 |ω| 볼륨</option>
+            <option value="wake">속도 결손 1−u/U 볼륨</option>
+            <option value="none">표시 안 함</option>
+          </select>
+        </label>
+        <label class="field" for="thr"><span class="lbl" id="thrLbl">임계값 <b id="thrVal">—</b></span>
+          <input type="range" id="thr" min="0" max="1000" step="1">
+        </label>
+        <label class="field" for="opac"><span class="lbl">불투명도 <b id="opacVal">—</b></span>
+          <input type="range" id="opac" min="0" max="1" step="0.01">
+        </label>
+        <label class="field" for="isoColor"><span class="lbl">등위면 색</span>
+          <select id="isoColor">
+            <option value="0">속도 크기 |u|/U</option>
+            <option value="1">유동 방향 속도 u/U</option>
+            <option value="2">압력 계수 C<sub>p</sub></option>
+          </select>
+        </label>
+        <label class="field" for="slice"><span class="lbl">단면</span>
+          <select id="slice">
+            <option value="0">없음</option>
+            <option value="3">XY 평면 (z 고정)</option>
+            <option value="2">XZ 평면 (y 고정)</option>
+            <option value="1">YZ 평면 (x 고정)</option>
+          </select>
+        </label>
+        <label class="field" for="sliceField"><span class="lbl">단면 물리량</span>
+          <select id="sliceField">
+            <option value="0">속도 크기 |u|/U</option>
+            <option value="1">유동 방향 속도 u/U</option>
+            <option value="2">와도 크기 |ω|L/U</option>
+            <option value="3">압력 계수 Cp</option>
+            <option value="4">Q·(L/U)²</option>
+          </select>
+        </label>
+        <label class="field" for="slicePos"><span class="lbl">단면 위치 <b id="slicePosVal">—</b></span>
+          <input type="range" id="slicePos" min="0" max="1" step="0.005">
+        </label>
+        <label class="check" for="particles"><input type="checkbox" id="particles"> 유적선 입자 (RK4 적분)</label>
+        <label class="check" for="surfCp"><input type="checkbox" id="surfCp"> 물체 표면에 압력 계수 표시</label>
+        <div class="field"><span class="lbl">렌더 품질</span>
+          <div class="seg" role="radiogroup" aria-label="렌더 품질">
+            <input type="radio" name="qual" id="qLow" value="low"><label for="qLow">저</label>
+            <input type="radio" name="qual" id="qMid" value="mid"><label for="qMid">중</label>
+            <input type="radio" name="qual" id="qHigh" value="high"><label for="qHigh">고</label>
+          </div>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button type="button" id="btnRun" class="primary">일시정지</button>
+        <button type="button" id="btnReset">유동 초기화</button>
+        <button type="button" id="btnCam">시점 복귀</button>
+      </div>
+      <p class="note">드래그 회전 · 휠/핀치 확대 · 우클릭 또는 Shift+드래그 이동 · Space 일시정지 · R 초기화</p>
+      <p class="note"><b>방법.</b> D3Q19 격자 볼츠만법으로 약압축성 Navier–Stokes 방정식을 공간·시간 2차 정확도로 풉니다. 분포함수는 격자 가중치를 뺀 값으로 저장해 FP32 반올림 오차를 줄이고, 물체 표면은 해석적 부호거리함수의 근(Illinois 할선법)을 찾아 Bouzidi 보간 반사로 처리합니다. 유입은 속도, 유출은 압력을 비평형 외삽(Guo)으로 주고, 유출 직전 흡수층이 반사파를 줄입니다. 항력·양력은 경계 링크마다 운동량 교환을 합산해 구합니다.</p>
+    </div>
+  </aside>
+
+  <div class="overlay scales" id="scales" aria-label="색 척도"></div>
+  <div class="overlay toast" id="toast" role="status" hidden></div>
+  <div class="overlay fatal" id="fatal" hidden><div><h2>시뮬레이션을 시작할 수 없습니다</h2><p id="fatalMsg"></p></div></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+
+function showFatal(msg) {
+  $('fatalMsg').textContent = msg;
+  $('fatal').hidden = false;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  D3Q19 lattice
+// ════════════════════════════════════════════════════════════════════
+const C = [[0,0,0],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1],
+  [1,1,0],[-1,-1,0],[1,0,1],[-1,0,-1],[0,1,1],[0,-1,-1],
+  [1,-1,0],[-1,1,0],[1,0,-1],[-1,0,1],[0,1,-1],[0,-1,1]];
+const Q = 19;
+const W = C.map((c) => { const n = Math.abs(c[0]) + Math.abs(c[1]) + Math.abs(c[2]); return n === 0 ? 1 / 3 : n === 1 ? 1 / 18 : 1 / 36; });
+const OPP = C.map((_, i) => (i === 0 ? 0 : i % 2 === 1 ? i + 1 : i - 1));
+const IDX = new Map(C.map((c, i) => [c.join(','), i]));
+const idxOf = (c) => IDX.get(c.join(','));
+const R19 = [...Array(Q).keys()];
+const fl = (x) => { const s = String(x); return /[.eE]/.test(s) ? s : s + '.0'; };
+const SQ3 = Math.sqrt(3);
+
+// ════════════════════════════════════════════════════════════════════
+//  Scenes: analytic implicit geometry in lattice units (cell centres at integers)
+// ════════════════════════════════════════════════════════════════════
+function cdSphere(Re) { return 24 / Re * (1 + 0.15 * Math.pow(Re, 0.687)) + 0.42 / (1 + 42500 * Math.pow(Re, -1.16)); }
+function logInterp(tab, x) {
+  if (x <= tab[0][0]) return tab[0][1];
+  for (let i = 1; i < tab.length; i++) {
+    if (x <= tab[i][0]) {
+      const [x0, y0] = tab[i - 1], [x1, y1] = tab[i];
+      const t = (Math.log(x) - Math.log(x0)) / (Math.log(x1) - Math.log(x0));
+      return Math.exp(Math.log(y0) + t * (Math.log(y1) - Math.log(y0)));
+    }
+  }
+  return tab[tab.length - 1][1];
+}
+const CYL_CD = [[5, 4.12], [10, 2.85], [20, 2.05], [40, 1.52], [60, 1.42], [100, 1.34], [200, 1.30], [300, 1.25], [1000, 1.02], [3900, 0.99], [10000, 1.15], [20000, 1.2]];
+function stCylinder(Re) {
+  if (Re < 47) return null;
+  if (Re <= 180) return -3.3265 / Re + 0.1816 + 1.6e-4 * Re;
+  const wil = -3.3265 / 180 + 0.1816 + 1.6e-4 * 180;
+  const rosh = (r) => 0.212 * (1 - 21.2 / r);
+  if (Re <= 300) return wil + (rosh(300) - wil) * (Re - 180) / 120;
+  return rosh(Re);
+}
+
+const SCENES = {
+  sphere: {
+    id: 0, label: '구', Lname: 'D', dims: [12, 5, 5], res: { low: 12, mid: 18, high: 22 },
+    bc: { y: 'slip', z: 'slip' }, mirZ: false, frame: [-2, 6, 3],
+    defaults: { re: 300, vis: 'q', thr: 0.6, slice: 0, sliceField: 1, iso: 0 }, picks: [50, 100, 300, 1000, 3700],
+    place(L, N) {
+      const cy = (N[1] - 1) / 2, cz = (N[2] - 1) / 2, cx = 3 * L, R = L / 2;
+      return {
+        s0: [cx, cy, cz, R], s1: [0, 0, 0, 0], s2: [0, 0, 0, 0],
+        omin: [cx - R - 1, cy - R - 1, cz - R - 1], omax: [cx + R + 1, cy + R + 1, cz + R + 1],
+        rake: { x: 1.6 * L, y0: cy - 0.9 * L, y1: cy + 0.9 * L, z0: cz - 0.05 * L, z1: cz + 0.05 * L },
+        area: Math.PI * L * L / 4, blockage: Math.PI * L * L / 4 / (N[1] * N[2]),
+      };
+    },
+    ref(Re) {
+      let regime;
+      if (Re < 24) regime = '박리 없는 부착 유동';
+      else if (Re < 210) regime = '정상 축대칭 재순환 영역';
+      else if (Re < 270) regime = '정상 비축대칭 후류 (양력 발생)';
+      else if (Re < 420) regime = '주기적 헤어핀 와류 방출';
+      else regime = '불규칙 와류 방출 · 난류 전이';
+      const st = Re >= 280 && Re <= 340 ? { v: 0.137, src: 'Johnson & Patel 1999, Re 300' } : null;
+      return { cd: cdSphere(Re), cdSrc: 'Clift–Gauvin 항력 곡선', st, regime, cl: null };
+    },
+  },
+  cylinder: {
+    id: 1, label: '원기둥', Lname: 'D', dims: [20, 12, 4], res: { low: 8, mid: 12, high: 15 },
+    bc: { y: 'slip', z: 'per' }, mirZ: false, frame: [-2.5, 9, 3],
+    defaults: { re: 100, vis: 'q', thr: 0.3, slice: 0, sliceField: 2, iso: 0 }, picks: [40, 100, 200, 1000, 3900],
+    place(L, N) {
+      const cy = (N[1] - 1) / 2, cx = 5 * L, R = L / 2;
+      return {
+        s0: [cx, cy, 0, R], s1: [0, 0, 0, 0], s2: [0, 0, 0, 0],
+        omin: [cx - R - 1, cy - R - 1, -0.5], omax: [cx + R + 1, cy + R + 1, N[2] - 0.5],
+        rake: { x: 2.5 * L, y0: cy - 1.4 * L, y1: cy + 1.4 * L, z0: N[2] / 2 - 0.05 * L - 0.5, z1: N[2] / 2 + 0.05 * L - 0.5 },
+        area: L * N[2], blockage: L / N[1],
+      };
+    },
+    ref(Re) {
+      let regime;
+      if (Re < 5) regime = '박리 없는 Stokes 유동';
+      else if (Re < 47) regime = '정상 쌍와류 (와열 없음)';
+      else if (Re < 190) regime = '2차원 층류 카르만 와열';
+      else if (Re < 260) regime = '3차원 와열 Mode A (λ≈4D)';
+      else if (Re < 1000) regime = '3차원 와열 Mode B (λ≈1D)';
+      else regime = '아임계 난류 후류';
+      const s = stCylinder(Re);
+      return { cd: logInterp(CYL_CD, Re), cdSrc: '실험·DNS 종합 (무한 영역)', st: s ? { v: s, src: Re <= 180 ? 'Williamson 1988' : 'Roshko 근사' } : null, regime, cl: null };
+    },
+  },
+  wing: {
+    id: 2, label: 'NACA 0012 날개', Lname: 'c', dims: [5, 2.5, 2.25], res: { low: 24, mid: 36, high: 48 },
+    bc: { y: 'slip', z: 'slip' }, mirZ: true, frame: [-1, 3, 2],
+    defaults: { re: 1000, vis: 'q', thr: 1.0, slice: 0, sliceField: 2, iso: 0 }, picks: [300, 1000, 3000, 10000],
+    place(L, N, st) {
+      const a = st.aoa * Math.PI / 180, sa = Math.sin(a), ca = Math.cos(a);
+      const cy = (N[1] - 1) / 2, px = 1.45 * L, hs = 1.5 * L;
+      const ey = 0.75 * L * Math.abs(sa) + 0.1 * L + 1.5;
+      return {
+        s0: [px, cy, -0.5, L], s1: [hs, sa, ca, 0], s2: [0, 0, 0, 0],
+        omin: [px - 0.3 * L - 1, cy - ey, -0.5 - hs - 1], omax: [px + 0.8 * L + 1, cy + ey, -0.5 + hs + 1],
+        rake: { x: 0.8 * L, y0: cy - 0.12 * L, y1: cy + 0.16 * L, z0: 1.36 * L, z1: 1.64 * L },
+        area: L * hs, blockage: (0.12 * L * ca + L * Math.abs(sa)) * hs / (N[1] * N[2]),
+      };
+    },
+    ref(Re, st) {
+      const a = st.aoa * Math.PI / 180, AR = 3;
+      return { cd: null, st: null, regime: `가로세로비 3 직사각 날개, α = ${st.aoa}° · 익단 와류`, cl: { v: 2 * Math.PI * a * AR / (AR + 2), src: '양력선 이론 (비점성)' } };
+    },
+  },
+  ahmed: {
+    id: 3, label: 'Ahmed 차체', Lname: 'L', dims: [4, 1.0, 0.8], res: { low: 56, mid: 80, high: 104 },
+    bc: { y: 'slip', z: 'slip' }, mirZ: true, frame: [-0.9, 2.1, 1],
+    defaults: { re: 5000, vis: 'q', thr: 4.0, slice: 0, sliceField: 1, iso: 0, model: 'reg' }, picks: [1000, 5000, 20000],
+    place(L, N) {
+      const H = 0.2759 * L, hw = 0.1863 * L, Rr = 0.0958 * L, g = 0.0479 * L;
+      const sl = 0.2126 * L, ang = 25 * Math.PI / 180, dxs = sl * Math.cos(ang), dys = sl * Math.sin(ang);
+      const nn = Math.hypot(dys, dxs);
+      const x0 = 1.0 * L, y0 = -0.5 + g;
+      return {
+        s0: [x0, y0, -0.5, L], s1: [H, hw, Rr, 0], s2: [dxs, dys, dys / nn, dxs / nn],
+        omin: [x0 - 1, y0 - 1, -0.5 - hw - 1], omax: [x0 + L + 1, y0 + H + 1, -0.5 + hw + 1],
+        rake: { x: 0.5 * L, y0: y0 + 0.03 * L, y1: y0 + H + 0.14 * L, z0: 0.72 * hw, z1: 0.8 * hw },
+        area: H * hw, blockage: H * hw / (N[1] * N[2]),
+      };
+    },
+    ref() {
+      return { cd: null, st: null, regime: '후면 경사 25° · 경사면 박리와 C-기둥 와류', cl: null, note: '실험 C_D 0.285는 Re 4.3×10⁶ 값으로, 저 Re에서는 점성 항력 비중이 커서 직접 비교할 수 없습니다.' };
+    },
+  },
+};
+
+const SCENE_GLSL = `
+uniform vec4 uS0, uS1, uS2;
+vec3 mapP(vec3 P) {
+#if PERZ
+  P.z = mod(P.z + 0.5, float(NZ)) - 0.5;
+#endif
+#if MIRZ
+  if (P.z < -0.5) P.z = -1.0 - P.z;
+#endif
+  return P;
+}
+float nacaD(vec2 q) {
+  if (q.x < 0.0 || q.x > 1.0) return length(q - vec2(clamp(q.x, 0.0, 1.0), 0.0));
+  float t = max(q.x, 1e-5), st = sqrt(t);
+  float yt = 0.6 * (0.2969 * st + t * (-0.1260 + t * (-0.3516 + t * (0.2843 - 0.1036 * t))));
+  float dyt = 0.6 * (0.14845 / st - 0.1260 + t * (-0.7032 + t * (0.8529 - 0.4144 * t)));
+  return (abs(q.y) - yt) / sqrt(1.0 + dyt * dyt);
+}
+float rbox2(vec2 p, vec2 b, vec4 r) {
+  r.xy = (p.x > 0.0) ? r.xy : r.zw;
+  r.x = (p.y > 0.0) ? r.x : r.y;
+  vec2 q = abs(p) - b + r.x;
+  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x;
+}
+float sceneF(vec3 P) {
+  P = mapP(P);
+#if SCENE == 0
+  return length(P - uS0.xyz) - uS0.w;
+#elif SCENE == 1
+  return length(P.xy - uS0.xy) - uS0.w;
+#elif SCENE == 2
+  vec3 d = P - uS0.xyz; float c = uS0.w;
+  float xb = uS1.z * d.x - uS1.y * d.y, yb = uS1.y * d.x + uS1.z * d.y;
+  return max(nacaD(vec2(xb / c + 0.25, yb / c)) * c, abs(d.z) - uS1.x);
+#else
+  vec3 d = P - uS0.xyz; float L = uS0.w, H = uS1.x;
+  float side = rbox2(vec2(d.x - 0.5 * L, d.y - 0.5 * H), vec2(0.5 * L, 0.5 * H), vec4(0.0, 0.0, uS1.z, uS1.z));
+  float top = rbox2(vec2(d.x - 0.5 * L, d.z), vec2(0.5 * L, uS1.y), vec4(0.0, 0.0, uS1.z, uS1.z));
+  float sl = dot(vec2(d.x - (L - uS2.x), d.y - H), uS2.zw);
+  return max(max(side, top), sl);
+#endif
+}
+`;
+
+// ════════════════════════════════════════════════════════════════════
+//  GLSL generation
+// ════════════════════════════════════════════════════════════════════
+function header(d) {
+  return `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+${Object.entries(d).map(([k, v]) => `#define ${k} ${v}`).join('\n')}
+ivec2 A(ivec3 p) { return ivec2(p.x + (p.z % TX) * NX, p.y + (p.z / TX) * NY); }
+bool cellOf(out ivec3 p) {
+  ivec2 f = ivec2(gl_FragCoord.xy);
+  int tx = f.x / NX, ty = f.y / NY;
+  p = ivec3(f.x - tx * NX, f.y - ty * NY, ty * TX + tx);
+  return p.z < NZ;
+}
+`;
+}
+const FS_VS = `#version 300 es
+out vec2 vUv;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vUv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const cuExpr = (c) => {
+  let s = '';
+  ['x', 'y', 'z'].forEach((a, k) => {
+    if (c[k] === 1) s += (s ? ' + ' : '') + `u.${a}`;
+    else if (c[k] === -1) s += (s ? ' - ' : '-') + `u.${a}`;
+  });
+  return s || '0.0';
+};
+const fetchF = (i, pos) => `texelFetch(uF${i >> 2}, A(${pos}), 0).${'xyzw'[i & 3]}`;
+
+function genCommon() {
+  let s = 'float sum19(float a[19]) { return ' + R19.map((i) => `a[${i}]`).join(' + ') + '; }\n';
+  const comp = (k) => {
+    const p = [], n = [];
+    R19.forEach((i) => { if (C[i][k] === 1) p.push(`a[${i}]`); else if (C[i][k] === -1) n.push(`a[${i}]`); });
+    return `(${p.join(' + ')}) - (${n.join(' + ')})`;
+  };
+  s += `vec3 mom19(float a[19]) { return vec3(${comp(0)}, ${comp(1)}, ${comp(2)}); }\n`;
+  s += 'void loadLocal(ivec3 p, out float l[19]) {\n  ivec2 a = A(p);\n';
+  for (let k = 0; k < 5; k++) s += `  vec4 t${k} = texelFetch(uF${k}, a, 0);\n`;
+  R19.forEach((i) => { s += `  l[${i}] = t${i >> 2}.${'xyzw'[i & 3]};\n`; });
+  s += '}\n';
+  // equilibrium, stored shifted by -w_i: e_i = w_i [(rho-1) + rho (3 c.u + 4.5 (c.u)^2 - 1.5 u.u)]
+  s += 'void feqAll(float r1, vec3 u, out float e[19]) {\n  float rho = 1.0 + r1, uu = dot(u, u);\n';
+  s += `  e[0] = ${fl(W[0])} * (r1 - rho * 1.5 * uu);\n`;
+  for (let i = 1; i < Q; i++) s += `  { float cu = ${cuExpr(C[i])}; e[${i}] = ${fl(W[i])} * (r1 + rho * (3.0 * cu + 4.5 * cu * cu - 1.5 * uu)); }\n`;
+  s += '}\n';
+  s += `float rootQ(vec3 P0, vec3 d) {
+  float a = 0.0, b = 1.0, fa = sceneF(P0), fb = sceneF(P0 + d);
+  if (!(fa > 0.0) || fb > 0.0) return 0.5;
+  int side = 0;
+  for (int k = 0; k < 6; k++) {
+    float c = (a * fb - b * fa) / (fb - fa);
+    float fc = sceneF(P0 + c * d);
+    if (fc > 0.0) { a = c; fa = fc; if (side == 1) fb *= 0.5; side = 1; }
+    else { b = c; fb = fc; if (side == -1) fa *= 0.5; side = -1; }
+  }
+  return clamp((a * fb - b * fa) / (fb - fa), 1e-3, 1.0);
+}
+`;
+  return s;
+}
+
+function genPull(bc, bouzidi) {
+  function src(i) {
+    const [cx, cy, cz] = C[i];
+    let s = `ivec3 s = p - ivec3(${cx}, ${cy}, ${cz}); `;
+    const ry = cy !== 0 && bc.y === 'slip', rz = cz !== 0 && bc.z === 'slip';
+    if (cy !== 0 && bc.y === 'per') s += 's.y = (s.y + NY) % NY; ';
+    if (cz !== 0 && bc.z === 'per') s += 's.z = (s.z + NZ) % NZ; ';
+    if (ry) s += 'bool ry = s.y < 0 || s.y >= NY; if (ry) s.y = p.y; ';
+    if (rz) s += 'bool rz = s.z < 0 || s.z >= NZ; if (rz) s.z = p.z; ';
+    return { s, ry, rz };
+  }
+  // free-slip walls are specular reflections: the arriving population left a neighbour inside the domain with the mirrored velocity
+  function val(i, ry, rz, tgt) {
+    const [cx, cy, cz] = C[i];
+    const jy = idxOf([cx, -cy, cz]), jz = idxOf([cx, cy, -cz]), jyz = idxOf([cx, -cy, -cz]);
+    if (ry && rz) return `if (ry && rz) ${tgt} = ${fetchF(jyz, 's')}; else if (ry) ${tgt} = ${fetchF(jy, 's')}; else if (rz) ${tgt} = ${fetchF(jz, 's')}; else ${tgt} = ${fetchF(i, 's')};`;
+    if (ry) return `if (ry) ${tgt} = ${fetchF(jy, 's')}; else ${tgt} = ${fetchF(i, 's')};`;
+    if (rz) return `if (rz) ${tgt} = ${fetchF(jz, 's')}; else ${tgt} = ${fetchF(i, 's')};`;
+    return `${tgt} = ${fetchF(i, 's')};`;
+  }
+  let fast = 'void pullFast(ivec3 p, out float f[19]) {\n  f[0] = texelFetch(uF0, A(p), 0).x;\n';
+  for (let i = 1; i < Q; i++) { const b = src(i); fast += `  { ${b.s}${val(i, b.ry, b.rz, `f[${i}]`)} }\n`; }
+  fast += '}\n';
+
+  // near-wall cells: detect links that cross the body surface, then (Bouzidi) relocate the wall to the analytic root
+  let near = 'int pullNear(ivec3 p, float l[19], out float f[19]) {\n  int wm = 0;\n  f[0] = l[0];\n';
+  for (let i = 1; i < Q; i++) {
+    const b = src(i);
+    near += `  { ${b.s}\n    if (texelFetch(uG, A(s), 0).r <= 0.0) { wm |= ${1 << i}; f[${i}] = l[${OPP[i]}]; }\n    else { ${val(i, b.ry, b.rz, `f[${i}]`)} } }\n`;
+  }
+  if (bouzidi) {
+    near += `  vec3 P0 = vec3(p);
+  for (int i = 1; i < 19; i++) {
+    if ((wm & (1 << i)) == 0) continue;
+    int o = OPPI[i];
+    float fo = l[o];
+    float q = rootQ(P0, -vec3(CC[i]));
+    if (q < 0.5) {
+      ivec3 b = p + CC[i];
+      bool ok = b.y >= 0 && b.y < NY;
+${bc.z === 'per' ? '      b.z = (b.z + NZ) % NZ;' : '      ok = ok && b.z >= 0 && b.z < NZ;'}
+      float fb = fo;
+      if (ok) { if (texelFetch(uG, A(b), 0).r > 0.0) fb = fetchDyn(b, o); }
+      f[i] = 2.0 * q * fo + (1.0 - 2.0 * q) * fb;
+    } else {
+      f[i] = fo / (2.0 * q) + (1.0 - 0.5 / q) * l[i];
+    }
+  }
+`;
+  }
+  near += '  return wm;\n}\n';
+  const consts = `const ivec3 CC[19] = ivec3[19](${C.map((c) => `ivec3(${c.join(', ')})`).join(', ')});
+const int OPPI[19] = int[19](${OPP.join(', ')});
+float fetchDyn(ivec3 b, int k) {
+  ivec2 a = A(b); int g = k >> 2; vec4 t;
+  if (g == 0) t = texelFetch(uF0, a, 0); else if (g == 1) t = texelFetch(uF1, a, 0); else if (g == 2) t = texelFetch(uF2, a, 0); else if (g == 3) t = texelFetch(uF3, a, 0); else t = texelFetch(uF4, a, 0);
+  return t[k & 3];
+}
+`;
+  return consts + fast + near;
+}
+
+// second-moment of a non-equilibrium array: Pi_ab = sum_i c_ia c_ib n_i
+function piDecl(n) {
+  const P = (a, b) => {
+    const t = [];
+    R19.forEach((i) => { const v = C[i][a] * C[i][b]; if (v === 1) t.push(`+ ${n}[${i}]`); else if (v === -1) t.push(`- ${n}[${i}]`); });
+    return t.join(' ').replace(/^\+ /, '');
+  };
+  return `  float pxx = ${P(0, 0)}, pyy = ${P(1, 1)}, pzz = ${P(2, 2)};\n  float pxy = ${P(0, 1)}, pxz = ${P(0, 2)}, pyz = ${P(1, 2)};\n`;
+}
+// Hermite projection Q_i:Pi = c_ia c_ib Pi_ab - cs^2 tr(Pi), with tr = tr(Pi)/3 declared by the caller
+function qPi(i) {
+  const [x, y, z] = C[i];
+  const t = [];
+  if (x) t.push('pxx'); if (y) t.push('pyy'); if (z) t.push('pzz');
+  if (x * y) t.push(`${x * y > 0 ? '' : '-'}2.0 * pxy`);
+  if (x * z) t.push(`${x * z > 0 ? '' : '-'}2.0 * pxz`);
+  if (y * z) t.push(`${y * z > 0 ? '' : '-'}2.0 * pyz`);
+  return '(' + (t.length ? t.join(' + ').replace(/\+ -/g, '- ') : '0.0') + ' - tr)';
+}
+
+function genBoundary() {
+  // inlet: equilibrium at (rho = 1, u = U) imposed on the incoming populations, no feedback from the interior,
+  //   which keeps it stable at tau -> 1/2 and lets outgoing pressure waves leave partially.
+  // outlet: rho = 1 with the neighbour's velocity and its non-equilibrium stress projected onto the
+  //   second-order Hermite basis (regularized extrapolation), so odd ghost moments are not copied back.
+  let s = `void boundaryCell(ivec3 p, out float f[19]) {
+  if (p.x == 0) {
+    float sy = sin(3.14159265 * (float(p.y) + 0.5) / float(NY));
+    float sz = sin(3.14159265 * (float(p.z) + 0.5) / float(NZ));
+    vec3 ui = uUin + vec3(0.0, uPert.y * sy * (1.0 + 0.3 * sin(6.2831853 * (float(p.z) + 0.5) / float(NZ))), uPert.z * sz);
+    feqAll(0.0, ui, f);
+    return;
+  }
+  ivec3 nb = ivec3(NX - 2, p.y, p.z);
+  float l[19]; loadLocal(nb, l);
+  float rn = sum19(l); vec3 un = mom19(l) / (1.0 + rn);
+  float en[19]; feqAll(rn, un, en);
+  float n[19];
+  for (int i = 0; i < 19; i++) n[i] = l[i] - en[i];
+${piDecl('n')}  float tr = (pxx + pyy + pzz) / 3.0;
+  vec3 ub = un; ub.x = max(ub.x, 0.0);
+  float eb[19]; feqAll(0.0, ub, eb);
+`;
+  R19.forEach((i) => { s += `  f[${i}] = eb[${i}] + ${fl(W[i] * 4.5)} * ${qPi(i)};\n`; });
+  return s + '}\n';
+}
+
+function genCollide(model) {
+  let s = 'void collide(inout float f[19], int x) {\n';
+  s += '  float r1 = sum19(f), rho = 1.0 + r1;\n  vec3 u = mom19(f) / rho;\n';
+  s += '  float uu = dot(u, u);\n  if (uu > 0.1225) { u *= 0.35 / sqrt(uu); }\n';
+  s += '  float e[19]; feqAll(r1, u, e);\n  float n[19];\n';
+  R19.forEach((i) => { s += `  n[${i}] = f[${i}] - e[${i}];\n`; });
+  s += piDecl('n');
+  // Smagorinsky: tau_eff = (tau0 + sqrt(tau0^2 + 18 sqrt(2) Cs^2 |Pi_neq| / rho)) / 2   (Hou et al. 1996)
+  s += '  float tau = uTau0;\n';
+  s += '  if (uCs2 > 0.0) { float Qn = sqrt(pxx * pxx + pyy * pyy + pzz * pzz + 2.0 * (pxy * pxy + pxz * pxz + pyz * pyz)); tau = 0.5 * (uTau0 + sqrt(uTau0 * uTau0 + 25.455844122715710 * uCs2 * Qn / rho)); }\n';
+  // absorbing layers: outlet sponge, plus a thin inlet layer where the flow is uniform (potential flow carries no viscous stress)
+  // that damps the odd non-equilibrium modes excited by the imposed inflow state
+  s += '  float sp = max(0.0, float(x) - uSpX0) / max(1.0, float(NX - 1) - uSpX0); tau += uSpAmp * sp * sp;\n';
+  s += '  float si = max(0.0, 1.0 - float(x) / uSpIn); tau += 0.35 * si * si;\n';
+  s += '  float om = 1.0 / tau;\n';
+  if (model === 'trt') {
+    s += '  float omm = 1.0 / (0.5 + uLam / (tau - 0.5));\n';
+    s += '  f[0] = e[0] + (1.0 - om) * n[0];\n';
+    for (let i = 1; i < Q; i += 2) {
+      const j = OPP[i];
+      s += `  { float np = 0.5 * (n[${i}] + n[${j}]), nm = 0.5 * (n[${i}] - n[${j}]); f[${i}] = e[${i}] + n[${i}] - om * np - omm * nm; f[${j}] = e[${j}] + n[${j}] - om * np + omm * nm; }\n`;
+    }
+  } else if (model === 'reg') {
+    s += '  float tr = (pxx + pyy + pzz) / 3.0;\n';
+    R19.forEach((i) => { s += `  f[${i}] = e[${i}] + (1.0 - om) * ${fl(W[i] * 4.5)} * ${qPi(i)};\n`; });
+  } else {
+    R19.forEach((i) => { s += `  f[${i}] = e[${i}] + (1.0 - om) * n[${i}];\n`; });
+  }
+  // start-up: accelerate the whole field uniformly (exact difference method) so the inflow ramp needs no pressure gradient and excites no acoustic sloshing
+  s += '  if (uDu.x != 0.0) { float e2[19]; feqAll(r1, u + uDu, e2); for (int i = 0; i < 19; i++) f[i] += e2[i] - e[i]; }\n';
+  return s + '}\n';
+}
+
+const outDecl = (ks) => ks.map((k, j) => `layout(location = ${j}) out vec4 o${k};`).join('\n');
+const outWrite = (ks, arr) => ks.map((k) => `o${k} = vec4(${[0, 1, 2, 3].map((c) => { const i = k * 4 + c; return i < Q ? `${arr}[${i}]` : '0.0'; }).join(', ')});`).join(' ');
+const outZero = (ks) => ks.map((k) => `o${k} = vec4(0.0);`).join(' ');
+
+const SIM_UNIFORMS = `
+uniform sampler2D uF0, uF1, uF2, uF3, uF4, uG;
+uniform float uTau0, uCs2, uLam, uSpX0, uSpAmp, uSpIn;
+uniform vec3 uUin, uPert, uDu;
+`;
+
+function collideFS(defs, ks, bc) {
+  return header(defs) + SIM_UNIFORMS + SCENE_GLSL + genCommon() + genPull(bc, defs.BOUZIDI === 1) + genCollide(defs.MODEL_NAME) + genBoundary() + `
+${outDecl(ks)}
+void main() {
+  ivec3 p;
+  if (!cellOf(p)) { ${outZero(ks)} return; }
+  float g = texelFetch(uG, A(p), 0).r;
+  if (g <= 0.0) { ${outZero(ks)} return; }
+  float f[19];
+  if (p.x == 0 || p.x == NX - 1) { boundaryCell(p, f); ${outWrite(ks, 'f')} return; }
+  if (g < 1000.0) { float l[19]; loadLocal(p, l); pullNear(p, l, f); }
+  else pullFast(p, f);
+  collide(f, p.x);
+  ${outWrite(ks, 'f')}
+}
+`;
+}
+
+function diagFS(defs, bc) {
+  let force = '';
+  for (let i = 1; i < Q; i++) {
+    const [cx, cy, cz] = C[i];
+    force += `    if ((wm & ${1 << i}) != 0) Fv -= vec3(${cx}.0, ${cy}.0, ${cz}.0) * (f[${i}] + l[${OPP[i]}] + ${fl(2 * W[i])});\n`;
+  }
+  return header(defs) + SIM_UNIFORMS + SCENE_GLSL + genCommon() + genPull(bc, defs.BOUZIDI === 1) + `
+layout(location = 0) out vec4 oF;
+layout(location = 1) out vec4 oS;
+void main() {
+  ivec3 p; oF = vec4(0.0); oS = vec4(0.0);
+  if (!cellOf(p)) return;
+  float g = texelFetch(uG, A(p), 0).r;
+  if (g <= 0.0) return;
+  float l[19]; loadLocal(p, l);
+  float r1 = sum19(l); vec3 u = mom19(l) / (1.0 + r1); float uu = dot(u, u);
+  bool bad = isnan(r1) || isinf(r1) || isnan(uu) || isinf(uu) || r1 < -0.9;
+  oS = bad ? vec4(0.0, 0.0, 0.0, 1e30) : vec4(r1, 0.5 * (1.0 + r1) * uu, sqrt(uu), abs(r1));
+  vec3 Fv = vec3(0.0);
+  if (g < 1000.0 && p.x > 0 && p.x < NX - 1 && !bad) {
+    float f[19]; int wm = pullNear(p, l, f);
+    // momentum exchange: F_solid = sum over wall links of -c_i (f*_opp(x) + f_i(x))
+${force}  }
+  oF = vec4(Fv, 1.0);
+}
+`;
+}
+
+function geomPhiFS(defs) {
+  return header(defs) + SCENE_GLSL + `
+out vec4 o;
+void main() { ivec3 p; if (!cellOf(p)) { o = vec4(1e4); return; } o = vec4(sceneF(vec3(p)), 0.0, 0.0, 0.0); }
+`;
+}
+function geomNearFS(defs, bc) {
+  const cs = C.map((c) => `ivec3(${c.join(', ')})`).join(', ');
+  const wy = bc.y === 'per' ? 's.y = (s.y + NY) % NY;' : 'if (s.y < 0 || s.y >= NY) s.y = p.y;';
+  const wz = bc.z === 'per' ? 's.z = (s.z + NZ) % NZ;' : 'if (s.z < 0 || s.z >= NZ) s.z = p.z;';
+  return header(defs) + `
+uniform sampler2D uT;
+out vec4 o;
+const ivec3 CC[19] = ivec3[19](${cs});
+void main() {
+  ivec3 p; if (!cellOf(p)) { o = vec4(1e4); return; }
+  float g = texelFetch(uT, A(p), 0).r;
+  if (g <= 0.0) { o = vec4(g); return; }
+  bool near = false;
+  for (int i = 1; i < 19; i++) {
+    ivec3 s = p - CC[i];
+    s.x = clamp(s.x, 0, NX - 1); ${wy} ${wz}
+    if (texelFetch(uT, A(s), 0).r <= 0.0) near = true;
+  }
+  o = vec4(near ? g : 1e4);
+}
+`;
+}
+function macroFS(defs) {
+  return header(defs) + SIM_UNIFORMS + SCENE_GLSL + genCommon() + `
+out vec4 o;
+void main() {
+  ivec3 p; if (!cellOf(p)) { o = vec4(0.0); return; }
+  if (texelFetch(uG, A(p), 0).r <= 0.0) { o = vec4(0.0); return; }
+  float l[19]; loadLocal(p, l);
+  float r1 = sum19(l);
+  o = vec4(r1, mom19(l) / (1.0 + r1));
+}
+`;
+}
+function visFS(defs, bc) {
+  // visualisation-only fields; gradients use central differences with 1-2-1 transverse smoothing (3D Sobel)
+  // so the Q-criterion, a squared-gradient quantity, does not light up grid-scale acoustic noise
+  return header(defs) + `
+uniform sampler2D uM, uG;
+uniform float uU, uL;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+vec3 Uc(ivec3 q) {
+  q.x = clamp(q.x, 0, NX - 1); q.y = clamp(q.y, 0, NY - 1);
+${bc.z === 'per' ? '  q.z = (q.z + NZ) % NZ;' : '  q.z = clamp(q.z, 0, NZ - 1);'}
+  return texelFetch(uM, A(q), 0).yzw;
+}
+vec3 dAxis(ivec3 p, ivec3 ea, ivec3 eb, ivec3 ec) {
+  vec3 s = vec3(0.0);
+  for (int j = -1; j <= 1; j++) for (int k = -1; k <= 1; k++) {
+    ivec3 o = eb * j + ec * k;
+    s += float((2 - abs(j)) * (2 - abs(k))) * (Uc(p + ea + o) - Uc(p - ea + o));
+  }
+  return s / 32.0;
+}
+void main() {
+  ivec3 p; o0 = vec4(0.0); o1 = vec4(0.0);
+  if (!cellOf(p)) return;
+  vec4 m = texelFetch(uM, A(p), 0);
+  if (texelFetch(uG, A(p), 0).r <= 0.0) return;
+  vec3 uc = m.yzw;
+  const ivec3 ex = ivec3(1, 0, 0), ey = ivec3(0, 1, 0), ez = ivec3(0, 0, 1);
+  vec3 gx = dAxis(p, ex, ey, ez), gy = dAxis(p, ey, ex, ez), gz = dAxis(p, ez, ex, ey);
+  mat3 G = mat3(gx, gy, gz);
+  mat3 S = 0.5 * (G + transpose(G)), O = 0.5 * (G - transpose(G));
+  float s2 = dot(S[0], S[0]) + dot(S[1], S[1]) + dot(S[2], S[2]);
+  float w2 = dot(O[0], O[0]) + dot(O[1], O[1]) + dot(O[2], O[2]);
+  vec3 w = vec3(gy.z - gz.y, gz.x - gx.z, gx.y - gy.x);
+  float tU = uL / uU;
+  o0 = vec4(0.5 * (w2 - s2) * tU * tU, length(w) * tU, uc.x / uU, (2.0 / 3.0) * m.x / (uU * uU));
+  o1 = vec4(length(uc) / uU, uc.y / uU, uc.z / uU, 1.0);
+}
+`;
+}
+const REDUCE_FS = `#version 300 es
+precision highp float; precision highp int; precision highp sampler2D;
+uniform sampler2D uA, uB;
+uniform ivec2 uSz;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+void main() {
+  ivec2 b = ivec2(gl_FragCoord.xy) * 4;
+  vec4 a = vec4(0.0), s = vec4(0.0);
+  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+    ivec2 q = b + ivec2(i, j);
+    if (q.x < uSz.x && q.y < uSz.y) {
+      a += texelFetch(uA, q, 0);
+      vec4 t = texelFetch(uB, q, 0);
+      s.xy += t.xy; s.zw = max(s.zw, t.zw);
+    }
+  }
+  o0 = a; o1 = s;
+}`;
+
+const CMAP_GLSL = `
+vec3 turbo(float x) {
+  x = clamp(x, 0.0, 1.0);
+  const vec4 kr4 = vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234);
+  const vec4 kg4 = vec4(0.09140261, 2.19418839, 4.84296658, -14.18503333);
+  const vec4 kb4 = vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771);
+  const vec2 kr2 = vec2(-152.94239396, 59.28637943);
+  const vec2 kg2 = vec2(4.27729857, 2.82956604);
+  const vec2 kb2 = vec2(-89.90310912, 27.34824973);
+  vec4 v4 = vec4(1.0, x, x * x, x * x * x);
+  vec2 v2 = v4.zw * v4.z;
+  return clamp(vec3(dot(v4, kr4) + dot(v2, kr2), dot(v4, kg4) + dot(v2, kg2), dot(v4, kb4) + dot(v2, kb2)), 0.0, 1.0);
+}
+vec3 diverge(float x) {
+  x = clamp(x, 0.0, 1.0);
+  vec3 lo = vec3(0.230, 0.299, 0.754), mid = vec3(0.865, 0.865, 0.865), hi = vec3(0.706, 0.016, 0.150);
+  return x < 0.5 ? mix(lo, mid, smoothstep(0.0, 1.0, x * 2.0)) : mix(mid, hi, smoothstep(0.0, 1.0, x * 2.0 - 1.0));
+}
+float cpMap(float cp) { return clamp(cp >= 0.0 ? 0.5 + 0.5 * cp : 0.5 + cp / 3.0, 0.0, 1.0); }
+float h12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+`;
+
+function renderFS(defs) {
+  return header(defs) + SCENE_GLSL + CMAP_GLSL + `
+uniform sampler2D uV0, uV1;
+uniform mat4 uInvVP, uVP;
+uniform vec3 uEye, uBmin, uBmax, uOmin, uOmax;
+uniform float uStep, uThr, uOpac, uDens, uFrame, uSlicePos, uL;
+uniform int uMode, uIsoColor, uSliceAxis, uSliceField, uSurf;
+in vec2 vUv;
+out vec4 oCol;
+
+vec2 boxHit(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax) {
+  vec3 inv = 1.0 / rd;
+  vec3 t0 = (bmin - ro) * inv, t1 = (bmax - ro) * inv;
+  vec3 tn = min(t0, t1), tf = max(t0, t1);
+  return vec2(max(max(tn.x, tn.y), tn.z), min(min(tf.x, tf.y), tf.z));
+}
+vec4 sV(sampler2D t, vec3 P) {
+#if MIRZ
+  if (P.z < -0.5) P.z = -1.0 - P.z;
+#endif
+  P = clamp(P, vec3(0.0), vec3(float(NX - 1), float(NY - 1), float(NZ - 1)));
+  float zf = floor(P.z);
+  int z0 = int(zf), z1 = min(z0 + 1, NZ - 1);
+  vec2 inv = 1.0 / vec2(float(AW), float(AH));
+  vec2 o0 = vec2(float((z0 % TX) * NX), float((z0 / TX) * NY));
+  vec2 o1 = vec2(float((z1 % TX) * NX), float((z1 / TX) * NY));
+  return mix(texture(t, (o0 + P.xy + 0.5) * inv), texture(t, (o1 + P.xy + 0.5) * inv), P.z - zf);
+}
+vec3 sceneN(vec3 P) {
+  const vec2 k = vec2(1.0, -1.0); const float h = 0.04;
+  return normalize(k.xyy * sceneF(P + k.xyy * h) + k.yyx * sceneF(P + k.yyx * h) + k.yxy * sceneF(P + k.yxy * h) + k.xxx * sceneF(P + k.xxx * h));
+}
+float traceObstacle(vec3 ro, vec3 rd, float tmin, float tmax) {
+  vec2 ob = boxHit(ro, rd, uOmin, uOmax);
+  float t = max(tmin, ob.x), t1 = min(tmax, ob.y);
+  if (t > t1) return 1e9;
+  for (int i = 0; i < 160; i++) {
+    float d = sceneF(ro + rd * t);
+    if (d < 0.015) return t;
+    t += max(d * 0.9, 0.01);
+    if (t > t1) break;
+  }
+  return 1e9;
+}
+vec3 light(vec3 base, vec3 n, vec3 rd) {
+  vec3 L1 = normalize(vec3(-0.35, 0.85, 0.45));
+  float dif = max(dot(n, L1), 0.0);
+  float amb = 0.32 + 0.18 * n.y;
+  float spec = pow(max(dot(n, normalize(L1 - rd)), 0.0), 48.0);
+  float rim = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+  return base * (amb + 0.72 * dif) + 0.22 * spec + 0.12 * rim * vec3(0.6, 0.75, 0.9);
+}
+vec3 background(vec3 ro, vec3 rd) {
+  vec3 sky = mix(vec3(0.028, 0.040, 0.058), vec3(0.075, 0.100, 0.135), smoothstep(-0.6, 0.8, rd.y));
+  if (rd.y < 0.0) {
+    float t = (uBmin.y - ro.y) / rd.y;
+    vec3 P = ro + rd * t;
+    if (t > 0.0 && P.x > uBmin.x && P.x < uBmax.x && P.z > uBmin.z && P.z < uBmax.z) {
+      vec2 g = abs(fract(P.xz / uL - 0.5) - 0.5) * uL;
+      float w = 0.0016 * t;
+      float line = 1.0 - smoothstep(w, 2.5 * w, min(g.x, g.y));
+      vec3 fc = vec3(0.060, 0.080, 0.105) + line * vec3(0.07, 0.085, 0.10);
+      return mix(fc, sky, smoothstep(0.0, 1.0, t / (6.0 * max(uBmax.x - uBmin.x, uBmax.z - uBmin.z))));
+    }
+  }
+  return sky;
+}
+vec3 sliceCol(vec3 H) {
+  if (uSliceField == 0) return turbo(sV(uV1, H).x / 1.6);
+  vec4 v = sV(uV0, H);
+  if (uSliceField == 1) return turbo((v.z + 0.4) / 1.8);
+  if (uSliceField == 2) return turbo(sqrt(v.y / 16.0));
+  if (uSliceField == 3) return diverge(cpMap(v.w));
+  return diverge(0.5 + 0.5 * tanh(v.x * 0.5));
+}
+vec3 isoBase(vec3 H) {
+  if (uIsoColor == 0) return turbo(sV(uV1, H).x / 1.6);
+  if (uIsoColor == 1) return turbo((sV(uV0, H).z + 0.4) / 1.8);
+  return diverge(cpMap(sV(uV0, H).w));
+}
+void main() {
+  vec2 ndc = vUv * 2.0 - 1.0;
+  vec4 a = uInvVP * vec4(ndc, -1.0, 1.0), b = uInvVP * vec4(ndc, 1.0, 1.0);
+  vec3 ro = uEye, rd = normalize(b.xyz / b.w - a.xyz / a.w);
+  vec3 col = background(ro, rd);
+  float tOpaque = 1e9;
+  vec2 tb = boxHit(ro, rd, uBmin, uBmax);
+  if (tb.y > max(tb.x, 0.0)) {
+    tb.x = max(tb.x, 0.0);
+    vec3 behind = col; float tBehind = 1e9;
+    float tObs = traceObstacle(ro, rd, tb.x, tb.y);
+    if (tObs < 1e8) {
+      vec3 H = ro + rd * tObs, n = sceneN(H);
+      vec3 base = uSurf == 1 ? diverge(cpMap(sV(uV0, H + n * 1.5).w)) : vec3(0.60, 0.64, 0.68);
+      behind = light(base, n, rd); tBehind = tObs;
+    }
+    if (uSliceAxis > 0) {
+      int ax = uSliceAxis - 1;
+      float pos = mix(uBmin[ax], uBmax[ax], uSlicePos);
+      float den = rd[ax];
+      if (abs(den) > 1e-6) {
+        float ts = (pos - ro[ax]) / den;
+        if (ts > tb.x && ts < tb.y && ts < tBehind) {
+          vec3 H = ro + rd * ts;
+          if (sceneF(H) > 0.0) { behind = sliceCol(H) * 0.92; tBehind = ts; }
+        }
+      }
+    }
+    tOpaque = tBehind;
+    vec4 acc = vec4(0.0);
+    float tEnd = min(tb.y, tBehind), tIso = 1e9;
+    if (uMode > 0) {
+      float t = tb.x + uStep * h12(gl_FragCoord.xy + fract(uFrame * 0.6180339) * 97.0);
+      float prev = 0.0; bool has = false;
+      for (int k = 0; k < 1600; k++) {
+        if (t > tEnd || acc.a > 0.985) break;
+        vec3 P = ro + rd * t;
+        vec4 v = sV(uV0, P);
+        if (uMode == 1) {
+          float qv = v.x - uThr;
+          if (has && prev < 0.0 && qv >= 0.0) {
+            float ta = t - uStep, tc = t;
+            for (int j = 0; j < 6; j++) {
+              float tm = 0.5 * (ta + tc);
+              if (sV(uV0, ro + rd * tm).x - uThr < 0.0) ta = tm; else tc = tm;
+            }
+            float th = 0.5 * (ta + tc);
+            vec3 H = ro + rd * th;
+            const float e = 0.75;
+            vec3 g = vec3(sV(uV0, H + vec3(e, 0, 0)).x - sV(uV0, H - vec3(e, 0, 0)).x,
+                          sV(uV0, H + vec3(0, e, 0)).x - sV(uV0, H - vec3(0, e, 0)).x,
+                          sV(uV0, H + vec3(0, 0, e)).x - sV(uV0, H - vec3(0, 0, e)).x);
+            vec3 n = -normalize(g + 1e-9);
+            if (dot(n, rd) > 0.0) n = -n;
+            vec3 c = light(isoBase(H), n, rd);
+            acc.rgb += (1.0 - acc.a) * uOpac * c; acc.a += (1.0 - acc.a) * uOpac;
+            tIso = min(tIso, th);
+          }
+          prev = qv; has = true;
+        } else {
+          float s, w; vec3 c;
+          if (uMode == 2) { s = v.y; w = smoothstep(uThr, uThr * 2.5, s); c = turbo(0.12 + 0.88 * clamp(log(1.0 + s / uThr) / log(13.0), 0.0, 1.0)); }
+          else { s = 1.0 - v.z; w = smoothstep(uThr, uThr + 0.25, s); c = turbo(clamp(s / 1.25, 0.0, 1.0)); }
+          float al = 1.0 - exp(-uDens * w * uStep);
+          acc.rgb += (1.0 - acc.a) * al * c; acc.a += (1.0 - acc.a) * al;
+        }
+        t += uStep;
+      }
+    }
+    col = acc.rgb + (1.0 - acc.a) * behind;
+    if (uMode == 1 && uOpac > 0.5) tOpaque = min(tOpaque, tIso);
+  }
+  oCol = vec4(col, 1.0);
+  if (tOpaque < 1e8) { vec4 c = uVP * vec4(ro + rd * tOpaque, 1.0); gl_FragDepth = clamp(0.5 * c.z / c.w + 0.5, 0.0, 1.0); }
+  else gl_FragDepth = 1.0;
+}
+`;
+}
+
+function particleUpdateFS(defs) {
+  return header(defs) + CMAP_GLSL + `
+uniform sampler2D uPos, uM, uG;
+uniform float uDt, uSeed, uLife, uXmax;
+uniform vec4 uRake;
+uniform vec2 uRakeZ;
+uniform int uInit;
+out vec4 o;
+vec3 M(ivec3 q) { return texelFetch(uM, A(q), 0).yzw; }
+vec3 vel(vec3 P) {
+  vec3 q = clamp(P, vec3(0.0), vec3(float(NX - 1), float(NY - 1), float(NZ - 1)));
+  ivec3 i0 = ivec3(floor(q)), i1 = min(i0 + 1, ivec3(NX - 1, NY - 1, NZ - 1));
+  vec3 t = q - vec3(i0);
+  vec3 c00 = mix(M(i0), M(ivec3(i1.x, i0.y, i0.z)), t.x);
+  vec3 c10 = mix(M(ivec3(i0.x, i1.y, i0.z)), M(ivec3(i1.x, i1.y, i0.z)), t.x);
+  vec3 c01 = mix(M(ivec3(i0.x, i0.y, i1.z)), M(ivec3(i1.x, i0.y, i1.z)), t.x);
+  vec3 c11 = mix(M(ivec3(i0.x, i1.y, i1.z)), M(i1), t.x);
+  return mix(mix(c00, c10, t.y), mix(c01, c11, t.y), t.z);
+}
+bool bad(vec3 p) {
+#if PERZ
+  bool zo = false;
+#else
+  bool zo = p.z < -0.5 || p.z > float(NZ) - 0.5;
+#endif
+  if (p.x < 0.0 || p.x > uXmax || p.y < -0.5 || p.y > float(NY) - 0.5 || zo) return true;
+  ivec3 c = clamp(ivec3(floor(p + 0.5)), ivec3(0), ivec3(NX - 1, NY - 1, NZ - 1));
+  return texelFetch(uG, A(c), 0).r <= 0.0;
+}
+void main() {
+  vec2 id = gl_FragCoord.xy;
+  vec4 s = texelFetch(uPos, ivec2(id), 0);
+  float life = uLife * (0.55 + 0.45 * h12(id * 1.731));
+  vec3 p = s.xyz; float age = s.w;
+  bool re = uInit == 1 || age > life || bad(p);
+  if (!re) {
+    float h = uDt;
+    vec3 k1 = vel(p), k2 = vel(p + 0.5 * h * k1), k3 = vel(p + 0.5 * h * k2), k4 = vel(p + h * k3);
+    p += h / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+#if PERZ
+    p.z = mod(p.z + 0.5, float(NZ)) - 0.5;
+#endif
+    age += h;
+    if (bad(p)) re = true;
+  }
+  if (re) {
+    float a = h12(id + uSeed), b = h12(id.yx + uSeed * 1.37 + 11.1), c = h12(id * 0.73 + uSeed * 2.11 + 5.3);
+    p = vec3(uRake.x, mix(uRake.y, uRake.z, a), mix(uRakeZ.x, uRakeZ.y, b));
+    age = 0.0;
+    if (uInit == 1) { p.x = mix(uRake.x, uXmax, c); age = c * life; }
+  }
+  o = vec4(p, age);
+}
+`;
+}
+function particleDrawVS(defs) {
+  return header(defs).replace(/bool cellOf[\s\S]*$/, '') + CMAP_GLSL + `
+uniform sampler2D uPos, uM;
+uniform mat4 uVP;
+uniform int uPW;
+uniform float uTrail, uU, uLife;
+out vec4 vC;
+void main() {
+  int pid = gl_VertexID >> 1, e = gl_VertexID & 1;
+  ivec2 tc = ivec2(pid % uPW, pid / uPW);
+  vec4 s = texelFetch(uPos, tc, 0);
+  vec3 p = s.xyz;
+  ivec3 c = clamp(ivec3(floor(p + 0.5)), ivec3(0), ivec3(NX - 1, NY - 1, NZ - 1));
+  vec3 u = texelFetch(uM, A(c), 0).yzw;
+  vec3 P = e == 0 ? p : p - u * uTrail;
+  if (gl_InstanceID == 1) P.z = -1.0 - P.z;
+  gl_Position = uVP * vec4(P, 1.0);
+  float life = uLife * (0.55 + 0.45 * h12((vec2(tc) + 0.5) * 1.731));
+  float fade = smoothstep(0.0, 80.0, s.w) * (1.0 - smoothstep(0.8 * life, life, s.w));
+  float sp = length(u) / uU;
+  vC = vec4(mix(vec3(0.90, 0.94, 1.0), turbo(clamp(sp / 1.6, 0.0, 1.0)), 0.3), (e == 0 ? 0.42 : 0.0) * fade);
+}
+`;
+}
+const PARTICLE_FS = `#version 300 es
+precision mediump float;
+in vec4 vC; out vec4 o;
+void main() { o = vC; }`;
+const LINE_VS = `#version 300 es
+in vec3 aP; uniform mat4 uVP;
+void main() { gl_Position = uVP * vec4(aP, 1.0); }`;
+const LINE_FS = `#version 300 es
+precision mediump float;
+uniform vec4 uC; out vec4 o;
+void main() { o = uC; }`;
+const PRESENT_FS = `#version 300 es
+precision mediump float;
+uniform sampler2D uTex; in vec2 vUv; out vec4 o;
+void main() { vec3 c = texture(uTex, vUv).rgb; vec2 d = vUv - 0.5; c *= 1.0 - 0.28 * dot(d, d); o = vec4(c, 1.0); }`;
+
+// ════════════════════════════════════════════════════════════════════
+//  WebGL plumbing
+// ════════════════════════════════════════════════════════════════════
+const canvas = $('view');
+let gl = null;
+try {
+  gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+} catch (e) { gl = null; }
+if (!gl) { showFatal('이 브라우저에서 WebGL 2를 사용할 수 없습니다. 최신 Chrome, Edge, Safari, Firefox에서 열어 주세요.'); return; }
+if (!gl.getExtension('EXT_color_buffer_float')) { showFatal('이 기기는 부동소수점 렌더 타깃(EXT_color_buffer_float)을 지원하지 않아 FP32 유동 계산을 할 수 없습니다.'); return; }
+const CAPS = {
+  maxDraw: gl.getParameter(gl.MAX_DRAW_BUFFERS),
+  maxTex: Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS)),
+};
+const emptyVAO = gl.createVertexArray();
+
+function compile(type, src, label) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS) && !gl.isContextLost()) {
+    const log = gl.getShaderInfoLog(s);
+    console.error(label + '\n' + log + '\n' + src.split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'));
+    throw new Error(`${label} 셰이더 컴파일 실패: ${log}`);
+  }
+  return s;
+}
+function makeProgram(vs, fs, label) {
+  const p = gl.createProgram();
+  const a = compile(gl.VERTEX_SHADER, vs, label + '/vs'), b = compile(gl.FRAGMENT_SHADER, fs, label + '/fs');
+  gl.attachShader(p, a); gl.attachShader(p, b);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS) && !gl.isContextLost()) throw new Error(`${label} 링크 실패: ${gl.getProgramInfoLog(p)}`);
+  gl.deleteShader(a); gl.deleteShader(b);
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, info.name); }
+  return { p, u, label };
+}
+function tex2D(w, h, ifmt, filter) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, ifmt, w, h);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function makeFbo(texs, depthRb) {
+  const f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  texs.forEach((t, i) => gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, t, 0));
+  if (depthRb) gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRb);
+  gl.drawBuffers(texs.map((_, i) => gl.COLOR_ATTACHMENT0 + i));
+  const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (st !== gl.FRAMEBUFFER_COMPLETE && !gl.isContextLost()) throw new Error('프레임버퍼 생성 실패 (0x' + st.toString(16) + ') — 해상도를 낮춰 보세요.');
+  return f;
+}
+function run(prog, fbo, w, h, setup) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, w, h);
+  gl.useProgram(prog.p);
+  let unit = 0;
+  const bind = (name, tex) => {
+    const loc = prog.u[name];
+    if (loc === undefined) return;
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(loc, unit++);
+  };
+  setup(prog.u, bind);
+  gl.bindVertexArray(emptyVAO);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  State
+// ════════════════════════════════════════════════════════════════════
+const coarse = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
+const state = {
+  scene: 'sphere', res: coarse ? 'low' : 'mid', Loverride: 0,
+  re: 300, ma: 0.1, aoa: 8,
+  model: 'trt', les: 'auto', cs: 0.12, bouzidi: true, fp16: false, spf: 0,
+  vis: 'q', thr: { q: 0.6, vort: 2.0, wake: 0.25 }, opac: 0.6, iso: 0,
+  slice: 0, sliceField: 1, slicePos: 0.5,
+  particles: true, surfCp: true, quality: coarse ? 'low' : 'mid',
+  running: true,
+};
+{
+  const h = (location.hash || '').replace('#', '');
+  if (SCENES[h]) state.scene = h;
+}
+const sim = { ready: false, step: 0, cur: 0, F: [[], []], fbo: [[], []], groups: [], progs: {}, hist: [], spfAuto: 3, pending: null };
+const view = { w: 0, h: 0, rw: 0, rh: 0, color: null, depth: null, fbo: null };
+const cam = { yaw: 0.55, pitch: 0.4, dist: 300, target: [0, 0, 0], fov: 38 * Math.PI / 180 };
+
+function flowParams() {
+  const U = state.ma / SQ3;
+  const nu = U * sim.L / state.re;
+  const tau0 = Math.max(0.5 + 3 * nu, 0.5002);
+  const delta = 5 * sim.L / Math.sqrt(state.re);
+  const lesOn = state.les === 'on' || (state.les === 'auto' && (tau0 < 0.505 || delta < 3));
+  const T = sim.Tramp, t = sim.step;
+  const rampAt = (k) => (k >= T ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * k / T));
+  const ramp = rampAt(t), dramp = rampAt(t + 1) - ramp;
+  const pert = t < T ? Math.sin(Math.PI * t / T) : 0;
+  return { U, nu, tau0, lesOn, cs2: lesOn ? state.cs * state.cs : 0, ramp, dramp, pert, delta };
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Simulation setup
+// ════════════════════════════════════════════════════════════════════
+function domainFor(scene, res, Lo) {
+  const S = SCENES[scene];
+  const L = Lo || S.res[res];
+  return { L, N: (state.dimsOverride || S.dims).map((d) => Math.max(4, Math.round(d * L))) };
+}
+function atlasFor(N) {
+  let best = null;
+  for (let tx = 1; tx <= N[2]; tx++) {
+    const ty = Math.ceil(N[2] / tx), W_ = N[0] * tx, H_ = N[1] * ty;
+    if (W_ > CAPS.maxTex || H_ > CAPS.maxTex) continue;
+    const score = Math.max(W_, H_) + W_ * H_ * 1e-7;
+    if (!best || score < best.score) best = { tx, W: W_, H: H_, score };
+  }
+  return best;
+}
+const fmtCells = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : Math.round(n / 1e3) + 'k';
+
+const allocated = [];
+function track(kind, obj) { allocated.push([kind, obj]); return obj; }
+function freeAll() {
+  for (const [k, o] of allocated) {
+    if (k === 't') gl.deleteTexture(o); else if (k === 'f') gl.deleteFramebuffer(o); else if (k === 'p') gl.deleteProgram(o.p);
+  }
+  allocated.length = 0;
+}
+
+function defsBase() {
+  const S = SCENES[state.scene];
+  return { NX: sim.N[0], NY: sim.N[1], NZ: sim.N[2], TX: sim.TX, AW: sim.AW, AH: sim.AH, SCENE: S.id, MIRZ: S.mirZ ? 1 : 0, PERZ: S.bc.z === 'per' ? 1 : 0 };
+}
+
+function compileSimKernels() {
+  const S = SCENES[state.scene];
+  const defs = { ...defsBase(), BOUZIDI: state.bouzidi ? 1 : 0, MODEL_NAME: state.model };
+  for (const k of ['collide', 'diag']) {
+    if (sim.progs[k]) [].concat(sim.progs[k]).forEach((p) => gl.deleteProgram(p.p));
+  }
+  const d2 = { ...defs }; delete d2.MODEL_NAME;
+  const src = (ks) => collideFS(defs, ks, S.bc).replace('#define MODEL_NAME ' + state.model + '\n', '');
+  sim.progs.collide = sim.groups.map((ks) => makeProgram(FS_VS, src(ks), 'collide'));
+  sim.progs.diag = makeProgram(FS_VS, diagFS(d2, S.bc).replace(/#define MODEL_NAME.*\n/, ''), 'diag');
+}
+
+function rebuild(keepCamera) {
+  sim.ready = false;
+  const S = SCENES[state.scene];
+  let { L, N } = domainFor(state.scene, state.res, state.Loverride);
+  let at = atlasFor(N);
+  if (!at) throw new Error('GPU 텍스처 한도를 넘는 격자입니다. 해상도를 낮춰 주세요.');
+  freeAll();
+  for (const k of Object.keys(sim.progs)) [].concat(sim.progs[k]).forEach((p) => gl.deleteProgram(p.p));
+  sim.progs = {};
+  Object.assign(sim, { L, N, TX: at.tx, AW: at.W, AH: at.H, cells: N[0] * N[1] * N[2], S });
+  sim.place = S.place(L, N, state);
+  sim.groups = CAPS.maxDraw >= 5 ? [[0, 1, 2, 3, 4]] : [[0, 1, 2, 3], [4]];
+  sim.Tramp = Math.round(Math.max(600, 4 * N[0]));
+  sim.spX0 = N[0] - 1 - Math.max(8, Math.round(0.1 * N[0]));
+  sim.spIn = Math.max(6, Math.round(0.04 * N[0]));
+
+  const fmt = state.fp16 ? gl.RGBA16F : gl.RGBA32F;
+  for (let b = 0; b < 2; b++) {
+    sim.F[b] = [0, 1, 2, 3, 4].map(() => track('t', tex2D(at.W, at.H, fmt, gl.NEAREST)));
+    sim.fbo[b] = sim.groups.map((ks) => track('f', makeFbo(ks.map((k) => sim.F[b][k]))));
+  }
+  sim.geom = track('t', tex2D(at.W, at.H, gl.R32F, gl.NEAREST));
+  sim.geomTmp = track('t', tex2D(at.W, at.H, gl.R32F, gl.NEAREST));
+  sim.geomFbo = track('f', makeFbo([sim.geom]));
+  sim.geomTmpFbo = track('f', makeFbo([sim.geomTmp]));
+  sim.macro = track('t', tex2D(at.W, at.H, gl.RGBA32F, gl.NEAREST));
+  sim.macroFbo = track('f', makeFbo([sim.macro]));
+  sim.vis0 = track('t', tex2D(at.W, at.H, gl.RGBA16F, gl.LINEAR));
+  sim.vis1 = track('t', tex2D(at.W, at.H, gl.RGBA16F, gl.LINEAR));
+  sim.visFbo = track('f', makeFbo([sim.vis0, sim.vis1]));
+  sim.diagF = track('t', tex2D(at.W, at.H, gl.RGBA32F, gl.NEAREST));
+  sim.diagS = track('t', tex2D(at.W, at.H, gl.RGBA32F, gl.NEAREST));
+  sim.diagFbo = track('f', makeFbo([sim.diagF, sim.diagS]));
+  sim.red = [];
+  for (let w = at.W, h = at.H; w > 1 || h > 1;) {
+    w = Math.ceil(w / 4); h = Math.ceil(h / 4);
+    const a = track('t', tex2D(w, h, gl.RGBA32F, gl.NEAREST)), b2 = track('t', tex2D(w, h, gl.RGBA32F, gl.NEAREST));
+    sim.red.push({ w, h, a, b: b2, fbo: track('f', makeFbo([a, b2])) });
+  }
+
+  const defs = defsBase();
+  compileSimKernels();
+  sim.progs.geomPhi = makeProgram(FS_VS, geomPhiFS(defs), 'geomPhi');
+  sim.progs.geomNear = makeProgram(FS_VS, geomNearFS(defs, S.bc), 'geomNear');
+  sim.progs.macro = makeProgram(FS_VS, macroFS(defs), 'macro');
+  sim.progs.vis = makeProgram(FS_VS, visFS(defs, S.bc), 'vis');
+  sim.progs.reduce = makeProgram(FS_VS, REDUCE_FS, 'reduce');
+  sim.progs.render = makeProgram(FS_VS, renderFS(defs), 'render');
+  sim.progs.pUpdate = makeProgram(FS_VS, particleUpdateFS(defs), 'particles');
+  sim.progs.pDraw = makeProgram(particleDrawVS(defs), PARTICLE_FS, 'particleDraw');
+  if (!sim.progs.line) {
+    sim.progs.line = makeProgram(LINE_VS, LINE_FS, 'line');
+    sim.progs.present = makeProgram(FS_VS, PRESENT_FS, 'present');
+  }
+  buildGeometry();
+  resetFlow();
+  setupParticles();
+  buildLines();
+  if (!keepCamera) resetCamera();
+  sim.ready = true;
+  updateResInfo();
+}
+
+function sceneUniforms(u) {
+  const p = sim.place;
+  gl.uniform4fv(u.uS0, p.s0); gl.uniform4fv(u.uS1, p.s1); gl.uniform4fv(u.uS2, p.s2);
+}
+
+function buildGeometry() {
+  sim.place = SCENES[state.scene].place(sim.L, sim.N, state);
+  run(sim.progs.geomPhi, sim.geomTmpFbo, sim.AW, sim.AH, (u) => sceneUniforms(u));
+  run(sim.progs.geomNear, sim.geomFbo, sim.AW, sim.AH, (u, bind) => bind('uT', sim.geomTmp));
+  sim.visDirty = true;
+}
+
+function resetFlow() {
+  for (let b = 0; b < 2; b++) {
+    sim.fbo[b].forEach((f, gi) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      sim.groups[gi].forEach((_, j) => gl.clearBufferfv(gl.COLOR, j, [0, 0, 0, 0]));
+    });
+  }
+  sim.cur = 0; sim.step = 0; sim.hist = []; sim.pending = null; sim.last = null; sim.lastDiag = -1e9;
+  sim.gen = (sim.gen || 0) + 1;
+  sim.visDirty = true; sim.particleInit = true; sim.analysis = null;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Time stepping & diagnostics
+// ════════════════════════════════════════════════════════════════════
+function stepOnce(fp) {
+  const src = sim.cur, dst = 1 - src;
+  const U = fp.U;
+  sim.groups.forEach((ks, gi) => {
+    run(sim.progs.collide[gi], sim.fbo[dst][gi], sim.AW, sim.AH, (u, bind) => {
+      for (let k = 0; k < 5; k++) bind('uF' + k, sim.F[src][k]);
+      bind('uG', sim.geom);
+      gl.uniform1f(u.uTau0, fp.tau0);
+      gl.uniform1f(u.uCs2, fp.cs2);
+      gl.uniform1f(u.uLam, 3 / 16);
+      gl.uniform1f(u.uSpX0, sim.spX0);
+      gl.uniform1f(u.uSpAmp, 0.6);
+      gl.uniform1f(u.uSpIn, sim.spIn);
+      gl.uniform3f(u.uUin, U * fp.ramp, 0, 0);
+      gl.uniform3f(u.uDu, U * fp.dramp, 0, 0);
+      const S = SCENES[state.scene];
+      gl.uniform3f(u.uPert, 0, 0.06 * U * fp.pert, S.mirZ || S.bc.z === 'per' ? 0 : 0.02 * U * fp.pert);
+      sceneUniforms(u);
+    });
+  });
+  sim.cur = dst;
+  sim.step++;
+}
+
+function runDiagnostics() {
+  run(sim.progs.diag, sim.diagFbo, sim.AW, sim.AH, (u, bind) => {
+    for (let k = 0; k < 5; k++) bind('uF' + k, sim.F[sim.cur][k]);
+    bind('uG', sim.geom);
+    sceneUniforms(u);
+  });
+  let srcA = sim.diagF, srcB = sim.diagS, sw = sim.AW, sh = sim.AH;
+  for (const lv of sim.red) {
+    run(sim.progs.reduce, lv.fbo, lv.w, lv.h, (u, bind) => {
+      bind('uA', srcA); bind('uB', srcB); gl.uniform2i(u.uSz, sw, sh);
+    });
+    srcA = lv.a; srcB = lv.b; sw = lv.w; sh = lv.h;
+  }
+  return sim.red[sim.red.length - 1].fbo;
+}
+
+const readback = { pbo: gl.createBuffer(), sync: null, step: 0, data: new Float32Array(8) };
+gl.bindBuffer(gl.PIXEL_PACK_BUFFER, readback.pbo);
+gl.bufferData(gl.PIXEL_PACK_BUFFER, 32, gl.STREAM_READ);
+gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+
+function requestDiag() {
+  const fbo = runDiagnostics();
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, readback.pbo);
+  gl.readBuffer(gl.COLOR_ATTACHMENT0);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, 0);
+  gl.readBuffer(gl.COLOR_ATTACHMENT1);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, 16);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  readback.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  readback.step = sim.step;
+  readback.gen = sim.gen;
+  gl.flush();
+}
+function pollDiag() {
+  if (!readback.sync) return;
+  const st = gl.clientWaitSync(readback.sync, 0, 0);
+  if (st === gl.TIMEOUT_EXPIRED) return;
+  gl.deleteSync(readback.sync);
+  readback.sync = null;
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, readback.pbo);
+  gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, readback.data);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  if (readback.gen === sim.gen) ingest(readback.data, readback.step);
+}
+function diagSync() {
+  const fbo = runDiagnostics();
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+  const out = new Float32Array(8), tmp = new Float32Array(4);
+  gl.readBuffer(gl.COLOR_ATTACHMENT0); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, tmp); out.set(tmp, 0);
+  gl.readBuffer(gl.COLOR_ATTACHMENT1); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, tmp); out.set(tmp, 4);
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  return out;
+}
+
+function ingest(d, step) {
+  const [Fx, Fy, Fz, nCells, sR1, sKE, maxU, maxDr] = d;
+  if (!Number.isFinite(Fx + Fy + Fz + sR1 + sKE) || maxDr > 1e20 || maxU > 0.6) { onDiverged(); return; }
+  const fp = flowParams();
+  const q = 0.5 * fp.U * fp.U * sim.place.area;
+  const rec = { step, ts: step * fp.U / sim.L, cd: Fx / q, cl: Fy / q, cz: Fz / q, rho: sR1 / nCells, maxU, maxDr };
+  sim.last = rec;
+  if (step < sim.Tramp) return;
+  const h = sim.hist;
+  if (h.length && step <= h[h.length - 1].step) return;
+  h.push(rec);
+  if (h.length > 9000) sim.hist = h.filter((_, i) => i % 2 === 0 || i > h.length - 3000);
+}
+
+function onDiverged() {
+  const wasLes = flowParams().lesOn;
+  if (!wasLes) { state.les = 'on'; syncControls(); }
+  resetFlow();
+  toast(wasLes
+    ? '수치 발산이 감지되어 유동을 초기화했습니다. 레이놀즈 수를 낮추거나 격자 해상도를 높여 주세요.'
+    : '수치 발산이 감지되어 Smagorinsky LES를 켜고 유동을 초기화했습니다.');
+}
+
+// ── signal analysis: Strouhal number from lateral-force zero crossings, period-aligned means ──
+function analyze() {
+  const h = sim.hist;
+  if (h.length < 20) return null;
+  const tEnd = h[h.length - 1].ts, tStart = h[0].ts;
+  const recent = h.filter((r) => r.ts >= Math.max(tStart + 3, tEnd - 80));
+  if (recent.length < 20) return null;
+  const S = SCENES[state.scene];
+  const comps = S.mirZ ? ['cl'] : ['cl', 'cz'];
+  let best = null;
+  for (const c of comps) {
+    const m = recent.reduce((s, r) => s + r[c], 0) / recent.length;
+    const sd = Math.sqrt(recent.reduce((s, r) => s + (r[c] - m) ** 2, 0) / recent.length);
+    if (!best || sd > best.sd) best = { c, m, sd };
+  }
+  let st = null, periods = [], crossings = [];
+  if (best && best.sd > 2e-3) {
+    for (let i = 1; i < recent.length; i++) {
+      const a = recent[i - 1][best.c] - best.m, b = recent[i][best.c] - best.m;
+      if (a < 0 && b >= 0) crossings.push(recent[i - 1].ts + (recent[i].ts - recent[i - 1].ts) * (-a / (b - a)));
+    }
+    for (let i = 1; i < crossings.length; i++) periods.push(crossings[i] - crossings[i - 1]);
+    periods = periods.slice(-6);
+    if (periods.length >= 2) {
+      const mp = periods.reduce((s, x) => s + x, 0) / periods.length;
+      const cv = Math.sqrt(periods.reduce((s, x) => s + (x - mp) ** 2, 0) / periods.length) / mp;
+      st = { v: 1 / mp, cv, n: periods.length };
+    }
+  }
+  let win;
+  if (st && st.cv < 0.2 && crossings.length >= 3) {
+    const k = Math.min(crossings.length - 1, 4);
+    win = h.filter((r) => r.ts >= crossings[crossings.length - 1 - k] && r.ts <= crossings[crossings.length - 1]);
+  } else {
+    win = h.filter((r) => r.ts >= tEnd - 10);
+  }
+  if (win.length < 3) win = recent.slice(-20);
+  const mean = (k) => win.reduce((s, r) => s + r[k], 0) / win.length;
+  const cd = mean('cd'), cl = mean('cl');
+  const clRms = Math.sqrt(win.reduce((s, r) => s + (r.cl - cl) ** 2, 0) / win.length);
+  // convergence of the mean: compare halves of the last 20 t·U/L
+  const tail = h.filter((r) => r.ts >= tEnd - 20);
+  let steady = false;
+  if (tail.length > 20 && tEnd - tStart > 25) {
+    const half = tail.length >> 1;
+    const m1 = tail.slice(0, half).reduce((s, r) => s + r.cd, 0) / half;
+    const m2 = tail.slice(half).reduce((s, r) => s + r.cd, 0) / (tail.length - half);
+    const amp = Math.max(...tail.map((r) => r.cd)) - Math.min(...tail.map((r) => r.cd));
+    steady = Math.abs(m1 - m2) < 0.004 * Math.abs(cd) && amp < 0.01 * Math.abs(cd);
+  }
+  return { cd, cl, clRms, st: st && st.cv < 0.25 ? st : null, steady, tEnd, periodic: !!(st && st.cv < 0.25) };
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Visualisation
+// ════════════════════════════════════════════════════════════════════
+function computeFields(fp) {
+  run(sim.progs.macro, sim.macroFbo, sim.AW, sim.AH, (u, bind) => {
+    for (let k = 0; k < 5; k++) bind('uF' + k, sim.F[sim.cur][k]);
+    bind('uG', sim.geom);
+  });
+  run(sim.progs.vis, sim.visFbo, sim.AW, sim.AH, (u, bind) => {
+    bind('uM', sim.macro); bind('uG', sim.geom);
+    gl.uniform1f(u.uU, fp.U); gl.uniform1f(u.uL, sim.L);
+  });
+}
+
+const particles = { pw: 0, ph: 0, tex: [], fbo: [], cur: 0 };
+function setupParticles() {
+  const pw = 256, ph = coarse ? 32 : 64;
+  particles.pw = pw; particles.ph = ph; particles.count = pw * ph;
+  particles.tex = [0, 1].map(() => track('t', tex2D(pw, ph, gl.RGBA32F, gl.NEAREST)));
+  particles.fbo = particles.tex.map((t) => track('f', makeFbo([t])));
+  particles.cur = 0;
+  sim.particleInit = true;
+}
+function updateParticles(dt, fp) {
+  const src = particles.cur, dst = 1 - src, r = sim.place.rake;
+  run(sim.progs.pUpdate, particles.fbo[dst], particles.pw, particles.ph, (u, bind) => {
+    bind('uPos', particles.tex[src]); bind('uM', sim.macro); bind('uG', sim.geom);
+    gl.uniform1f(u.uDt, dt);
+    gl.uniform1f(u.uSeed, (sim.step % 9973) * 0.137 + Math.random() * 13.1);
+    gl.uniform1f(u.uLife, 1.15 * sim.N[0] / fp.U);
+    gl.uniform1f(u.uXmax, sim.N[0] - 1.5);
+    gl.uniform4f(u.uRake, r.x, r.y0, r.y1, 0);
+    gl.uniform2f(u.uRakeZ, r.z0, r.z1);
+    gl.uniform1i(u.uInit, sim.particleInit ? 1 : 0);
+  });
+  particles.cur = dst;
+  sim.particleInit = false;
+}
+
+let lineBuf = null, lineVAO = null, lineSegs = {};
+function buildLines() {
+  const [nx, ny, nz] = sim.N, S = SCENES[state.scene];
+  const x0 = -0.5, x1 = nx - 0.5, y0 = -0.5, y1 = ny - 0.5, z0 = S.mirZ ? -nz - 0.5 : -0.5, z1 = nz - 0.5;
+  const v = [];
+  const seg = (a, b) => v.push(...a, ...b);
+  const box = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+  [[1, 2], [5, 6], [1, 5], [2, 6], [0, 1], [3, 2], [4, 5], [7, 6]].forEach(([a, b]) => seg(box[a], box[b]));
+  const boxN = v.length / 3;
+  const rect = (x) => { seg([x, y0, z0], [x, y1, z0]); seg([x, y1, z0], [x, y1, z1]); seg([x, y1, z1], [x, y0, z1]); seg([x, y0, z1], [x, y0, z0]); };
+  rect(x0);
+  const inletN = v.length / 3 - boxN;
+  rect(sim.spX0);
+  lineSegs = { box: [0, boxN], inlet: [boxN, inletN], sponge: [boxN + inletN, v.length / 3 - boxN - inletN] };
+  if (!lineBuf) { lineBuf = gl.createBuffer(); lineVAO = gl.createVertexArray(); }
+  gl.bindVertexArray(lineVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+}
+
+// ── camera ──
+const V3 = {
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+};
+function mul4(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; }
+  return o;
+}
+function inv4(m) {
+  const o = new Float32Array(16);
+  const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = m;
+  const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10, b03 = a01 * a12 - a02 * a11;
+  const b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12, b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30;
+  const b08 = a20 * a33 - a23 * a30, b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  const det = 1 / (b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06);
+  o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det; o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+  o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det; o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+  o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det; o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+  o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det; o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+  o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det; o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+  o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det; o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+  o[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det; o[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+  o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det; o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+  return o;
+}
+function boxBounds() {
+  const [nx, ny, nz] = sim.N, S = SCENES[state.scene];
+  return { min: [-0.5, -0.5, S.mirZ ? -nz - 0.5 : -0.5], max: [nx - 0.5, ny - 0.5, nz - 0.5] };
+}
+function freeRect() {
+  const W = canvas.clientWidth || 1, H = canvas.clientHeight || 1;
+  const ro = $('readout').getBoundingClientRect(), pa = $('panel').getBoundingClientRect();
+  let l = 0, r = W, t = 0, b = H;
+  if (W > 760) { l = Math.min(W * 0.42, ro.right); r = Math.max(W * 0.58, pa.left); }
+  else { t = Math.min(H * 0.55, ro.bottom); b = Math.max(H * 0.45 + 1, pa.top); }
+  return { l, r, t, b, W, H };
+}
+function resetCamera() {
+  const b = boxBounds(), o = sim.place, L = sim.L, fr = SCENES[state.scene].frame;
+  const ox = (o.omin[0] + o.omax[0]) / 2, oy = (o.omin[1] + o.omax[1]) / 2;
+  const lo = [Math.max(b.min[0], ox + fr[0] * L), Math.max(b.min[1], oy - fr[2] * L), b.min[2]];
+  const hi = [Math.min(b.max[0], ox + fr[1] * L), Math.min(b.max[1], oy + fr[2] * L), b.max[2]];
+  cam.target = lo.map((v, k) => (v + hi[k]) / 2);
+  const r = 0.5 * Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  const f = freeRect(), tv = Math.tan(cam.fov / 2);
+  const half = Math.min(Math.atan(tv * (f.b - f.t) / f.H), Math.atan(tv * (f.W / f.H) * (f.r - f.l) / f.W));
+  cam.dist = 0.92 * r / Math.sin(half);
+  cam.yaw = -0.6; cam.pitch = 0.38;
+}
+function camMatrices(aspect) {
+  const cp = Math.cos(cam.pitch), eye = [cam.target[0] + cam.dist * cp * Math.sin(cam.yaw), cam.target[1] + cam.dist * Math.sin(cam.pitch), cam.target[2] + cam.dist * cp * Math.cos(cam.yaw)];
+  const z = V3.norm(V3.sub(eye, cam.target)), x = V3.norm(V3.cross([0, 1, 0], z)), y = V3.cross(z, x);
+  const view = new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -V3.dot(x, eye), -V3.dot(y, eye), -V3.dot(z, eye), 1]);
+  const n = Math.max(0.5, cam.dist * 0.02), f = cam.dist * 6 + 2000, t = 1 / Math.tan(cam.fov / 2);
+  const fr = freeRect();
+  const sx = (fr.l + fr.r) / fr.W - 1, sy = 1 - (fr.t + fr.b) / fr.H;
+  const proj = new Float32Array([t / aspect, 0, 0, 0, 0, t, 0, 0, -sx, -sy, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]);
+  const vp = mul4(proj, view);
+  return { eye, vp, inv: inv4(vp), right: x, up: y };
+}
+
+// ── render ──
+const QUAL = { low: { scale: 0.5, step: 1.25 }, mid: { scale: 0.8, step: 0.9 }, high: { scale: 1.0, step: 0.6 } };
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const q = QUAL[state.quality];
+  const rw = Math.max(1, Math.round(canvas.clientWidth * q.scale * Math.min(dpr, state.quality === 'high' ? 1.5 : 1)));
+  const rh = Math.max(1, Math.round(canvas.clientHeight * q.scale * Math.min(dpr, state.quality === 'high' ? 1.5 : 1)));
+  if (rw === view.rw && rh === view.rh && view.fbo) return;
+  if (view.fbo) { gl.deleteFramebuffer(view.fbo); gl.deleteTexture(view.color); gl.deleteRenderbuffer(view.depth); }
+  view.rw = rw; view.rh = rh;
+  view.color = tex2D(rw, rh, gl.RGBA8, gl.LINEAR);
+  view.depth = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, view.depth);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, rw, rh);
+  view.fbo = makeFbo([view.color], view.depth);
+}
+
+function render(fp, frame) {
+  resize();
+  const M = camMatrices(view.rw / view.rh);
+  const b = boxBounds();
+  const modes = { none: 0, q: 1, vort: 2, wake: 3 };
+  const mode = modes[state.vis];
+  const thr = state.thr[state.vis] ?? 1;
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.ALWAYS);
+  gl.depthMask(true);
+  run(sim.progs.render, view.fbo, view.rw, view.rh, (u, bind) => {
+    bind('uV0', sim.vis0); bind('uV1', sim.vis1);
+    sceneUniforms(u);
+    gl.uniformMatrix4fv(u.uInvVP, false, M.inv); gl.uniformMatrix4fv(u.uVP, false, M.vp);
+    gl.uniform3fv(u.uEye, M.eye); gl.uniform3fv(u.uBmin, b.min); gl.uniform3fv(u.uBmax, b.max);
+    gl.uniform3fv(u.uOmin, sim.place.omin); gl.uniform3fv(u.uOmax, sim.place.omax);
+    gl.uniform1f(u.uStep, QUAL[state.quality].step);
+    gl.uniform1f(u.uThr, thr);
+    gl.uniform1f(u.uOpac, 0.25 + 0.7 * state.opac);
+    gl.uniform1f(u.uDens, 0.01 + 0.35 * state.opac * state.opac);
+    gl.uniform1f(u.uFrame, frame);
+    gl.uniform1f(u.uL, sim.L);
+    gl.uniform1i(u.uMode, mode); gl.uniform1i(u.uIsoColor, state.iso);
+    gl.uniform1i(u.uSliceAxis, state.slice); gl.uniform1i(u.uSliceField, state.sliceField);
+    gl.uniform1f(u.uSlicePos, state.slicePos);
+    gl.uniform1i(u.uSurf, state.surfCp ? 1 : 0);
+  });
+  gl.depthFunc(gl.LEQUAL);
+  // domain frame
+  gl.useProgram(sim.progs.line.p);
+  gl.uniformMatrix4fv(sim.progs.line.u.uVP, false, M.vp);
+  gl.bindVertexArray(lineVAO);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.uniform4f(sim.progs.line.u.uC, 0.55, 0.65, 0.75, 0.35); gl.drawArrays(gl.LINES, lineSegs.box[0], lineSegs.box[1]);
+  gl.uniform4f(sim.progs.line.u.uC, 0.95, 0.69, 0.24, 0.55); gl.drawArrays(gl.LINES, lineSegs.inlet[0], lineSegs.inlet[1]);
+  gl.uniform4f(sim.progs.line.u.uC, 0.55, 0.65, 0.75, 0.18); gl.drawArrays(gl.LINES, lineSegs.sponge[0], lineSegs.sponge[1]);
+  // tracer streaks
+  if (state.particles) {
+    const pd = sim.progs.pDraw;
+    gl.useProgram(pd.p);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, particles.tex[particles.cur]); gl.uniform1i(pd.u.uPos, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, sim.macro); gl.uniform1i(pd.u.uM, 1);
+    gl.uniformMatrix4fv(pd.u.uVP, false, M.vp);
+    gl.uniform1i(pd.u.uPW, particles.pw);
+    gl.uniform1f(pd.u.uTrail, 0.6 * sim.L / fp.U);
+    gl.uniform1f(pd.u.uU, fp.U);
+    gl.uniform1f(pd.u.uLife, 1.15 * sim.N[0] / fp.U);
+    gl.bindVertexArray(emptyVAO);
+    gl.drawArraysInstanced(gl.LINES, 0, particles.count * 2, SCENES[state.scene].mirZ ? 2 : 1);
+  }
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+  gl.disable(gl.DEPTH_TEST);
+  run(sim.progs.present, null, canvas.width, canvas.height, (u, bind) => bind('uTex', view.color));
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Main loop
+// ════════════════════════════════════════════════════════════════════
+let frameNo = 0, lastT = performance.now(), dtEma = 16, perf = { t0: performance.now(), steps: 0, mlups: 0 }, hudT = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!sim.ready || sim.headless || gl.isContextLost()) return;
+  const dt = Math.min(100, now - lastT); lastT = now;
+  dtEma = 0.9 * dtEma + 0.1 * dt;
+  try {
+    pollDiag();
+    let fp = flowParams();
+    let spf = 0;
+    if (state.running) {
+      spf = state.spf || sim.spfAuto;
+      for (let i = 0; i < spf; i++) { if (sim.step <= sim.Tramp || i === 0) fp = flowParams(); stepOnce(fp); }
+      perf.steps += spf;
+      if (!readback.sync && sim.step - sim.lastDiag >= 24) { requestDiag(); sim.lastDiag = sim.step; }
+      sim.visDirty = true;
+    }
+    if (sim.visDirty) { computeFields(fp); sim.visDirty = false; }
+    if (state.particles && (state.running || sim.particleInit)) updateParticles(Math.max(1, spf), fp);
+    render(fp, frameNo++);
+    if (!state.spf && state.running && frameNo % 8 === 0) {
+      if (dtEma < 21 && sim.spfAuto < 48) sim.spfAuto++;
+      else if (dtEma > 30 && sim.spfAuto > 1) sim.spfAuto = Math.max(1, Math.floor(sim.spfAuto * 0.8));
+    }
+    if (now - perf.t0 > 1000) { perf.mlups = perf.steps * sim.cells / ((now - perf.t0) * 1e3); perf.steps = 0; perf.t0 = now; }
+    if (now - hudT > 250) { hudT = now; updateHud(); }
+  } catch (e) {
+    console.error(e);
+    showFatal(e.message || String(e));
+    sim.ready = false;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  HUD
+// ════════════════════════════════════════════════════════════════════
+const css = getComputedStyle(document.documentElement);
+const COL = { amber: css.getPropertyValue('--amber').trim(), cyan: css.getPropertyValue('--cyan').trim(), text: css.getPropertyValue('--text').trim(), muted: css.getPropertyValue('--muted').trim(), line: css.getPropertyValue('--line').trim() };
+const f3 = (x) => (x == null || !Number.isFinite(x) ? '—' : x.toFixed(3));
+const fsig = (x, n = 3) => (x == null || !Number.isFinite(x) ? '—' : Math.abs(x) >= 1e-3 || x === 0 ? x.toPrecision(n) : x.toExponential(1));
+const pct = (a, b) => { const e = (a - b) / b * 100; return (e >= 0 ? '+' : '−') + Math.abs(e).toFixed(1) + '%'; };
+const fmtRe = (r) => r >= 1000 ? r.toLocaleString('en-US') : String(r);
+
+function updateHud() {
+  const fp = flowParams();
+  const S = SCENES[state.scene];
+  const ref = S.ref(state.re, state);
+  const an = sim.analysis = analyze();
+  const warm = sim.step < sim.Tramp;
+  const chip = $('runChip');
+  if (!state.running) { chip.textContent = '일시정지'; chip.dataset.s = 'pause'; }
+  else if (warm) { chip.textContent = `유입 가속 ${Math.round(100 * sim.step / sim.Tramp)}%`; chip.dataset.s = 'warm'; }
+  else if (an && an.steady) { chip.textContent = '정상 상태 수렴'; chip.dataset.s = 'steady'; }
+  else if (an && an.periodic) { chip.textContent = '주기 유동'; chip.dataset.s = 'steady'; }
+  else { chip.textContent = '계산 중'; chip.dataset.s = 'run'; }
+
+  $('mCd').textContent = an ? f3(an.cd) : '—';
+  if (ref.cd) {
+    const err = an ? pct(an.cd, ref.cd) : '';
+    const good = an && Math.abs(an.cd - ref.cd) / ref.cd < 0.05;
+    $('mCdRef').innerHTML = `기준 ${ref.cd.toFixed(3)}${an ? ` · <span class="${good ? 'good' : 'off'}">${err}</span>` : ''}<br>${ref.cdSrc}`;
+  } else {
+    $('mCdRef').textContent = ref.note ? '저 Re 결과 · 실험값과 직접 비교 불가' : '—';
+  }
+  $('mCl').textContent = an ? f3(an.cl) : '—';
+  if (ref.cl) $('mClRef').innerHTML = `${ref.cl.src} ${ref.cl.v.toFixed(3)}${an ? ` · ${pct(an.cl, ref.cl.v)}` : ''}`;
+  else $('mClRef').textContent = an && an.periodic ? `진동 RMS ${an.clRms.toFixed(3)}` : (an ? '평균값' : '—');
+  if (an && an.st) {
+    $('mSt').textContent = an.st.v.toFixed(3);
+    $('mStRef').innerHTML = ref.st ? `기준 ${ref.st.v.toFixed(3)} · <span class="${Math.abs(an.st.v - ref.st.v) / ref.st.v < 0.05 ? 'good' : 'off'}">${pct(an.st.v, ref.st.v)}</span><br>${ref.st.src}` : `${an.st.n}주기 평균`;
+  } else {
+    $('mSt').textContent = '—';
+    $('mStRef').textContent = ref.st ? `기준 ${ref.st.v.toFixed(3)} (${ref.st.src})` : (an ? '와류 방출 없음' : '—');
+  }
+  $('regime').innerHTML = `<b>${S.label} · Re ${fmtRe(state.re)}</b> — ${ref.regime}`;
+
+  $('dRe').textContent = fmtRe(state.re);
+  $('dT').textContent = (sim.step * fp.U / sim.L).toFixed(1);
+  $('dTau').textContent = fp.tau0.toFixed(4) + (fp.lesOn ? ' +LES' : '');
+  $('dStep').textContent = sim.step.toLocaleString('en-US');
+  $('dNu').textContent = fp.nu.toExponential(2);
+  $('dPerf').textContent = perf.mlups ? perf.mlups.toFixed(0) : '—';
+  const L = sim.last;
+  $('dMa').textContent = L ? (L.maxU * SQ3).toFixed(3) : '—';
+  $('dDr').textContent = L ? L.maxDr.toExponential(2) : '—';
+  $('dRho').textContent = L ? L.rho.toExponential(2) : '—';
+  $('dSpf').textContent = String(state.spf || sim.spfAuto) + (state.spf ? '' : ' 자동');
+
+  const flags = [];
+  if (warm) flags.push(['info', `유입 속도를 0에서 U까지 ${sim.Tramp}스텝에 걸쳐 높이는 중입니다. 계수는 가속 완료 후 기록합니다.`]);
+  else if (an && an.tEnd - sim.hist[0].ts < 30 && !an.steady) flags.push(['info', '초기 과도 구간입니다. 평균 계수는 t·U/L이 커질수록 수렴합니다.']);
+  if (fp.delta < 3) flags.push(['warn', `경계층 두께가 약 ${fp.delta.toFixed(1)}셀로 격자가 거칩니다. 결과가 LES 모델에 좌우됩니다.`]);
+  if (!fp.lesOn && fp.tau0 < 0.505) flags.push(['warn', `τ = ${fp.tau0.toFixed(4)}로 0.5에 가깝습니다. 발산 위험이 있으니 LES를 켜 두세요.`]);
+  if (L && L.maxU * SQ3 > 0.3) flags.push(['warn', `국소 마하수 ${(L.maxU * SQ3).toFixed(2)} — 압축성 오차가 커집니다. 격자 마하수를 낮춰 보세요.`]);
+  if (ref.cd && sim.place.blockage > 0.05) flags.push(['info', `차폐율 ${(sim.place.blockage * 100).toFixed(1)}% — 측벽 영향으로 측정 C_D가 무한 영역 기준보다 다소 높게 나옵니다.`]);
+  if (ref.note) flags.push(['info', ref.note]);
+  if (state.fp16) flags.push(['info', 'FP16 저장 모드입니다. 질량·계수에 반올림 잡음이 FP32보다 큽니다.']);
+  $('flags').innerHTML = flags.map(([l, t]) => `<li data-l="${l}">${t}</li>`).join('');
+  drawChart(ref, an);
+  drawScales();
+}
+
+const chart = $('chart');
+function drawChart(ref, an) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = chart.clientWidth, h = chart.clientHeight;
+  if (!w || !h) return;
+  if (chart.width !== Math.round(w * dpr)) { chart.width = Math.round(w * dpr); chart.height = Math.round(h * dpr); }
+  const c = chart.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  const H = sim.hist;
+  const padL = 34, padR = 6, padT = 6, padB = 14;
+  c.font = '10px ' + css.getPropertyValue('--font-data');
+  c.fillStyle = COL.muted;
+  if (H.length < 2) { c.fillText('가속 완료 후 C_D, C_L 이력이 그려집니다', padL, h / 2); return; }
+  const stride = Math.max(1, Math.floor(H.length / 600));
+  const pts = H.filter((_, i) => i % stride === 0 || i === H.length - 1);
+  const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts;
+  const robust = H.slice(Math.floor(H.length * 0.25));
+  let lo = Infinity, hi = -Infinity;
+  for (const r of robust) { lo = Math.min(lo, r.cd, r.cl); hi = Math.max(hi, r.cd, r.cl); }
+  if (ref.cd) { lo = Math.min(lo, ref.cd); hi = Math.max(hi, ref.cd); }
+  if (ref.cl) { lo = Math.min(lo, ref.cl.v); hi = Math.max(hi, ref.cl.v); }
+  lo = Math.min(lo, 0); const pad = (hi - lo) * 0.12 || 0.1; lo -= pad; hi += pad;
+  const X = (t) => padL + (w - padL - padR) * (t - t0) / Math.max(1e-9, t1 - t0);
+  const Y = (v) => padT + (h - padT - padB) * (1 - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo));
+  c.strokeStyle = COL.line; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(padL, Y(0)); c.lineTo(w - padR, Y(0)); c.stroke();
+  c.fillStyle = COL.muted; c.textAlign = 'right'; c.textBaseline = 'middle';
+  [lo + pad, hi - pad].forEach((v) => c.fillText(v.toFixed(2), padL - 4, Y(v)));
+  c.fillText('0', padL - 4, Y(0));
+  c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  c.fillText(t0.toFixed(0), padL, h - 2);
+  c.textAlign = 'right'; c.fillText(t1.toFixed(0), w - padR, h - 2);
+  if (ref.cd) {
+    c.setLineDash([3, 3]); c.strokeStyle = COL.text; c.globalAlpha = 0.6;
+    c.beginPath(); c.moveTo(padL, Y(ref.cd)); c.lineTo(w - padR, Y(ref.cd)); c.stroke();
+    c.setLineDash([]); c.globalAlpha = 1;
+  }
+  const line = (k, col) => {
+    c.strokeStyle = col; c.lineWidth = 1.5; c.beginPath();
+    pts.forEach((r, i) => (i ? c.lineTo(X(r.ts), Y(r[k])) : c.moveTo(X(r.ts), Y(r[k]))));
+    c.stroke();
+    const e = pts[pts.length - 1];
+    c.fillStyle = col; c.beginPath(); c.arc(X(e.ts), Y(e[k]), 2.5, 0, Math.PI * 2); c.fill();
+  };
+  line('cl', COL.cyan);
+  line('cd', COL.amber);
+}
+
+// colour scales (JS twins of the GLSL maps)
+function turboJS(x) {
+  x = Math.min(1, Math.max(0, x));
+  const v4 = [1, x, x * x, x * x * x], v2 = [x ** 4, x ** 5];
+  const d = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+  const r = d(v4, [0.13572138, 4.61539260, -42.66032258, 132.13108234]) + d(v2, [-152.94239396, 59.28637943]);
+  const g = d(v4, [0.09140261, 2.19418839, 4.84296658, -14.18503333]) + d(v2, [4.27729857, 2.82956604]);
+  const b = d(v4, [0.10667330, 12.64194608, -60.58204836, 110.36276771]) + d(v2, [-89.90310912, 27.34824973]);
+  return [r, g, b].map((v) => Math.round(255 * Math.min(1, Math.max(0, v))));
+}
+function divergeJS(x) {
+  const lo = [0.230, 0.299, 0.754], mid = [0.865, 0.865, 0.865], hi = [0.706, 0.016, 0.150];
+  const ss = (t) => t * t * (3 - 2 * t);
+  const m = (a, b, t) => a.map((v, i) => Math.round(255 * (v + (b[i] - v) * t)));
+  return x < 0.5 ? m(lo, mid, ss(x * 2)) : m(mid, hi, ss(x * 2 - 1));
+}
+function gradient(fn, map) { const st = []; for (let i = 0; i <= 12; i++) { const t = i / 12; st.push(`rgb(${fn(map(t)).join(',')}) ${(t * 100).toFixed(1)}%`); } return `linear-gradient(90deg, ${st.join(', ')})`; }
+const SCALE_DEFS = {
+  speed: { nm: '속도 크기 |u|/U', g: () => gradient(turboJS, (t) => t), a: '0', b: '1.6' },
+  ux: { nm: '유동 방향 속도 u/U', g: () => gradient(turboJS, (t) => t), a: '−0.4', b: '1.4' },
+  cp: { nm: '압력 계수 Cp', g: () => gradient(divergeJS, (t) => t), a: '−1.5', b: '+1.0' },
+  vortS: { nm: '와도 크기 |ω|L/U', g: () => gradient(turboJS, (t) => t), a: '0', b: '16' },
+  q: { nm: 'Q·(L/U)²', g: () => gradient(divergeJS, (t) => t), a: '< 0', b: '> 0' },
+};
+let scaleKey = '';
+function drawScales() {
+  const items = [];
+  if (state.vis === 'q') items.push({ ...SCALE_DEFS[['speed', 'ux', 'cp'][state.iso]], pre: '와류 등위면 · ' });
+  if (state.vis === 'vort') items.push({ nm: '와도 볼륨 |ω|L/U', g: () => gradient(turboJS, (t) => 0.12 + 0.88 * t), a: fsig(state.thr.vort, 2), b: fsig(state.thr.vort * 13, 2) });
+  if (state.vis === 'wake') items.push({ nm: '속도 결손 1−u/U', g: () => gradient(turboJS, (t) => t), a: '0', b: '1.25 (역류)' });
+  if (state.slice) items.push({ ...SCALE_DEFS[['speed', 'ux', 'vortS', 'cp', 'q'][state.sliceField]], pre: '단면 · ' });
+  if (state.surfCp && !items.some((i) => i.nm === SCALE_DEFS.cp.nm)) items.push({ ...SCALE_DEFS.cp, pre: '표면 · ' });
+  const key = JSON.stringify(items.map((i) => [i.nm, i.pre, i.a, i.b]));
+  if (key === scaleKey) return;
+  scaleKey = key;
+  $('scales').hidden = !items.length;
+  $('scales').innerHTML = items.slice(0, 3).map((i) => `<div class="scale"><span class="nm">${i.pre || ''}${i.nm}</span><div class="bar" style="background:${i.g()}"></div><div class="ends"><span>${i.a}</span><span>${i.b}</span></div></div>`).join('');
+}
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 7000);
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  Controls
+// ════════════════════════════════════════════════════════════════════
+const RE_LO = Math.log10(10), RE_HI = Math.log10(20000);
+const niceRe = (r) => { const p = Math.pow(10, Math.floor(Math.log10(r)) - 1); return Math.round(r / p) * p; };
+const reToSlider = (r) => Math.round(1000 * (Math.log10(r) - RE_LO) / (RE_HI - RE_LO));
+const sliderToRe = (v) => niceRe(Math.pow(10, RE_LO + (RE_HI - RE_LO) * v / 1000));
+const THR = { q: [0.02, 50], vort: [0.2, 30], wake: [0.02, 1.0] };
+const thrToSlider = (m, v) => { const [a, b] = THR[m]; return Math.round(1000 * Math.log(v / a) / Math.log(b / a)); };
+const sliderToThr = (m, s) => { const [a, b] = THR[m]; return a * Math.pow(b / a, s / 1000); };
+
+function updateResInfo() {
+  const S = SCENES[state.scene];
+  const { L, N } = domainFor(state.scene, state.res, state.Loverride);
+  const cells = N[0] * N[1] * N[2];
+  const mb = cells * 2 * 5 * (state.fp16 ? 8 : 16) / 1048576;
+  $('resInfo').textContent = `${N.join('×')} = ${fmtCells(cells)} 셀 · ${S.Lname} = ${L}셀 · 분포함수 ${mb.toFixed(0)} MB${S.mirZ ? ' · 대칭면 반모델' : ''}`;
+}
+function syncControls() {
+  const S = SCENES[state.scene];
+  $('scene').value = state.scene;
+  $({ low: 'resLow', mid: 'resMid', high: 'resHigh' }[state.res]).checked = true;
+  $('re').value = reToSlider(state.re); $('reVal').textContent = fmtRe(state.re);
+  $('ma').value = state.ma; $('maVal').textContent = state.ma.toFixed(2);
+  $('aoaField').hidden = state.scene !== 'wing';
+  $('aoa').value = state.aoa; $('aoaVal').textContent = state.aoa + '°';
+  $('model').value = state.model;
+  $({ auto: 'lesAuto', on: 'lesOn', off: 'lesOff' }[state.les]).checked = true;
+  $('cs').value = state.cs; $('csVal').textContent = state.cs.toFixed(2);
+  $(state.bouzidi ? 'bndBz' : 'bndBb').checked = true;
+  $(state.fp16 ? 'precF16' : 'precF32').checked = true;
+  $('spf').value = state.spf; $('spfVal').textContent = state.spf ? String(state.spf) : '자동';
+  $('vis').value = state.vis;
+  const tm = state.vis;
+  $('thr').disabled = tm === 'none';
+  if (THR[tm]) {
+    $('thr').value = thrToSlider(tm, state.thr[tm]);
+    $('thrVal').textContent = fsig(state.thr[tm], 2);
+    $('thrLbl').firstChild.textContent = { q: 'Q·(L/U)² 임계값 ', vort: '|ω|L/U 임계값 ', wake: '1−u/U 임계값 ' }[tm];
+  }
+  $('opac').value = state.opac; $('opacVal').textContent = Math.round(state.opac * 100) + '%';
+  $('isoColor').value = String(state.iso);
+  $('slice').value = String(state.slice); $('sliceField').value = String(state.sliceField);
+  $('slicePos').value = state.slicePos; $('slicePosVal').textContent = Math.round(state.slicePos * 100) + '%';
+  $('particles').checked = state.particles; $('surfCp').checked = state.surfCp;
+  $({ low: 'qLow', mid: 'qMid', high: 'qHigh' }[state.quality]).checked = true;
+  $('btnRun').textContent = state.running ? '일시정지' : '계속';
+  $('rePicks').innerHTML = S.picks.map((r) => `<button type="button" data-re="${r}">Re ${fmtRe(r)}</button>`).join('');
+  updateResInfo();
+}
+
+function applySceneDefaults() {
+  const d = SCENES[state.scene].defaults;
+  state.re = d.re; state.vis = d.vis; state.thr[d.vis] = d.thr; state.slice = d.slice; state.sliceField = d.sliceField; state.iso = d.iso;
+  state.model = d.model || 'trt';
+}
+
+function safely(fn) { return (...a) => { try { fn(...a); } catch (e) { console.error(e); showFatal(e.message || String(e)); } }; }
+const on = (id, ev, fn) => $(id).addEventListener(ev, safely(fn));
+
+on('scene', 'change', (e) => { state.scene = e.target.value; applySceneDefaults(); syncControls(); rebuild(false); try { history.replaceState(null, '', '#' + state.scene); } catch (err) { /* sandboxed frame */ } });
+document.querySelectorAll('input[name="res"]').forEach((el) => el.addEventListener('change', safely(() => { state.res = el.value; syncControls(); rebuild(true); resetCamera(); })));
+on('re', 'input', (e) => { state.re = sliderToRe(+e.target.value); $('reVal').textContent = fmtRe(state.re); });
+on('re', 'change', () => { sim.hist = []; });
+on('rePicks', 'click', (e) => { const b = e.target.closest('button[data-re]'); if (!b) return; state.re = +b.dataset.re; sim.hist = []; syncControls(); });
+on('ma', 'input', (e) => { state.ma = +e.target.value; $('maVal').textContent = state.ma.toFixed(2); });
+on('ma', 'change', () => resetFlow());
+on('aoa', 'input', (e) => { state.aoa = +e.target.value; $('aoaVal').textContent = state.aoa + '°'; buildGeometry(); sim.hist = []; });
+on('model', 'change', (e) => { state.model = e.target.value; compileSimKernels(); sim.hist = []; });
+document.querySelectorAll('input[name="les"]').forEach((el) => el.addEventListener('change', () => { state.les = el.value; sim.hist = []; }));
+on('cs', 'input', (e) => { state.cs = +e.target.value; $('csVal').textContent = state.cs.toFixed(2); });
+document.querySelectorAll('input[name="bnd"]').forEach((el) => el.addEventListener('change', safely(() => { state.bouzidi = el.value === '1'; compileSimKernels(); sim.hist = []; })));
+document.querySelectorAll('input[name="prec"]').forEach((el) => el.addEventListener('change', safely(() => { state.fp16 = el.value === '1'; rebuild(true); })));
+on('spf', 'input', (e) => { state.spf = +e.target.value; $('spfVal').textContent = state.spf ? String(state.spf) : '자동'; });
+on('vis', 'change', (e) => { state.vis = e.target.value; syncControls(); });
+on('thr', 'input', (e) => { const m = state.vis; if (!THR[m]) return; state.thr[m] = sliderToThr(m, +e.target.value); $('thrVal').textContent = fsig(state.thr[m], 2); });
+on('opac', 'input', (e) => { state.opac = +e.target.value; $('opacVal').textContent = Math.round(state.opac * 100) + '%'; });
+on('isoColor', 'change', (e) => { state.iso = +e.target.value; });
+on('slice', 'change', (e) => { state.slice = +e.target.value; });
+on('sliceField', 'change', (e) => { state.sliceField = +e.target.value; });
+on('slicePos', 'input', (e) => { state.slicePos = +e.target.value; $('slicePosVal').textContent = Math.round(state.slicePos * 100) + '%'; });
+on('particles', 'change', (e) => { state.particles = e.target.checked; sim.particleInit = true; });
+on('surfCp', 'change', (e) => { state.surfCp = e.target.checked; });
+document.querySelectorAll('input[name="qual"]').forEach((el) => el.addEventListener('change', () => { state.quality = el.value; }));
+on('btnRun', 'click', () => { state.running = !state.running; syncControls(); });
+on('btnReset', 'click', () => resetFlow());
+on('btnCam', 'click', () => resetCamera());
+on('sheetHandle', 'click', () => { const p = $('panel'); const open = !p.classList.contains('open'); p.classList.toggle('open', open); $('sheetHandle').setAttribute('aria-expanded', String(open)); });
+window.addEventListener('keydown', (e) => {
+  if (e.target.closest('input, select, textarea')) return;
+  if (e.code === 'Space') { e.preventDefault(); state.running = !state.running; syncControls(); }
+  else if (e.key === 'r' || e.key === 'R') resetFlow();
+});
+
+// orbit / pan / zoom
+const pointers = new Map();
+let pinch = null;
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('pointerdown', (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey });
+  canvas.classList.add('dragging');
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+  }
+});
+function panBy(dx, dy) {
+  const M = camMatrices(1);
+  const s = cam.dist * Math.tan(cam.fov / 2) * 2 / canvas.clientHeight;
+  for (let k = 0; k < 3; k++) cam.target[k] += (-dx * M.right[k] + dy * M.up[k]) * s;
+}
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 1) {
+    if (p.pan) panBy(dx, dy);
+    else { cam.yaw -= dx * 0.006; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006)); }
+  } else if (pointers.size === 2 && pinch) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    cam.dist = Math.max(10, Math.min(5000, cam.dist * pinch.d / Math.max(d, 1)));
+    panBy(cx - pinch.cx, cy - pinch.cy);
+    pinch = { d, cx, cy };
+  }
+});
+const endPointer = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; if (!pointers.size) canvas.classList.remove('dragging'); };
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); cam.dist = Math.max(10, Math.min(5000, cam.dist * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
+canvas.addEventListener('dblclick', () => resetCamera());
+canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); showFatal('GPU 컨텍스트가 손실되었습니다. 메모리가 부족할 수 있으니 해상도를 낮추고 페이지를 새로 고쳐 주세요.'); });
+
+// ════════════════════════════════════════════════════════════════════
+//  Boot
+// ════════════════════════════════════════════════════════════════════
+try {
+  applySceneDefaults();
+  if (coarse) $('roDetails').open = false;
+  syncControls();
+  rebuild(false);
+  requestAnimationFrame(frame);
+} catch (e) {
+  console.error(e);
+  showFatal(e.message || String(e));
+}
+
+// headless validation hooks
+window.LBM = {
+  state, sim, SCENES, cam,
+  configure(o) { Object.assign(state, o); syncControls(); rebuild(false); },
+  steps(n) { for (let i = 0; i < n; i++) stepOnce(flowParams()); },
+  diag() { const d = diagSync(); ingest(d, sim.step); return Array.from(d); },
+  analyze, flowParams,
+  pause() { state.running = false; syncControls(); },
+  probe() {
+    computeFields(flowParams());
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sim.macroFbo);
+    const a = new Float32Array(sim.AW * sim.AH * 4);
+    gl.readPixels(0, 0, sim.AW, sim.AH, gl.RGBA, gl.FLOAT, a);
+    const [nx, ny, nz] = sim.N, tx = sim.TX;
+    const prof = new Array(nx).fill(0), cells = [];
+    for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+      const ax = x + (z % tx) * nx, ay = y + Math.floor(z / tx) * ny, o = (ay * sim.AW + ax) * 4;
+      const sp = Math.hypot(a[o + 1], a[o + 2], a[o + 3]);
+      prof[x] = Math.max(prof[x], sp);
+      cells.push([sp, x, y, z, a[o], a[o + 1], a[o + 2], a[o + 3]]);
+    }
+    cells.sort((p, q) => q[0] - p[0]);
+    return { prof, top: cells.slice(0, 12) };
+  },
+};
+})();
+</script>
+</body>
+</html>
