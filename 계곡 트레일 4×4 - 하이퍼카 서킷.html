@@ -4153,9 +4153,10 @@ function hcBrake(w,wm){
 // its ground 0.457 m under the centre of mass. The 4x4: the off-road truck at its own size (the chassis is built to it:
 // 3.48 m wheelbase, 0.739 m half track, 35" tyres), its ground 1.086 m under the centre of mass; its paint, scratches and
 // mud baked into its textures. Each model's own wheels (the left one of each axle, centred on the hub, axle along x) turn
-// on the chassis' wheels in place of the procedural ones, where the model has them (the 4x4's stay on its Blender file's
-// hubs, hub: the centres of its wheels there, in the model's own axes: Blender x, z, -y); the hypercar's stand-in brake discs
-// give way to real brakes. The game's own steering wheel and pedals give way to the model's cabin.
+// on the chassis' wheels in place of the procedural ones, where the model has them (the 4x4's sit on its Blender file's
+// hubs at rest, hub: the centres of its wheels there, in the model's own axes: Blender x, z, -y, and ride on its axles: see
+// axleRig); the hypercar's stand-in brake discs give way to real brakes. The game's own steering wheel and pedals give way
+// to the model's cabin.
 // (should a model not load, the procedural body stays)
 const MODEL=HC?{file:'revuelto.glb',s:1.0594,p:[0,-0.457,0.2517],W:['HCW_F','HCW_R'],drop:[['HCW_F_006','HCW_F_007'],['HCW_R_002','HCW_R_003']],dx:[0.004,-0.017],dy:[-0.002,0.0256],brakes:true}
   :!SC?{file:'offroad.glb',s:1,p:[0,-1.0856,-0.23],W:['OW_F','OW_R'],drop:[[],[]],dx:[0,0],dy:[0,0],brakes:false,mirror:true,
@@ -4165,6 +4166,75 @@ const MODEL=HC?{file:'revuelto.glb',s:1.0594,p:[0,-0.457,0.2517],W:['HCW_F','HCW
 function mirrorX(g){const m=g.clone();for(const k of['position','normal']){const a=m.attributes[k];if(!a)continue;for(let i=0;i<a.count;i++)a.setX(i,-a.getX(i));a.needsUpdate=true;}
   if(m.index){const a=m.index.array;for(let i=0;i<a.length;i+=3){const t=a[i+1];a[i+1]=a[i+2];a[i+2]=t;}m.index.needsUpdate=true;}
   m.computeBoundingSphere();return m;}
+// The off-road model's axles, coil-overs, driveshafts and the lines under its front axle are part of its body mesh (its
+// Blender file joins them): each vertex gets the axle it hangs on and how far it follows it (0: the frame, 1: the axle).
+// The pieces are found as the mesh's connected parts (its vertices welded where seams split them) by where they lie, in
+// the model's own axes (Blender x, z, -y):
+// the axle tubes with their hubs and the coil-overs (springs and shocks) are parts of their own; the front differential
+// is one piece with the frame horn ahead of it (its housing moves, the nose from it to the post on the crossmember bends, the
+// rest stays on the frame); the rear one is one piece with
+// both driveshafts and the transfer case (the front shaft leans from the transfer case to the front axle, the rear one
+// from it to the rear axle); the brake and fuel lines that run under the front axle bend with it.
+// Springs and shocks: their lower ends ride on the axle, their upper ends stay on the frame, the length between the two
+// spring perches compresses evenly.
+function axleParts(P,I,AZ){
+  const n=P.length/3,par=new Int32Array(n);for(let i=0;i<n;i++)par[i]=i;
+  const find=a=>{while(par[a]!==a){par[a]=par[par[a]];a=par[a];}return a;};
+  const uni=(a,b)=>{a=find(a);b=find(b);if(a!==b)par[a]=b;};
+  {const H=new Map();for(let i=0;i<n;i++){const k=(Math.round(P[3*i]*1e4)+40000)*6.4e9+(Math.round(P[3*i+1]*1e4)+40000)*8e4+(Math.round(P[3*i+2]*1e4)+40000);
+    const j=H.get(k);if(j===undefined)H.set(k,i);else uni(i,j);}}
+  for(let t=0;t<I.length;t+=3){uni(I[t],I[t+1]);uni(I[t],I[t+2]);}
+  const C=new Map(),root=new Int32Array(n);
+  for(let i=0;i<n;i++){const r=find(i);root[i]=r;let c=C.get(r);if(!c)C.set(r,c={lo:[1e9,1e9,1e9],hi:[-1e9,-1e9,-1e9],k:0});
+    for(let q=0;q<3;q++){const v=P[3*i+q];if(v<c.lo[q])c.lo[q]=v;if(v>c.hi[q])c.hi[q]=v;}}
+  const lin=(v,a,b)=>Math.min(1,Math.max(0,(v-a)/(b-a))),sm=(v,a,b)=>{const t=lin(v,a,b);return t*t*(3-2*t);};
+  // kinds: 1 axle tube, 2 coil-over, 3 frame horn with the front differential, 4 drivetrain, 5 lines under the front axle
+  for(const c of C.values()){const [x0,y0,z0]=c.lo,[x1,y1,z1]=c.hi,zc=(z0+z1)/2;
+    for(let a=0;a<2;a++){if(Math.abs(zc-AZ[a])>0.07||z1-z0>0.26)continue;
+      if(x1-x0>1.3&&y0>0.34&&y1<0.57){c.k=1;c.a=a;}
+      else if(y0>0.47&&y1<1.18&&((x0>0.19&&x1<0.44)||(x1<-0.19&&x0>-0.44))){c.k=2;c.a=a;}}
+    if(!c.k&&x1-x0>1.5&&z1>2.9&&y0<0.34&&z0<AZ[0]-0.1)c.k=3;
+    else if(!c.k&&x1-x0<0.6&&z0<AZ[1]-0.1&&z1>AZ[0]+0.2&&y0>0.25&&y1<0.7)c.k=4;
+    else if(!c.k&&x1-x0>0.8&&x1-x0<0.9&&y0>0.27&&y1<0.68&&z0<0&&z1>2.7)c.k=5;}
+  // the coil-overs' perches (lower, upper) front and rear
+  const PER=[[0.605,1.065],[0.587,0.959]];
+  const W=new Float32Array(n),A=new Float32Array(n),K=new Int8Array(n),kinds=new Int32Array(6);
+  for(let i=0;i<n;i++){const c=C.get(root[i]);if(!c.k)continue;kinds[c.k]++;K[i]=c.k;const x=P[3*i],y=P[3*i+1],z=P[3*i+2];let w=0,a=0;
+    switch(c.k){
+      case 1:w=1;a=c.a;break;
+      case 2:a=c.a;w=1-lin(y,PER[a][0],PER[a][1]);break;
+      case 3:if(Math.abs(x)<0.135&&y>0.3&&y<0.618&&z>AZ[0]-0.19)w=1-lin(z,AZ[0]+0.155,AZ[0]+0.378);break;
+      case 4:if(z>AZ[0]-0.69){a=0;w=lin(z,AZ[0]-0.683,AZ[0]-0.183);}else if(z<AZ[1]+0.135){a=1;w=1;}else{a=1;w=1-lin(z,AZ[1]+0.134,0.95);}break;
+      case 5:w=1-sm(Math.abs(z-AZ[0]),0.2,0.65);break;}
+    W[i]=w;A[i]=a;}
+  return {W,A,K,kinds,comps:C.size};}
+// the off-road model's solid axles: its body as a skinned mesh on three bones (the frame, the front and the rear axle),
+// each vertex weighted by axleParts. Each axle's bone and the wheels on it follow that axle's suspension every frame (its
+// heave and roll, the roll steer, the pinion angle and the shifts of its links and track bar), turned about its hub line;
+// at rest every bone is where the Blender file has it
+const AXV={ok:false,bones:null,c:[new V3(),new V3()],t:[new V3(),new V3()],q:[new QT(),new QT()],qw:[new QT(),new QT()],p:new V3(),e:new THREE.Euler(),v:new V3()};
+function axleRig(b){
+  const o=b.getObjectByName('OR_BODY'),g=o&&o.isMesh?o.geometry:null;
+  if(!g||!g.index||g.attributes.position.isInterleavedBufferAttribute)return;
+  const n=g.attributes.position.count,{W,A}=axleParts(g.attributes.position.array,g.index.array,MODEL.hub.map(h=>h[2]));
+  const si=new Uint16Array(n*4),sw=new Float32Array(n*4);
+  for(let i=0;i<n;i++){si[4*i+1]=1+A[i];sw[4*i]=1-W[i];sw[4*i+1]=W[i];}
+  g.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(si,4));g.setAttribute('skinWeight',new THREE.Float32BufferAttribute(sw,4));
+  const sk=new THREE.SkinnedMesh(g,o.material);sk.name=o.name;sk.position.copy(o.position);sk.quaternion.copy(o.quaternion);sk.scale.copy(o.scale);
+  sk.castShadow=o.castShadow;sk.receiveShadow=o.receiveShadow;
+  const bones=[new THREE.Bone(),new THREE.Bone(),new THREE.Bone()];bones[0].add(bones[1],bones[2]);sk.add(bones[0]);
+  o.parent.add(sk);o.parent.remove(o);b.updateMatrixWorld(true);sk.bind(new THREE.Skeleton(bones));
+  // (its bounds: the body's, with room for the axles' travel)
+  if(!g.boundingSphere)g.computeBoundingSphere();sk.boundingSphere=g.boundingSphere.clone();sk.boundingSphere.radius+=0.6;
+  for(let a=0;a<2;a++)AXV.c[a].set(0,MODEL.hub[a][1],MODEL.hub[a][2]);
+  AXV.bones=bones;AXV.ok=true;}
+function axlePose(){
+  for(let a=0;a<2;a++){const A=axleS[a],q=AXV.q[a],B=AXV.bones[a+1];
+    AXV.t[a].set(A.dx,SUSP-STATIC-A.X,A.dz);
+    // R = Ry(roll steer) Rz(roll) Rx(pinion): the beam's left end drops as the axle rolls (th > 0), the pinion tilts with
+    // the links; the wheels take the same turn without the pinion's (it only turns them about their own axle)
+    q.setFromEuler(AXV.e.set(-A.ph,A.yaw,-Math.atan(A.th),'YZX'));AXV.qw[a].setFromEuler(AXV.e.set(0,A.yaw,-Math.atan(A.th),'YZX'));
+    B.quaternion.copy(q);B.position.copy(AXV.c[a]).applyQuaternion(q).negate().add(AXV.c[a]).add(AXV.t[a]);}}
 if(MODEL){
   try{const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js'),{DRACOLoader}=await import('three/addons/loaders/DRACOLoader.js');
     const ld=new GLTFLoader(),dr=new DRACOLoader();dr.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');ld.setDRACOLoader(dr);
@@ -4180,6 +4250,7 @@ if(MODEL){
         if(mir)n.traverse(o=>{if(o.isMesh)o.geometry=mirrorX(o.geometry);});
         h.add(n);wm.spinner.add(h);if(MODEL.brakes)hcBrake(w,wm);}
       HCW.on=true;HCW.dy=MODEL.dy;}
+    if(HCW.on&&!SC&&MODEL.hub)try{axleRig(b);}catch(e){console.warn('axle rig',e);}
     // the model's own steering wheel turns on its column
     const SN=MODEL.steer&&b.getObjectByName(MODEL.steer.node);if(SN)HCW.steer={n:SN,q0:SN.quaternion.clone(),ax:new V3(...MODEL.steer.ax).normalize()};
     carGroup.add(b);HCW.model=true;}catch(e){console.warn('vehicle model',e);}}
@@ -6338,17 +6409,21 @@ function updateVisuals(dt){
   // 0.2 m at 280 km/h): carry them along with the body, so they sit in their arches at any speed
   const lag=!garage.on&&!!car.sp;if(lag)_vq.copy(car.sq).invert().premultiply(car.q);
   const toNow=(p,out)=>lag?out.copy(p).sub(car.sp).applyQuaternion(_vq).add(car.pos):out.copy(p);
-  // the off-road model's axles and coil springs are part of its body and do not move, so neither do its wheels: they
-  // stay on the hubs of its Blender file and only roll and (the front ones) steer; the physics keeps its long travel
-  const MV=HCW.on&&!SC&&!!MODEL.hub;
+  // the off-road model's wheels sit on the hubs of its Blender file at rest and ride with its axles (axlePose); should its
+  // axles not have come apart from its body, they stay on those hubs and only roll and (the front ones) steer
+  const MV=HCW.on&&!SC&&!!MODEL.hub,AV=MV&&AXV.ok;
+  if(AV)axlePose();
   wheels.forEach((w,i)=>{
     const wm=wheelMeshes[i];
-    if(MV){const h=MODEL.hub[w.front?0:1];wm.g.position.set(w.side*h[0],MODEL.p[1]+h[1],MODEL.p[2]+h[2]).applyMatrix4(carGroup.matrixWorld);}
+    if(MV){const a=w.front?0:1,h=MODEL.hub[a],v=AXV.v.set(w.side*h[0],h[1],h[2]);if(AV)v.sub(AXV.c[a]).applyQuaternion(AXV.q[a]).add(AXV.c[a]).add(AXV.t[a]);
+      wm.g.position.copy(v).add(AXV.p.fromArray(MODEL.p)).applyMatrix4(carGroup.matrixWorld);}
     else{toNow(w.center,wm.g.position);if(HCW.on)wm.g.position.addScaledVector(car.up,HCW.dy[w.front?0:1]);}
     if(wm.glow){const t=smooth(380,950,w.bT);wm.glow.emissiveIntensity=t*t*3.2;}   // a hot carbon-ceramic disc glows
     // camber follows the axle: tilt about the car's forward axis by the axle roll, then steer about the tilted kingpin
     const o=wheels[i^1],th=MV?0:(w.side>0?w.x-o.x:o.x-w.x)/(2*HALF_TRACK);
-    _q2.setFromAxisAngle(_zA,SC?-w.side*w.cam:-Math.atan(th));wm.g.quaternion.copy(car.q).multiply(_q2);_q2.setFromAxisAngle(_yA,w.steer+(MV?0:w.rs));wm.g.quaternion.multiply(_q2);
+    if(AV)wm.g.quaternion.copy(car.q).multiply(AXV.qw[w.front?0:1]);
+    else{_q2.setFromAxisAngle(_zA,SC?-w.side*w.cam:-Math.atan(th));wm.g.quaternion.copy(car.q).multiply(_q2);}
+    _q2.setFromAxisAngle(_yA,w.steer+(MV?0:w.rs));wm.g.quaternion.multiply(_q2);
     w.spin+=w.omega*dt;wm.spinner.rotation.x=w.spin;
     // contact plane in the tyre mesh's own space, for the carcass-deflection shader
     if(w.contact&&!garage.on){wm.g.updateMatrixWorld(true);_tm.copy(wm.tire.matrixWorld).invert();
