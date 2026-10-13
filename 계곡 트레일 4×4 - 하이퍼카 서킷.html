@@ -4153,11 +4153,13 @@ function hcBrake(w,wm){
 // its ground 0.457 m under the centre of mass. The 4x4: the off-road truck at its own size (the chassis is built to it:
 // 3.48 m wheelbase, 0.739 m half track, 35" tyres), its ground 1.086 m under the centre of mass; its paint, scratches and
 // mud baked into its textures. Each model's own wheels (the left one of each axle, centred on the hub, axle along x) turn
-// on the chassis' wheels in place of the procedural ones, where the model has them; the hypercar's stand-in brake discs
+// on the chassis' wheels in place of the procedural ones, where the model has them (the 4x4's stay on its Blender file's
+// hubs, hub: the centres of its wheels there, in the model's own axes: Blender x, z, -y); the hypercar's stand-in brake discs
 // give way to real brakes. The game's own steering wheel and pedals give way to the model's cabin.
 // (should a model not load, the procedural body stays)
 const MODEL=HC?{file:'revuelto.glb',s:1.0594,p:[0,-0.457,0.2517],W:['HCW_F','HCW_R'],drop:[['HCW_F_006','HCW_F_007'],['HCW_R_002','HCW_R_003']],dx:[0.004,-0.017],dy:[-0.002,0.0256],brakes:true}
   :!SC?{file:'offroad.glb',s:1,p:[0,-1.0856,-0.23],W:['OW_F','OW_R'],drop:[[],[]],dx:[0,0],dy:[0,0],brakes:false,mirror:true,
+    hub:[[0.7392,0.4556,1.969],[0.7392,0.4556,-1.5089]],
     steer:{node:'OR_STEER',ax:[0,0.491,-0.871]}}:null;
 // a wheel's mirror image across its hub plane (as Blender's Mirror modifier makes the right-hand wheels from the left)
 function mirrorX(g){const m=g.clone();for(const k of['position','normal']){const a=m.attributes[k];if(!a)continue;for(let i=0;i<a.count;i++)a.setX(i,-a.getX(i));a.needsUpdate=true;}
@@ -6336,17 +6338,17 @@ function updateVisuals(dt){
   // 0.2 m at 280 km/h): carry them along with the body, so they sit in their arches at any speed
   const lag=!garage.on&&!!car.sp;if(lag)_vq.copy(car.sq).invert().premultiply(car.q);
   const toNow=(p,out)=>lag?out.copy(p).sub(car.sp).applyQuaternion(_vq).add(car.pos):out.copy(p);
-  // the off-road model's axles and coil springs are part of its body and do not move: its wheels are drawn within a
-  // short travel of where they sit at rest (the physics keeps its long travel), so they never hang off the springs
-  const MV=HCW.model&&!SC,xs=SUSP-STATIC,xv=x=>MV?clamp(x,xs-0.08,xs+0.05):x;
+  // the off-road model's axles and coil springs are part of its body and do not move, so neither do its wheels: they
+  // stay on the hubs of its Blender file and only roll and (the front ones) steer; the physics keeps its long travel
+  const MV=HCW.on&&!SC&&!!MODEL.hub;
   wheels.forEach((w,i)=>{
     const wm=wheelMeshes[i];
-    toNow(w.center,wm.g.position);if(HCW.on)wm.g.position.addScaledVector(car.up,HCW.dy[w.front?0:1]);
-    if(MV)wm.g.position.addScaledVector(car.up,w.x-xv(w.x));
+    if(MV){const h=MODEL.hub[w.front?0:1];wm.g.position.set(w.side*h[0],MODEL.p[1]+h[1],MODEL.p[2]+h[2]).applyMatrix4(carGroup.matrixWorld);}
+    else{toNow(w.center,wm.g.position);if(HCW.on)wm.g.position.addScaledVector(car.up,HCW.dy[w.front?0:1]);}
     if(wm.glow){const t=smooth(380,950,w.bT);wm.glow.emissiveIntensity=t*t*3.2;}   // a hot carbon-ceramic disc glows
     // camber follows the axle: tilt about the car's forward axis by the axle roll, then steer about the tilted kingpin
-    const o=wheels[i^1],th=(w.side>0?xv(w.x)-xv(o.x):xv(o.x)-xv(w.x))/(2*HALF_TRACK);
-    _q2.setFromAxisAngle(_zA,SC?-w.side*w.cam:-Math.atan(th));wm.g.quaternion.copy(car.q).multiply(_q2);_q2.setFromAxisAngle(_yA,w.steer+w.rs);wm.g.quaternion.multiply(_q2);
+    const o=wheels[i^1],th=MV?0:(w.side>0?w.x-o.x:o.x-w.x)/(2*HALF_TRACK);
+    _q2.setFromAxisAngle(_zA,SC?-w.side*w.cam:-Math.atan(th));wm.g.quaternion.copy(car.q).multiply(_q2);_q2.setFromAxisAngle(_yA,w.steer+(MV?0:w.rs));wm.g.quaternion.multiply(_q2);
     w.spin+=w.omega*dt;wm.spinner.rotation.x=w.spin;
     // contact plane in the tyre mesh's own space, for the carcass-deflection shader
     if(w.contact&&!garage.on){wm.g.updateMatrixWorld(true);_tm.copy(wm.tire.matrixWorld).invert();
