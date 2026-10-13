@@ -857,8 +857,8 @@ const alpsMask=(x,z,o)=>{const N=1024,S=10240;let u=(x+S)/(2*S)*N-0.5,v=(z+S)/(2
   const i=u|0,j=v|0,fu=u-i,fv=v-j,k=(i+j*N)*4,w00=(1-fu)*(1-fv),w10=fu*(1-fv),w01=(1-fu)*fv,w11=fu*fv,E=N*4;
   for(let c=0;c<3;c++){o[c]=(ALPS_A0[k+c]*w00+ALPS_A0[k+4+c]*w10+ALPS_A0[k+E+c]*w01+ALPS_A0[k+E+4+c]*w11)/255;
     o[3+c]=(ALPS_B0[k+c]*w00+ALPS_B0[k+4+c]*w10+ALPS_B0[k+E+c]*w01+ALPS_B0[k+E+4+c]*w11)/255;}return o;};
-// lighter quality after a GPU context loss (lower resolution, smaller shadow map, no near-tree cards)
-let LOWQ=false;try{LOWQ=sessionStorage.getItem('vtLowQ')==='1';if(LOWQ)setTimeout(()=>{try{sessionStorage.removeItem('vtLowQ');}catch(_){}},60000);}catch(_){}
+// the quality is always the highest: no lighter mode, not even after a GPU context loss
+const LOWQ=false;
 /* ================= TERRAIN ================= */
 const WORLD=1024,SEG=1024,CELL=WORLD/SEG,HALF=WORLD/2,NV=SEG+1;
 const WATER_Y=-0.25,ALT0=412;
@@ -1527,8 +1527,8 @@ const sunDir=new V3(-0.66,0.36,-0.62).normalize();
 const LPI=Math.PI,PL=137;   // legacy -> physical light units (studio points: legacy falloff at ~8 m)
 const hemi=new THREE.HemisphereLight(C('#b3c9e6'),C('#5b4f3b'),0.8*LPI);scene.add(hemi);
 const sun=new THREE.DirectionalLight(C('#ffcf98'),3.0*LPI);
-sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
-const sc=sun.shadow.camera;sc.left=-34;sc.right=34;sc.top=34;sc.bottom=-34;sc.near=1;sc.far=280;
+sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
+const sc=sun.shadow.camera;sc.left=-50;sc.right=50;sc.top=50;sc.bottom=-50;sc.near=1;sc.far=280;
 sun.shadow.bias=-0.0002;sun.shadow.normalBias=0.03;
 const SUN_R=new V3().crossVectors(sunDir,new V3(0,1,0)).normalize(),SUN_U=new V3().crossVectors(SUN_R,sunDir).normalize();
 scene.add(sun);scene.add(sun.target);
@@ -1695,7 +1695,7 @@ const PHOTO={on:TSL.uniform(0),hi:TSL.uniform(1),tex:{},mean:{asph:[0.0508,0.050
 {const imgs=await Promise.race([photoP.catch(e=>{console.warn('ground photos',e);return null;}),new Promise(r=>setTimeout(()=>r(null),12000))]);
   const blank=document.createElement('canvas');blank.width=blank.height=4;{const x=blank.getContext('2d');x.fillStyle='#808080';x.fillRect(0,0,4,4);}
   PHOTO_K.forEach((k,i)=>{const t=new THREE.Texture(imgs?imgs[i]:blank);t.colorSpace=k.endsWith('_n')?THREE.NoColorSpace:THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;
-    t.minFilter=THREE.LinearMipmapLinearFilter;t.magFilter=THREE.LinearFilter;t.generateMipmaps=true;t.anisotropy=Math.min(4,renderer.getMaxAnisotropy());t.needsUpdate=true;PHOTO.tex[k]=t;});
+    t.minFilter=THREE.LinearMipmapLinearFilter;t.magFilter=THREE.LinearFilter;t.generateMipmaps=true;t.anisotropy=renderer.getMaxAnisotropy();t.needsUpdate=true;PHOTO.tex[k]=t;});
   PHOTO.on.value=imgs?1:0;}
 const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,positionLocal,positionView,positionWorld,normalLocal,cameraViewMatrix,cameraPosition,
     normalize,abs,pow,dot,mix,smoothstep,clamp,max,min,length,step,fract,floor,sin,sqrt,fwidth,dFdx,dFdy,reflect,select}=TSL;
@@ -1721,7 +1721,7 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
   const lay4=w=>tG.mul(w.x).add(tD.mul(w.y)).add(tR.mul(w.z)).add(tS.mul(w.w)).add(tM.mul(mudW));
   const lw=mix(sw,hw,near.mul(0.8)),det=dot(dd,lw).add(mudW.mul(dA.y.sub(0.5).mul(0.1).add(0.5)));
   // photographed ground near the camera: each layer's photo over its mean colour modulates the painted colour. A second
-  // sample, rotated 37 deg at another scale and blended in by low-frequency noise, hides the tiling (not on the low tier).
+  // sample, rotated 37 deg at another scale and blended in by low-frequency noise, hides the tiling.
   // Only pixels within ~260 m pay (the reads sit in a branch, with gradients taken outside it)
   const pu=wp.xz,pdx=dpx.xz,pdy=dpy.xz,RC=0.8,RS=0.6,rot=v=>vec2(v.x.mul(RC).sub(v.y.mul(RS)),v.x.mul(RS).add(v.y.mul(RC)));
   const ru=rot(pu).add(vec2(17.3,5.1)),rdx=rot(pdx),rdy=rot(pdy);
@@ -1739,7 +1739,7 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
       add('gravel',0.5,1.3,lw.z);add('sand',0.556,0.55,lw.w);});
     return out;})();
   // the photos' relief (normal maps baked from them offline, gravel's own): read like the colour, the rotated sample's
-  // tangent frame turned back to the world's; not on the low tier
+  // tangent frame turned back to the world's
   const photoN=Fn(()=>{const out=vec2(0).toVar();
     const gx=pdx.toVar(),gy=pdy.toVar(),hx=rdx.toVar(),hy=rdy.toVar();
     If(near.greaterThan(0.003).and(PHOTO.on.greaterThan(0.5)).and(PHOTO.hi.greaterThan(0.5)),()=>{
@@ -1824,7 +1824,7 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
   m.normalNode=normalize(cameraViewMatrix.mul(vec4(nw,0)).xyz);
   const V=normalize(cameraPosition.sub(positionWorld)),rv=reflect(V.negate(),nw),frs=pow(one.sub(clamp(dot(nw,V),0,1)),5).mul(0.98).add(0.02);
   m.emissiveNode=mix(skyMat.uniforms.horizon,skyMat.uniforms.top,pow(clamp(rv.y,0,1),0.45)).mul(frs).mul(pud);
-  const baked=mix(1,sunv,smoothstep(20,30,length(wp.xz.sub(shadowCenter.xz))));
+  const baked=mix(1,sunv,smoothstep(30,44,length(wp.xz.sub(shadowCenter.xz))));
   m.receivedShadowNode=Fn(([sh])=>sh.mul(baked));
   return m;})();
 
@@ -2526,7 +2526,7 @@ let SHRUB=null;
 }
 // shrubs, mid-distance tufts, and dense wind-blown grass around the camera
 // card grass steps aside (dithered) near the camera, where real blades grow instead
-// the hand-over distance between blades and cards (x..y m) follows the quality tier's blade radius
+// the hand-over distance between blades and cards (x..y m) follows the blade radius
 const uGB=TSL.uniform(new THREE.Vector2(10.5,14));
 function fadeNear(mat){mat.alphaToCoverage=true;
   const {float,vec2,fract,dot,screenCoordinate,smoothstep,length,positionView}=TSL;
@@ -2633,7 +2633,7 @@ function gInfo(x,z){
   else if(inMid(x,z)){const j=oIdx(x,z);GI.sf=OSF[j];GI.tw=OwR[j];GI.ws=OwS[j];GI.wd=OwD[j];GI.wm=0;GI.sun=OSUNV[j];}
   else if(SF_OUT!==null&&!inSq(x,z)){GI.sf=SF_OUT(x,z);GI.tw=0;GI.ws=AMO[2];GI.wd=clamp(0.25+AMO[4]*0.5,0,1);GI.wm=0;GI.sun=AMO[0];}
   else{const j=fIdx(x,z);GI.sf=FSF[j];GI.tw=FwR[j];GI.ws=FwS[j];GI.wd=FwD[j];GI.wm=0;GI.sun=FSUNV[j];}return GI;}
-const grassT=makeTiler({size:14,radius:LOWQ?3:8,per:560,seed:1,geo:tuftGeo(4,1.25,0.62),
+const grassT=makeTiler({size:14,radius:10,per:560,seed:1,geo:tuftGeo(4,1.25,0.62),
   mat:tileCull(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45)))),
   place(x,z,a,b,c,M,col){const g=gInfo(x,z),sf=g.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;pr*=(1-g.tw)*(1-g.ws);if(c>pr)return false;
     const sc=0.75+b*0.7,kk=(a*7.3)%1;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.03,z),_gQ,_gS.set(sc,sc*(0.85+kk*0.7),sc));col.copy(gA).lerp(gB,clamp(g.wd*0.6+kk*0.3,0,1)).multiplyScalar(0.72+0.28*g.sun);return true;}});
@@ -2645,7 +2645,7 @@ const pebT=(()=>{
     let yy=y*0.62;if(yy<-0.1)yy=-0.1+(yy+0.1)*0.3;p.setXYZ(i,x,yy,z);const ao=0.55+0.45*smooth(-0.1,0.45,yy);cl.push(ao,ao,ao);}
   g.setAttribute('color',new THREE.Float32BufferAttribute(cl,3));g.computeVertexNormals();
   const PR=[0.14,0.55,0.08,0.9,0.18,0.45,0.55,0],base=C('#817c73'),warm=C('#86725f'),red=C('#8e6a55');
-  return makeTiler({size:10,radius:LOWQ?3:5,per:150,seed:7,geo:g,mat:tileCull(new THREE.MeshStandardNodeMaterial({vertexColors:true,roughness:0.85,map:detailTex,flatShading:true}),ip=>aheadOf(ip,1.5)),
+  return makeTiler({size:10,radius:7,per:150,seed:7,geo:g,mat:tileCull(new THREE.MeshStandardNodeMaterial({vertexColors:true,roughness:0.85,map:detailTex,flatShading:true}),ip=>aheadOf(ip,1.5)),
     place(x,z,a,b,c,M,col){const g=gInfo(x,z);if(c>PR[g.sf]*(1-g.wm)*(1-g.tw*0.7))return false;
       const s=0.035+Math.pow(b,2.4)*0.2;_gE.set(a*0.6,a*TAU*3,b*0.5);_gQ.setFromEuler(_gE);M.compose(_gP.set(x,terrainH(x,z)-s*0.12,z),_gQ,_gS.set(s*(0.8+a*0.5),s,s*(0.8+c*0.5)));
       col.copy(base).lerp(warm,(a*5.1)%1).lerp(red,smooth(200,90,dist(x,z,ROCKZ))*0.6).multiplyScalar(0.75+((b*9.7)%1)*0.4);return true;}});
@@ -2683,7 +2683,7 @@ const bladeT=(()=>{
    mat.alphaToCoverage=true;mat.opacityNode=k;
    mat.normalNode=normalize(mix(normalize(normalViewGeometry),cameraViewMatrix.mul(vec4(0,1,0,0)).xyz,0.6));}
   tileCull(mat,ip=>aheadOf(ip,1).and(within(ip,uGB.y.add(0.6))));
-  return makeTiler({size:6,radius:5,per:420,seed:3,geo:g,mat,
+  return makeTiler({size:6,radius:7,per:420,seed:3,geo:g,mat,
     place(x,z,a,b,c,M,col){const gi=gInfo(x,z),sf=gi.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;
       pr*=(1-gi.tw)*(1-gi.ws)*(1-gi.wm)*(0.5+0.5*smooth(-0.35,0.35,nB(x*0.13,z*0.13)));if(c>pr)return false;
       const sc=0.7+b*0.65;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.015,z),_gQ,_gS.set(sc,sc*(0.8+((a*7.3)%1)*0.5),sc));
@@ -5575,7 +5575,7 @@ const gp={active:false,lx:0,rt:0,lt:0,prev:[]};
 const KEYLIST=(SC?k=>k.filter(([a])=>!/^(1 2 3|L|X|P)$/.test(a)):k=>k)([
   ['W ↑','가속 · 후진 중에는 제동'],['S ↓','제동 · 정지 후 길게 누르면 후진'],['A D','조향'],['Shift','부드러운 스로틀 (40%)'],
   ['Space','사이드 브레이크'],['1 2 3','2H · 4H · 4L 저속 (4L은 10 km/h 이하)'],['L','디퍼렌셜 잠금'],['X','경사로 저속 제어(HDC) 켜기/끄기'],['T','트랙션·주행 안정 제어 켜기/끄기'],['P','타이어 공기압 35 ↔ 18 psi'],
-  ['F','초파리 뇌 자율 주행 켜기/끄기'],['N','지도 · 초파리 목적지 고르기'],['B','하이퍼카 서킷 그리드로 이동 (랩 타임 기록)'],['C','카메라: 추적 · 운전석(초파리 운전 중엔 조수석) · 휠 · 자유'],['V','주행 중 3D 뷰 (드래그 회전)'],['G','차고 · 3D 쇼룸'],['K','차체 색상 바꾸기'],['R','차량 복구'],['M','소리 끄기'],['Q','그래픽 품질: 자동 · 울트라 · 높음 · 중간 · 낮음'],['J','텔레메트리: 서스펜션 → 타이어'],['H','조작법 보기']]);
+  ['F','초파리 뇌 자율 주행 켜기/끄기'],['N','지도 · 초파리 목적지 고르기'],['B','하이퍼카 서킷 그리드로 이동 (랩 타임 기록)'],['C','카메라: 추적 · 운전석(초파리 운전 중엔 조수석) · 휠 · 자유'],['V','주행 중 3D 뷰 (드래그 회전)'],['G','차고 · 3D 쇼룸'],['K','차체 색상 바꾸기'],['R','차량 복구'],['M','소리 끄기'],['J','텔레메트리: 서스펜션 → 타이어'],['H','조작법 보기']]);
 for(const id of['introKeys','helpKeys']){const el=$(id);el.innerHTML=KEYLIST.map(([k,v])=>`<span>${k.split(' ').map(s=>`<kbd>${s}</kbd>`).join('')}</span><span>${v}</span>`).join('');}
 const MODE_NAMES=['2H · 후륜 구동','4H · 고속 4륜 구동','4L · 저속 4륜 구동 (감속비 2.57)'];
 function setMode(m){if(SC){toast('상시 4륜 구동 · 전자식 센터 커플링 (앞 최대 600 N·m)');return;}
@@ -5609,7 +5609,7 @@ addEventListener('keydown',e=>{
     case'KeyF':flyToggle();break;case'KeyN':npToggle();break;case'Escape':if(!$('navpick').hidden)npToggle();break;
     case'Digit1':setMode(0);break;case'Digit2':setMode(1);break;case'Digit3':setMode(2);break;
     case'KeyB':circuitGo();break;case'KeyL':toggleLock();break;case'KeyX':toggleHdc();break;case'KeyT':drive.tc=!drive.tc;toast(drive.tc?'트랙션·주행 안정 제어 ON':'트랙션·주행 안정 제어 OFF · 휠스핀 허용');break;case'KeyP':togglePsi();break;case'KeyC':cycleCam();break;case'KeyR':recover();break;
-    case'KeyH':toggleHelp();break;case'KeyQ':QUAL.cycle();break;case'KeyJ':toggleTele();break;case'KeyM':snd.muted=!snd.muted;toast(snd.muted?'소리 끔':'소리 켬');break;
+    case'KeyH':toggleHelp();break;case'KeyJ':toggleTele();break;case'KeyM':snd.muted=!snd.muted;toast(snd.muted?'소리 끔':'소리 켬');break;
   }
 });
 addEventListener('keyup',e=>{keys[e.code]=false;});
@@ -6488,7 +6488,7 @@ function updateCamera(dt){
 const PFX=(()=>{
   const {Fn,Loop,float,vec2,vec3,vec4,uniform,pass,uv,screenCoordinate,rtt,getViewPosition,perspectiveDepthToViewZ,logarithmicDepthToViewZ,viewZToPerspectiveDepth,cameraNear,cameraFar,cameraProjectionMatrixInverse,
     dot,cross,normalize,abs,sign,cos,sin,select,mix,smoothstep,exp,exp2,log2,pow,max,min,clamp,fract,length,step,convertToTexture,renderOutput}=TSL;
-  // what the quality tier turns on: occlusion, shafts, bloom, and the scene's multisampling
+  // occlusion, shafts, bloom and the scene's multisampling: all on (the quality is always the highest)
   const P={level:2,ao:0.9,bloom:0.2,shaft:0.42,grade:1,dbg:0,dof:0,useAO:!LOWQ,useSh:!LOWQ,useBl:true,msaa:LOWQ?2:4};
   const scenePass=pass(scene,camera,{samples:P.msaa});
   // motion vectors for the temporal anti-aliasing, written beside the colour
@@ -6674,36 +6674,21 @@ const PFX=(()=>{
   };
   return P;
 })();
-// ---- graphics quality. Three tiers; the automatic mode starts high and steps down while the frame rate stays under
-// ~50 fps (effects and draw distance go before resolution), Q picks one by hand. The status panel shows the frame rate.
+// ---- graphics quality: always the highest, no tiers and no stepping down. Past the old 울트라: grass blades to 42 m,
+// grass to 140 m, pebbles to 70 m, near trees to 150 m, the finest terrain 1.5x as far, the frame at up to 2x the CSS
+// resolution (~8 MP). The status panel shows the frame rate.
 const QUAL=(()=>{
-  // (울트라: full detail well out from the truck — grass blades to 30 m, grass to 110 m, pebbles to 50 m, the near
-  // detail and the finest terrain to twice as far — so the view doesn't drop to a lower quality past the truck)
-  const T=[
-    {name:'울트라',pr:1.75,px:5.0e6,msaa:4,ao:1,sh:1,bl:1,blades:5,gb:[25,30.5],grass:8,peb:5,near:105,lodK:0.0072},
-    {name:'높음',pr:1.5,px:3.7e6,msaa:4,ao:1,sh:1,bl:1,blades:3,gb:[16,20.5],grass:6,peb:3,near:55,lodK:0.011},
-    {name:'중간',pr:1.0,px:2.4e6,msaa:4,ao:1,sh:1,bl:1,blades:2,gb:[10.5,14],grass:4,peb:2,near:42,lodK:0.016},
-    {name:'낮음',pr:0.85,px:1.6e6,msaa:2,ao:0,sh:0,bl:1,blades:1,gb:[4.5,6.5],grass:3,peb:1,near:30,lodK:0.024}];
-  const NT=T.length-1;
-  const Q={auto:true,tier:LOWQ?2:(GPU_OK?0:2),T,scale:1,fps:0,acc:0,n:0,hold:3,fa:0,fn:0,top:0};Q.top=Q.tier;
-  Q.apply=()=>{const t=T[Q.tier],px=Math.max(1,innerWidth*innerHeight);
-    renderer.setPixelRatio(Math.max(0.5,Math.min(window.devicePixelRatio||1,t.pr,Math.sqrt(t.px/px))*Q.scale));
-    PFX.useAO=!!t.ao;PFX.useSh=!!t.sh;PFX.useBl=!!t.bl;if(PFX.setMSAA)PFX.setMSAA(t.msaa);
-    uNearR.value=t.near;LOD_K=t.lodK;FAR_MAX=1e9;PHOTO.hi.value=t.name==='낮음'?0:1;uGB.value.set(t.gb[0],t.gb[1]);
-    bladeT.setRadius(t.blades);if(bladeT.mesh)bladeT.mesh.visible=t.blades>0;grassT.setRadius(t.grass);pebT.setRadius(t.peb);
-    resize();Q.hold=2;Q.acc=Q.n=0;Q.show();};
-  Q.show=()=>{const el=$('gfx');if(el)el.textContent=`${Q.auto?'자동 · ':''}${T[Q.tier].name}${Q.scale<1?'↓':''} · ${Q.fps||'—'} fps`;};
-  // Q: 자동 → 울트라 → 높음 → 중간 → 낮음 → 자동
-  Q.cycle=()=>{if(Q.auto){Q.auto=false;Q.tier=0;}else if(Q.tier<NT)Q.tier++;else{Q.auto=true;Q.tier=GPU_OK?0:2;}
-    Q.scale=1;Q.apply();toast(`그래픽 품질 · ${Q.auto?'자동':T[Q.tier].name}`);};
+  const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,peb:7,near:150,lodK:0.0048};
+  const Q={fps:0,fa:0,fn:0};
+  Q.apply=()=>{const px=Math.max(1,innerWidth*innerHeight);
+    renderer.setPixelRatio(Math.max(0.5,Math.min(window.devicePixelRatio||1,t.pr,Math.sqrt(t.px/px))));
+    PFX.useAO=PFX.useSh=PFX.useBl=true;if(PFX.setMSAA)PFX.setMSAA(t.msaa);
+    uNearR.value=t.near;LOD_K=t.lodK;FAR_MAX=1e9;PHOTO.hi.value=1;uGB.value.set(t.gb[0],t.gb[1]);
+    bladeT.setRadius(t.blades);if(bladeT.mesh)bladeT.mesh.visible=true;grassT.setRadius(t.grass);pebT.setRadius(t.peb);
+    resize();Q.show();};
+  Q.show=()=>{const el=$('gfx');if(el)el.textContent=`${t.name} · ${Q.fps||'—'} fps`;};
   Q.tick=raw=>{if(raw>0.25)return;
-    Q.fa+=raw;Q.fn++;if(Q.fa>=0.5){Q.fps=Math.round(Q.fn/Q.fa);Q.fa=Q.fn=0;Q.show();}
-    if(!Q.auto||!drive.started||garage.on)return;
-    if(Q.hold>0){Q.hold-=raw;return;}
-    Q.acc+=raw;Q.n++;if(Q.acc<2.5)return;const avg=Q.acc/Q.n;Q.acc=Q.n=0;
-    // under ~28 fps: render scale first (to 0.8), then a tier; over ~55 fps: back up, but not into a tier it left
-    if(avg>1/28){if(Q.scale>0.85){Q.scale-=0.1;Q.apply();}else if(Q.tier<NT){Q.tier++;Q.top=Math.max(Q.top,Q.tier);Q.scale=1;Q.apply();}else if(Q.scale>0.65){Q.scale-=0.1;Q.apply();}}
-    else if(avg<1/55){if(Q.scale<1){Q.scale=Math.min(1,Q.scale+0.1);Q.apply();}else if(Q.tier>Q.top){Q.tier--;Q.apply();Q.hold=4;}}};
+    Q.fa+=raw;Q.fn++;if(Q.fa>=0.5){Q.fps=Math.round(Q.fn/Q.fa);Q.fa=Q.fn=0;Q.show();}};
   return Q;})();
 function resize(){
   const w=app.clientWidth,h=app.clientHeight;renderer.setSize(w,h);PFX.resize();camera.aspect=w/h;camera.updateProjectionMatrix();
@@ -6713,8 +6698,7 @@ function resize(){
 addEventListener('resize',resize);resize();
 let last=performance.now(),acc=0,clock=0;
 const H_STEP=1/360;
-// adaptive resolution: drop the render scale when frames run long, creep back up when there is headroom
-const perf={t:0,n:0,good:0,pr:renderer.getPixelRatio(),max:renderer.getPixelRatio()};
+// the frame rate, for the status panel
 function adapt(raw){QUAL.tick(raw);}
 /* ================= FLY BRAIN AUTOPILOT ================= */
 // A fruit fly's brain drives the truck. The network is the FlyWire v783 connectome as the 커넥톰 초파리 page packs it
@@ -7406,13 +7390,12 @@ function tick(now){
   try{updateHUD(dt,vF,wade);teleDraw(dt);}catch(err){showErr(err);}
   try{updateAudio(dt,fx.sp,fx.slipSum,fx.loose,fx.splash);}catch(err){showErr(err);}
   try{flyHUD(dt);npTick(dt);}catch(err){showErr(err);}
-  if(cloudsOK&&(QUAL.tier<3||(CLOUD.fr=(CLOUD.fr|0)+1)%2===0))CLOUD.update(camera.position,clock);   // every other frame on the light tier
+  if(cloudsOK)CLOUD.update(camera.position,clock);
   if(!window.__noRender)PFX.render();
 }
-// if the GPU driver drops the WebGL context (too much load), reload once in a lighter quality mode
+// if the GPU driver drops the WebGL context (too much load), say so (no lighter reload: the quality stays the highest)
 const gpuLost=()=>{
-  const el=$('errBox');el.textContent=LOWQ?'그래픽 장치가 렌더링을 멈췄습니다. 페이지를 새로고침해 주세요.':'그래픽 부하로 렌더링이 멈췄습니다 — 가벼운 품질로 다시 불러옵니다…';el.hidden=false;
-  if(!LOWQ){try{sessionStorage.setItem('vtLowQ','1');}catch(_){}setTimeout(()=>location.reload(),1200);}};
+  const el=$('errBox');el.textContent='그래픽 장치가 렌더링을 멈췄습니다. 페이지를 새로고침해 주세요.';el.hidden=false;};
 renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();gpuLost();},false);
 renderer.onDeviceLost=info=>{console.warn('GPU device lost',info&&info.message);if(info&&info.reason==='destroyed')return;gpuLost();};
 // ---- the Alps beyond the map ----------------------------------------------------------------------------------------
@@ -7772,8 +7755,8 @@ if(ALPS.ok){
     for(const nm of['position','normal','color','splat','sunv'])g.attributes[nm].needsUpdate=true;}
   const P_0=P_,N_0=N_,C_0=C_,S_0=S_,V_0=V_;AP.job=buildJob;
   AP.build=(cx,cz)=>{for(const _ of buildJob(cx,cz));};
-  // the far Alpine forest: billboards from ~480 m to 2.6 km (see the top of this change)
-  if(ALPFAR)try{const MAXF=LOWQ?30000:80000,{attribute,cameraPosition,cameraViewMatrix,vec3,vec4,length,normalize,max,smoothstep,dot}=TSL;
+  // the far Alpine forest: billboards from ~480 m to 3.4 km (see the top of this change)
+  if(ALPFAR)try{const MAXF=120000,{attribute,cameraPosition,cameraViewMatrix,vec3,vec4,length,normalize,max,smoothstep,dot}=TSL;
     const P=new Float32Array(MAXF*12),CO=new Float32Array(MAXF*8),SZ=new Float32Array(MAXF*8),UV=new Float32Array(MAXF*8),CL=new Float32Array(MAXF*12),I=new Uint32Array(MAXF*6);
     for(let i=0;i<MAXF;i++){for(let k=0;k<4;k++){const u=k===1||k===2?1:0,v=k>=2?1:0,o=i*4+k;CO[o*2]=u;CO[o*2+1]=v;UV[o*2]=u;UV[o*2+1]=1-v;}I.set([i*4,i*4+1,i*4+2,i*4,i*4+2,i*4+3],i*6);}
     const g=new THREE.BufferGeometry(),aP=new THREE.BufferAttribute(P,3),aS=new THREE.BufferAttribute(SZ,2),aC=new THREE.BufferAttribute(CL,3);
@@ -7805,8 +7788,8 @@ if(ALPS.ok){
       for(const a of[aP,aS,aC]){a.clearUpdateRanges();a.addUpdateRange(0,n*4*a.itemSize);a.needsUpdate=true;}g.setDrawRange(0,n*6);mesh.visible=n>0;AFF.n=n;}
     let lx=1e9,lz=1e9,busy=false;
     AFF.tick=()=>{const cx=camera.position.x+clamp(car.vel.x*3,-500,500),cz=camera.position.z+clamp(car.vel.z*3,-500,500);if(busy||Math.abs(cx-lx)+Math.abs(cz-lz)<400)return;
-      const R=QUAL.tier<=1?2600:QUAL.tier===2?1800:1200;busy=true;lx=cx;lz=cz;bgRun(job(cx,cz,R),()=>{busy=false;});};
-    AFF.run=(cx,cz,R)=>{for(const _ of job(cx,cz,R||2600));};try{window.__AFF=AFF;}catch(_){}
+      const R=3400;busy=true;lx=cx;lz=cz;bgRun(job(cx,cz,R),()=>{busy=false;});};
+    AFF.run=(cx,cz,R)=>{for(const _ of job(cx,cz,R||3400));};try{window.__AFF=AFF;}catch(_){}
   }catch(e){console.warn('far forest',e);}
   // the Alpine forest round the truck: the valley's spruces (impostors, and the full models near the camera), each one
   // an obstacle for the truck, Jolt and the fly's eyes; placed from the land cover on a jittered 10 m grid, the same
@@ -7973,7 +7956,6 @@ try{if(!window.__vtNoCompile)await Promise.race([renderer.compileAsync(scene,cam
 QUAL.apply();
 requestAnimationFrame(frame);
 for(const id of['start','introView'])$(id).disabled=false;$('start').textContent='시동 걸기';
-if(LOWQ)$('startNote').textContent='가벼운 그래픽 품질로 실행 중 · Enter';
 }
 
 let booted=false;
