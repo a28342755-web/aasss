@@ -1512,18 +1512,19 @@ const camera=new THREE.PerspectiveCamera(62,app.clientWidth/app.clientHeight,0.1
 // a late-afternoon sun, 22 degrees up: long shadows, warm light raking across the valley
 const sunDir=new V3(-0.66,0.36,-0.62).normalize();
 // aerial perspective: exponential height fog that thins with altitude, warmer toward the sun (and glowing round it, the
-// haze lit from behind), bluer looking up
-{const {Fn,float,vec3,uniform,positionWorld,cameraPosition,length,exp,abs,max,dot,pow,mix,smoothstep,clamp,select,fog}=TSL;
+// haze lit from behind), bluer looking up. Its extinction is per channel (Rayleigh-like: blue fades into the haze first,
+// red last; green as before), so ridges behind ridges layer into blue while warm sunlit faces keep their colour longer
+{const {Fn,float,vec3,vec4,uniform,positionWorld,cameraPosition,length,exp,abs,max,dot,pow,mix,smoothstep,clamp,select,output}=TSL;
  const fogC=uniform(FOG),dens=uniform(3.4e-5),SD=vec3(sunDir.x,sunDir.y,sunDir.z);
  scene.fogNode=Fn(()=>{const fv=positionWorld.sub(cameraPosition).toVar(),fd=length(fv).toVar(),vd=fv.div(max(fd,1e-3)).toVar();
    const HF=1/1500,dy=fv.y.mul(HF).toVar();
    const integ=select(abs(dy).greaterThan(1e-3),float(1).sub(exp(dy.negate())).div(dy),float(1).sub(dy.mul(0.5)));
    const od=dens.mul(exp(max(cameraPosition.y,-10).mul(-HF))).mul(fd).mul(integ).add(dens.mul(0.35).mul(fd));
-   const fogF=clamp(float(1).sub(exp(od.negate())),0,1);
+   const fogF=clamp(vec3(1).sub(exp(vec3(0.78,1,1.45).mul(od).negate())),0,1);
    const sa=max(dot(vd,SD),0);
    const fc=fogC.mul(mix(vec3(1),vec3(1.32,1.12,0.86),pow(sa,3).mul(0.95))).mul(float(1).add(pow(sa,14).mul(1.6))).toVar();
    fc.assign(mix(fc,fogC.mul(vec3(0.86,0.93,1.06)),smoothstep(0,0.35,vd.y).mul(0.5)));
-   return fog(fc,fogF);})();}
+   return vec4(mix(output.rgb,fc,fogF),output.a);})();}
 const LPI=Math.PI,PL=137;   // legacy -> physical light units (studio points: legacy falloff at ~8 m)
 // the world's sun and sky (one pair of values: the garage puts these back on the way out)
 const SUN_I=3.0*LPI,HEMI_I=0.8*LPI;
@@ -4274,6 +4275,18 @@ function axlePose(){
     // the links; the wheels take the same turn without the pinion's (it only turns them about their own axle)
     q.setFromEuler(AXV.e.set(-A.ph,A.yaw,-Math.atan(A.th),'YZX'));AXV.qw[a].setFromEuler(AXV.e.set(0,A.yaw,-Math.atan(A.th),'YZX'));
     B.quaternion.copy(q);B.position.copy(AXV.c[a]).applyQuaternion(q).negate().add(AXV.c[a]).add(AXV.t[a]);}}
+// the 4x4's textures mark its paint, its mud and much of its rubber as metal (the grey body paint 0.99, the tan dust
+// 0.73; a metal has no diffuse, so the truck read near black in the sun). Paint is a dielectric under a lacquer: the
+// body keeps a hint of metal (metallic paint) and gets a clearcoat where it is smooth (the dust and mud are rough); on
+// the parts and wheels only grey, not too dark texels stay metallic (bare steel, the rack, the rims), the coloured and
+// the black ones (rubber) become dielectric. (One node material per glTF material; should one throw, the glTF's stays)
+const orMat=m=>{const {float,max,min,dot,vec3,smoothstep,materialColor,materialMetalness,materialRoughness}=TSL;
+  const n=new THREE.MeshPhysicalNodeMaterial();n.copy(m);const c=materialColor.rgb,ch=max(max(c.r,c.g),c.b).sub(min(min(c.r,c.g),c.b));
+  const metal=float(1).sub(smoothstep(0.04,0.1,ch)).mul(smoothstep(0.05,0.12,dot(c,vec3(0.2126,0.7152,0.0722)))),smooth=float(1).sub(smoothstep(0.45,0.72,materialRoughness));
+  if(/BODY/.test(m.name)){n.metalnessNode=materialMetalness.mul(metal).mul(0.3);n.clearcoatNode=smooth.mul(0.9);n.clearcoatRoughness=0.08;}
+  else{n.metalnessNode=materialMetalness.mul(metal);if(/PARTS/.test(m.name)){n.clearcoatNode=metal.oneMinus().mul(smooth).mul(0.6);n.clearcoatRoughness=0.12;}}
+  return n;},OR_M=new Map(),orSwap=m=>{if(!m||!m.isMeshStandardMaterial||!/^ORM_/.test(m.name))return m;
+  if(!OR_M.has(m))try{OR_M.set(m,orMat(m));}catch(e){console.warn('4x4 material',e);OR_M.set(m,m);}return OR_M.get(m);};
 if(MODEL){
   try{const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js'),{DRACOLoader}=await import('three/addons/loaders/DRACOLoader.js');
     const ld=new GLTFLoader(),dr=new DRACOLoader();dr.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');ld.setDRACOLoader(dr);
@@ -4281,6 +4294,7 @@ if(MODEL){
     for(const o of[...carGroup.children])if(o.isMesh)carGroup.remove(o);
     const b=gl.scene;b.scale.setScalar(MODEL.s);b.position.set(...MODEL.p);
     b.traverse(o=>{if(!o.isMesh)return;o.castShadow=true;o.receiveShadow=true;
+      if(MODEL.file==='offroad.glb')o.material=Array.isArray(o.material)?o.material.map(orSwap):orSwap(o.material);
       for(const m of Array.isArray(o.material)?o.material:[o.material]){if(!m)continue;if(m.isMeshStandardMaterial)env(m,1);if(HC&&/Piant|Paint/i.test(m.name))HCP.push(m);}});
     const WN=MODEL.W.map(n=>b.getObjectByName(n));
     if(WN[0]&&WN[1]){WN.forEach((n,k)=>{n.parent.remove(n);for(const nm of MODEL.drop[k]){const d=n.getObjectByName(nm);if(d)d.parent.remove(d);}});
