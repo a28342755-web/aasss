@@ -4809,7 +4809,7 @@ const rtiBlocks=[0,3].map(i=>{const m=new THREE.Mesh(rbox(0.72,1,0.66,0.03),new 
 const garage={xray:false,close:false,on:false,yaw:0.75,pitch:0.2,dist:7.6,spin:true,flex:false,flexT:0,steer:false,steerT:0,top:false,turn:0.4,saved:null,fromIntro:false};
 
 /* ================= FX ================= */
-const PMAX=2400;
+const PMAX=3600;
 const P={x:new Float32Array(PMAX),y:new Float32Array(PMAX),z:new Float32Array(PMAX),vx:new Float32Array(PMAX),vy:new Float32Array(PMAX),vz:new Float32Array(PMAX),
   life:new Float32Array(PMAX),max:new Float32Array(PMAX),s0:new Float32Array(PMAX),s1:new Float32Array(PMAX),a0:new Float32Array(PMAX),grav:new Float32Array(PMAX),drag:new Float32Array(PMAX),head:0};
 const pPos=new Float32Array(PMAX*3),pCol=new Float32Array(PMAX*3),pSize=new Float32Array(PMAX),pAlpha=new Float32Array(PMAX),pSeed=new Float32Array(PMAX*2);
@@ -4852,9 +4852,9 @@ const pMat=(()=>{const {float,vec2,vec3,vec4,attribute,uv,texture,positionGeomet
   const cS=dot(normalize(pp.sub(cameraPosition)),vec3(sunDir.x,sunDir.y,sunDir.z)),hgS=float(0.64).div(pow(float(1.36).sub(cS.mul(1.2)),1.5)).min(6);
   const fwS=vec3(1,0.86,0.66).mul(hgS.mul(float(1).sub(sm.a.mul(0.6))).mul(0.4)).add(0.88);
   // a water droplet: a bright bead with a glint
-  const rd=length(d).mul(2),aR=min(1,pa).mul(smoothstep(1,0.6,rd)).mul(0.85),litR=float(1.05).add(smoothstep(0.5,0,length(d.sub(vec2(-0.1,0.12))).mul(2)).mul(0.35));
+  const rd=length(d).mul(2),aR=min(1,pa).mul(smoothstep(1,0.3,rd)).mul(0.9),litR=float(1.05).add(smoothstep(0.5,0,length(d.sub(vec2(-0.1,0.12))).mul(2)).mul(0.35));
   const isW=kind.greaterThan(0.5).and(kind.lessThan(1.5)),isR=kind.greaterThan(1.5).and(kind.lessThan(2.5)),isM=kind.greaterThan(2.5);
-  const col=select(isW,pc.mul(litW.mul(1.9)),select(isR,pc.mul(litR),select(isM,pc.mul(float(0.95).add(float(0.5).sub(d.y).mul(0.3))),pc.mul(litS.mul(1.55)).mul(fwS))));
+  const col=select(isW,pc.mul(litW.mul(1.9)),select(isR,pc.mul(litR).mul(hgS.mul(0.1).add(0.95)),select(isM,pc.mul(float(0.95).add(float(0.5).sub(d.y).mul(0.3))).mul(fwS),pc.mul(litS.mul(1.55)).mul(fwS))));
   const al=select(isW,aW,select(isR,aR,select(isM,aM,aS)));
   m.colorNode=vec4(col,al);
   m.maskNode=pa.greaterThanEqual(0.003).and(al.greaterThan(0.004));
@@ -4881,7 +4881,37 @@ const RIP=(()=>{const N=220,S=128,cv=document.createElement('canvas');cv.width=c
     update(dt){for(let i=0;i<N;i++){const r=st[i];if(r.life<=0){ra[i]=0;continue;}r.t+=dt;const u=r.t/r.life;if(u>=1){r.life=0;ra[i]=0;me.setMatrixAt(i,M_.makeScale(0,0,0));continue;}
         const s=r.s0+(r.s1-r.s0)*(1-Math.pow(1-u,2));me.setMatrixAt(i,M_.compose(V_.set(r.x,r.y,r.z),Q_,S_.set(s,1,s)));ra[i]=r.a*(1-u)*Math.min(1,u*6);}
       me.instanceMatrix.needsUpdate=true;geo.attributes.ralpha.needsUpdate=true;}};})();
-const WATER_C=C('#e4edf1'),MIST_C=C('#f2f5f6');let bowT=0;
+// foam on the water: white, broken patches left where the hull and the tyres churn it up - a wake that spreads and
+// thins over a few seconds - drawn like the ripples, as one instanced mesh lying on the surface (each turned its own way)
+const FOAM=(()=>{const N=320,S=128,cv=document.createElement('canvas');cv.width=cv.height=S;const x=cv.getContext('2d'),img=x.createImageData(S,S),r=rng(1717),G=32,g=new Float32Array(G*G);
+  for(let i=0;i<g.length;i++)g[i]=r();
+  const vn=(px,py)=>{const ix=Math.floor(px),iy=Math.floor(py),fx=px-ix,fy=py-iy,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy),h=(a,b)=>g[(((a%G)+G)%G)+(((b%G)+G)%G)*G];
+    return lerp(lerp(h(ix,iy),h(ix+1,iy),sx),lerp(h(ix,iy+1),h(ix+1,iy+1),sx),sy);};
+  for(let j=0;j<S;j++)for(let i=0;i<S;i++){const u=(i+0.5)/S-0.5,v=(j+0.5)/S-0.5,rr=Math.hypot(u,v)*2;let f=0,a=0.5,fr=3.5;
+    for(let o=0;o<4;o++){f+=a*vn(u*fr+3,v*fr+7);a*=0.5;fr*=2.1;}
+    const al=clamp((f-0.4)*3.4,0,1)*clamp(1-rr*rr,0,1),k=(j*S+i)*4;img.data[k]=img.data[k+1]=img.data[k+2]=255;img.data[k+3]=Math.round(al*255);}
+  x.putImageData(img,0,0);const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.NoColorSpace;
+  const geo=new THREE.PlaneGeometry(1,1);geo.rotateX(-Math.PI/2);const fa=new Float32Array(N);geo.setAttribute('falpha',new THREE.InstancedBufferAttribute(fa,1).setUsage(THREE.DynamicDrawUsage));
+  const {attribute,texture,uv,vec3}=TSL,m=new THREE.MeshBasicNodeMaterial({transparent:true,depthWrite:false});
+  m.colorNode=vec3(0.9,0.93,0.94);m.opacityNode=attribute('falpha','float').mul(texture(tex,uv()).a);
+  const me=new THREE.InstancedMesh(geo,m,N);me.frustumCulled=false;me.renderOrder=2;me.count=N;scene.add(me);
+  const st=Array.from({length:N},()=>({x:0,z:0,t:0,life:0,s0:0,s1:0,a:0,q:new QT()}));let head=0;const M_=new THREE.Matrix4(),V_=new V3(),S_=new V3(),Y_=new V3(0,1,0);
+  for(let i=0;i<N;i++)me.setMatrixAt(i,M_.makeScale(0,0,0));
+  return{add(x,z,s0,s1,life,a){const f=st[head];head=(head+1)%N;f.x=x;f.z=z;f.t=0;f.life=life;f.s0=s0;f.s1=s1;f.a=a;f.q.setFromAxisAngle(Y_,Math.random()*TAU);},
+    update(dt){for(let i=0;i<N;i++){const f=st[i];if(f.life<=0){fa[i]=0;continue;}f.t+=dt;const u=f.t/f.life;if(u>=1){f.life=0;fa[i]=0;me.setMatrixAt(i,M_.makeScale(0,0,0));continue;}
+        const sz=f.s0+(f.s1-f.s0)*(1-Math.pow(1-u,2.2));me.setMatrixAt(i,M_.compose(V_.set(f.x,WATER_Y+0.025,f.z),f.q,S_.set(sz,1,sz)));fa[i]=f.a*Math.pow(1-u,1.6)*Math.min(1,u*10);}
+      me.instanceMatrix.needsUpdate=true;geo.attributes.falpha.needsUpdate=true;}};})();
+const WATER_C=C('#e4edf1'),MIST_C=C('#f2f5f6');let bowT=0,splCD=0;
+// the plunge: a crown of drops thrown up and out round the hull, sheets of spray rising and spreading, a ring of foam and
+// big rings on the water - all as strong as the plunge (k 0..1: its sinking speed and its speed through the water)
+function splashBurst(k){const _b=new V3(),n=Math.round(70+260*k),m=Math.round(8+24*k);
+  for(let i=0;i<n;i++){const a=Math.random()*TAU,rr=0.85+Math.random()*0.35;_b.set(Math.cos(a)*(BOX_HW+0.3)*rr,0,Math.sin(a)*(BOX_HL+0.2)*rr).applyQuaternion(car.q);
+    const l=Math.hypot(_b.x,_b.z)||1,out=(1.5+Math.random()*4)*(0.6+k),up=(2+Math.random()*5.5)*(0.45+k);
+    emit(car.pos.x+_b.x,WATER_Y+0.12,car.pos.z+_b.z,car.vel.x*0.35+_b.x/l*out,up,car.vel.z*0.35+_b.z/l*out,WATER_C,0.05,0.07+Math.random()*0.12,0.8+Math.random()*0.8,0.9,9.8,0.35,2);}
+  for(let i=0;i<m;i++){const a=Math.random()*TAU;_b.set(Math.cos(a)*(BOX_HW+0.4),0,Math.sin(a)*(BOX_HL+0.3)).applyQuaternion(car.q);const l=Math.hypot(_b.x,_b.z)||1,out=0.8+Math.random()*2.2*(0.5+k);
+    emit(car.pos.x+_b.x,WATER_Y+0.4+Math.random()*0.6,car.pos.z+_b.z,car.vel.x*0.3+_b.x/l*out,1.5+Math.random()*3.5*(0.4+k),car.vel.z*0.3+_b.z/l*out,MIST_C,1,(3+Math.random()*3)*(0.6+k*0.7),1.3+Math.random()*1.1,0.42,1.6,1.1,3);}
+  for(let i=0;i<10;i++){const a=i/10*TAU;_b.set(Math.cos(a)*(BOX_HW+0.6),0,Math.sin(a)*(BOX_HL+0.5)).applyQuaternion(car.q);FOAM.add(car.pos.x+_b.x,car.pos.z+_b.z,1.5,3.5+3*k,4+2*k,0.85);}
+  for(let i=0;i<3;i++)RIP.add(car.pos.x,WATER_Y+0.02,car.pos.z,2+i,8+10*k+i*3,2.4+i*0.6,0.4);}
 // exhaust flame on an overrun pop (the supercar's and hypercar's tailpipes: a few hot, fast, short-lived puffs blown
 // rearward), and sparks where the body grinds a wall or strikes something (tiny, bright, thrown out and falling)
 const EXH=HC?[[0.085,0.03,-2.02],[-0.085,0.03,-2.02]]:[[0.13,-0.02,-2.36],[-0.13,-0.02,-2.36]];
@@ -4893,7 +4923,7 @@ function fxSparks(px,py,pz,nx,nz,n){for(let i=0;i<n;i++){const sp=2+Math.random(
   emit(px,py,pz,car.vel.x*0.55+nx*sp*0.35+(Math.random()-0.5)*3.5,0.4+Math.random()*3.2,car.vel.z*0.55+nz*sp*0.35+(Math.random()-0.5)*3.5,SPARK_C[i%3],0.03,0.018,0.22+Math.random()*0.35,1,9.8,0.5);}}
 let fxFrame=0;
 function updateParticles(dt){
-  fxFrame++;RIP.update(dt);
+  fxFrame++;RIP.update(dt);FOAM.update(dt);
   for(let i=0;i<PMAX;i++){
     if(P.life[i]<=0){pAlpha[i]=0;continue;}
     P.life[i]-=dt;const d=Math.exp(-P.drag[i]*dt);
@@ -6513,7 +6543,8 @@ function updateVisuals(dt){
     if(inWater){rate=v*14+slip*8;splash+=v+slip;
       // where the tyre cuts the surface: rings spreading behind it (with the hull's, a wake), mist off it at speed
       w.rip=(w.rip||0)-dt;if(w.rip<=0&&(v>0.6||slip>1)){w.rip=0.18;RIP.add(w.cp.x,WATER_Y+0.02,w.cp.z,0.7,2.4+v*0.2,1.7,0.28);}
-      if(v>3&&Math.random()<dt*(v*1.2)){const k=Math.random();emit(w.cp.x,WATER_Y+0.35,w.cp.z,car.vel.x*0.5+w.sG.x*(k-0.5)*3,0.6+k,car.vel.z*0.5+w.sG.z*(k-0.5)*3,MIST_C,0.6,2.2+v*0.06,1.1+k*0.6,0.16,-0.05,1.4,3);}}
+      if(v>3&&Math.random()<dt*(v*2.2)){const k=Math.random();emit(w.cp.x,WATER_Y+0.35,w.cp.z,car.vel.x*0.5+w.sG.x*(k-0.5)*3,0.8+k*1.6,car.vel.z*0.5+w.sG.z*(k-0.5)*3,MIST_C,0.7,2.6+v*0.1,1.2+k*0.8,0.3,0.4,1.3,3);}
+      w.foam=(w.foam||0)-dt;if(w.foam<=0&&(v>0.8||slip>1.5)){w.foam=0.09;FOAM.add(w.cp.x,w.cp.z,0.6,1.6+v*0.12,2.6+Math.random()*1.4,Math.min(0.75,0.25+v*0.05+slip*0.04));}}
     else if(w.surf===S_MUD)rate=slip*16+v*1.5;
     else if(w.surf===S_ROCK)rate=slip*2.5;
     else if(w.surf===S_ASPH)rate=slip>2?(slip-2)*14:0;   // tyre smoke only when a wheel spins or skids
@@ -6523,7 +6554,7 @@ function updateVisuals(dt){
       const rx=(Math.random()-0.5),rz=(Math.random()-0.5);
       // water thrown off the tread: a rooster tail of drops up and back off the turning tyre, a few out to the side
       if(inWater){const th=-Math.sign(w.omega||1)*Math.min(7,Math.abs(w.omega*RAD)*0.5+slip*0.6),sd=(Math.random()-0.5)*2.6;
-        emit(w.cp.x+rx*0.5,WATER_Y+0.08,w.cp.z+rz*0.5,car.vel.x*0.55+w.fG.x*th+w.sG.x*sd,1.4+Math.random()*3.4,car.vel.z*0.55+w.fG.z*th+w.sG.z*sd,WATER_C,0.07,0.16+Math.random()*0.1,0.7+Math.random()*0.5,0.85,9.8,0.25,2);}
+        emit(w.cp.x+rx*0.5,WATER_Y+0.08,w.cp.z+rz*0.5,car.vel.x*0.55+w.fG.x*th+w.sG.x*sd,1.4+Math.random()*3.4,car.vel.z*0.55+w.fG.z*th+w.sG.z*sd,WATER_C,0.06,0.1+Math.random()*0.12,0.7+Math.random()*0.5,0.85,9.8,0.25,2);}
       else if(w.surf===S_MUD){const back=-Math.sign(w.omega)*Math.min(8,slip)*0.7;
         emit(w.cp.x+rx*0.3,w.cp.y+0.1,w.cp.z+rz*0.3,w.fG.x*back+w.sG.x*rx*2,1.2+Math.random()*2.8,w.fG.z*back+w.sG.z*rx*2,S.dust,0.09,0.13,1.1,0.95,9.8,0.3);}
       // burnt rubber: dense white-grey smoke rolling off the tyre, swelling for seconds and drifting up and away
@@ -6540,12 +6571,17 @@ function updateVisuals(dt){
   if(car.sub>0&&!garage.on)car.dirt=Math.max(0.02,car.dirt-dt*0.08*car.sub*(0.3+sp*0.2));
   // the body in the water: a bow wave off the front corners (a sheet of drops thrown out and up, rings that open into
   // a V behind), mist at speed; at rest, slow rings lapping round the hull
+  // the plunge: the hull going in fast (sinking quickly, or driven in at speed) throws a burst once
+  {const sP=car.subP||0,sv=(car.sub-sP)/Math.max(dt,1e-3);car.subP=car.sub;splCD-=dt;
+   if(!garage.on&&car.sub>0.02&&splCD<=0&&WET(car.pos.x,car.pos.z)){const av0=Math.abs(car.vel.dot(car.fwd));
+     if(sv>0.45||(sP<0.02&&av0>5)){splashBurst(clamp(Math.max(0,-car.vel.y)*0.16+av0*0.045+sv*0.12,0.15,1));splCD=0.9;}}}
   if(car.sub>0.04&&!garage.on&&WET(car.pos.x,car.pos.z)){const vF=car.vel.dot(car.fwd),av=Math.abs(vF);bowT-=dt;
     for(const sx of[1,-1]){_a.set(sx*(BOX_HW+0.05),0,Math.sign(vF||1)*(BOX_HL-0.1)).applyQuaternion(car.q).add(car.pos);
-      if(av>1){const nf=Math.min(6,av*dt*14*Math.min(1,car.sub*3)),n=Math.floor(nf)+(Math.random()<nf%1?1:0);
+      if(av>1){const nf=Math.min(9,av*dt*20*Math.min(1,car.sub*3)),n=Math.floor(nf)+(Math.random()<nf%1?1:0);
         for(let k=0;k<n;k++){const out=1+av*0.25+Math.random()*1.5;
-          emit(_a.x,WATER_Y+0.1,_a.z,car.vel.x*0.6+car.left.x*sx*out,1.2+av*0.18+Math.random()*1.6,car.vel.z*0.6+car.left.z*sx*out,WATER_C,0.08,0.2+Math.random()*0.12,0.8+Math.random()*0.4,0.8,9.8,0.3,2);}
-        if(av>4&&Math.random()<dt*av*0.8)emit(_a.x,WATER_Y+0.5,_a.z,car.vel.x*0.6+car.left.x*sx*2,0.8,car.vel.z*0.6+car.left.z*sx*2,MIST_C,0.8,2.6,1.3,0.14,-0.05,1.3,3);}}
+          emit(_a.x,WATER_Y+0.1,_a.z,car.vel.x*0.6+car.left.x*sx*out,1.2+av*0.18+Math.random()*1.6,car.vel.z*0.6+car.left.z*sx*out,WATER_C,0.06,0.1+Math.random()*0.14,0.8+Math.random()*0.5,0.85,9.8,0.3,2);}
+        if(av>3&&Math.random()<dt*av*1.6)emit(_a.x,WATER_Y+0.5,_a.z,car.vel.x*0.6+car.left.x*sx*(1.5+Math.random()*2),0.9+Math.random()*1.4,car.vel.z*0.6+car.left.z*sx*(1.5+Math.random()*2),MIST_C,0.9,3+av*0.12,1.3+Math.random()*0.7,0.3,0.5,1.2,3);
+        if(Math.random()<dt*(2+av*1.5))FOAM.add(_a.x+car.left.x*sx*0.3,_a.z+car.left.z*sx*0.3,0.8,2+av*0.25,3+Math.random()*2,Math.min(0.85,0.35+av*0.06));}}
     if(bowT<=0){bowT=av>1?0.14:0.7;
       if(av>1)for(const sx of[1,-1]){_a.set(sx*(BOX_HW+0.1),0,Math.sign(vF)*(BOX_HL-0.2)).applyQuaternion(car.q).add(car.pos);RIP.add(_a.x,WATER_Y+0.02,_a.z,1,3.5+av*0.35,2.4,0.32);}
       else{_a.set((Math.random()-0.5)*2*BOX_HW,0,(Math.random()-0.5)*2*BOX_HL).applyQuaternion(car.q).add(car.pos);RIP.add(_a.x,WATER_Y+0.02,_a.z,1.5,5,3.2,0.3);}}}
