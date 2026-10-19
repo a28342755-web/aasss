@@ -6947,33 +6947,105 @@ const PFX=(()=>{
         sm.addAssign(S.tap(c).mul(a));ws.addAssign(a);});
       o.assign(sm.div(ws));});
     return o;});
+  // ---- sun glare (order 300, linear light): staring into the low sun the lens flares - a wide soft glow, a starburst,
+  // a few ghosts, a thin streak, and a veil that lifts the blacks. How much of the sun is in view comes first: 24 taps
+  // over its disc into a 1x1 target: open sky by the shafts' depth test, times the brightness against the disc's own,
+  // so a cloud, a branch or dust over it dims the glare. A tap off the frame (the chase camera holds the sun about at
+  // the top edge) reads the frame's edge nearest it for open sky instead, times the cloud layer's transmittance toward
+  // the sun, and fades out within 0.12 screen heights. Eased over ~70 ms (TAA jitter flickers the taps at the rim)
+  // through a copy of last frame's value. The taps run only while the sun is near the frame (uFl, P.render), and the
+  // effect is gated by uFl as well, never by a stale value
+  const uFl=uniform(0),uVa=uniform(1),uVisK=uniform(1/1.6e4),uRot=uniform(0),uCq=uniform(new THREE.Vector2(0.5,0.4));let visRan=false,visLast=false,visEver=false,visCp=true,flV=0;
+  const uG={ghost:uniform(1),halo:uniform(1),star:uniform(1),streak:uniform(1),glow:uniform(1),veil:uniform(1)},GK=Object.keys(uG);
+  P.glare={k:1,ghost:1,halo:1,star:1,streak:1,glow:1,veil:1};   // k: the whole glare; the rest scale its parts
+  const gv=v=>v===undefined?1:Math.max(0,+v||0);   // (a part left out counts as 1)
+  const visPrev=new THREE.RenderTarget(1,1,{type:THREE.HalfFloatType,depthBuffer:false});visPrev.texture.name='VTSunVis.prev';try{renderer.initRenderTarget(visPrev);}catch(e){visCp=false;}
+  const mkV=uniform(0).onRenderUpdate(()=>{visRan=true;}),SDR=typeof SUN_DISC!=='undefined'?SUN_DISC.R:0.004625;
+  // (the sky's cloud layer: rgb in-scattered, a = transmittance, by azimuth and height; none, none in the way. Mapped
+  // as the disc's brightness is below, so a cloud dims the glare alike on and off the frame)
+  const cloudT=(()=>{try{return cloudsOK&&CLOUD.rt?smoothstep(0.03,0.3,TSL.texture(CLOUD.rt.texture,uCq).level(0).a):float(1);}catch(e){return float(1);}})();
+  const sunVis=rtt(Fn(()=>{const rs=uP5.mul(SDR*0.5*0.85),ax=vec2(float(1).div(uAsp),1).mul(rs),A=vec2(uAsp,1),m=vec2(1.5).div(uRes),v=float(0).toVar();
+    for(let k=0;k<24;k++){const a=k*2.39996323,f=Math.sqrt((k+0.5)/24),c=uSun.add(ax.mul(vec2(Math.cos(a)*f,Math.sin(a)*f))).toVar(),cc=clamp(c,m,vec2(1).sub(m)).toVar();
+      const z=dep.sample(cc).x,open=renderer.reversedDepthBuffer?step(z,0.00001):step(0.99999,z),l=dot(clamp(colRaw.sample(cc).rgb,0,6e4),lumW);
+      const out=length(c.sub(cc).mul(A)).toVar(),bright=smoothstep(0.03,0.3,select(l.lessThan(1e5),l,0).mul(uVisK));
+      v.addAssign(open.mul(select(out.lessThan(1e-6),bright,cloudT.mul(float(1).sub(smoothstep(0,0.12,out))))));}
+    const p0=TSL.texture(visPrev.texture,vec2(0.5)).level(0).r,pv=select(p0.lessThan(2),clamp(p0,0,1),float(0));
+    return vec4(clamp(mix(pv,v.div(24),uVa),0,1),0,0,1).add(mkV);})(),1,1,{depthBuffer:false});
+  sunVis.name='VTSunVis';
+  // the flare itself, all scaled by the visibility: ghosts along the line from the sun through the centre (soft
+  // hexagons, the aperture's shape, rims brighter, tinted by the coatings, red a little wider than blue), a faint ring
+  // round the sun, diffraction spikes turning slowly with the view, a thin horizontal streak, the lens's own glow
+  // round the sun and a veil over the whole frame that lifts the blacks and flattens the contrast.
+  // (The streak is analytic: the bloom chain's bright pass caps every highlight at the same 0.72, so in it the sun is
+  // no brighter than the sky round it, and a streak gathered from it smears the whole bright sky)
+  // [k: place on the line (1 = the sun, -1 = mirrored through the centre), size (screen heights), weight, tint]
+  const GH=[[0.55,0.03,0.6,[1,0.78,0.45]],[0.3,0.055,0.35,[0.55,0.9,0.75]],[-0.15,0.085,0.22,[0.65,0.55,1]],[-0.38,0.045,0.5,[0.5,1,0.55]],
+    [-0.62,0.12,0.16,[1,0.6,0.35]],[-0.95,0.065,0.38,[0.45,0.65,1]],[-1.3,0.17,0.1,[0.95,0.85,0.7]],[-1.75,0.09,0.2,[0.6,0.9,1]]];
+  P.addFX('sun glare',300,(x,S)=>{const {If,atan,floor}=TSL,c15=Math.cos(0.26),s15=Math.sin(0.26),GOLD=vec3(1,0.62,0.28);
+    // (the strength goes as the square root of how much of the sun shows: half hidden behind a trunk it still flares
+    // hard, as the real sun, thousands of times brighter than this disc, would)
+    const v0=S.tex(sunVis).r,V=select(v0.lessThan(2),clamp(v0,0,1),float(0)).sqrt().mul(uFl).toVar(),o=x.toVar();
+    If(V.greaterThan(1e-4),()=>{
+      const A=vec2(uAsp,1),u=S.u,q=u.sub(uSun).mul(A).toVar(),r=length(q).toVar(),cv=vec2(0.5).sub(uSun).mul(A).toVar(),cl=length(cv).toVar();
+      const gs=vec3(0).toVar();
+      for(const [k,sz,w,t] of GH){const p=u.sub(vec2(0.5).add(uSun.sub(0.5).mul(k))).mul(A),pa=abs(vec2(p.x.mul(c15).sub(p.y.mul(s15)),p.x.mul(s15).add(p.y.mul(c15))));
+        const hd=max(pa.x.mul(0.866).add(pa.y.mul(0.5)),pa.y).div(sz).toVar();
+        const sh=e=>float(1).sub(smoothstep(e*0.72,e,hd)).mul(smoothstep(e*0.25,e*0.98,hd).mul(0.6).add(0.4));
+        gs.addAssign(vec3(sh(1.04).mul(t[0]/1.04),sh(1).mul(t[1]),sh(0.96).mul(t[2])).mul(w));}
+      // (ghosts dim as the sun nears the centre, where they pile onto it)
+      const ghost=gs.mul(smoothstep(0,0.3,cl).mul(0.6).add(0.4)).mul(uG.ghost.mul(0.09));
+      const dc=dot(q,cv).div(max(r.mul(cl),1e-5)).mul(0.5).add(0.5),ring=e=>exp(r.sub(e).div(0.03).pow2().negate());
+      const halo=vec3(ring(0.43),ring(0.415),ring(0.4)).mul(dc.mul(0.75).add(0.25)).mul(uG.halo.mul(0.035));
+      // spikes: six long ones (the six blades) and six short between them, each its own length, thin lines of about a
+      // pixel widening a little outward; the per-spike value has period six so the turn is seamless where the yaw
+      // wraps (uRot = yaw/2 jumps by pi, six spikes)
+      const an=atan(q.y,select(r.greaterThan(1e-6),q.x,float(1))).add(uRot).toVar(),sn=an.mul(6/Math.PI).toVar(),n=floor(sn.add(0.5)).toVar(),ni=n.sub(floor(n.div(6)).mul(6));
+      const od=fract(ni.mul(0.5)).mul(2).toVar(),hs=fract(sin(ni.mul(12.9898).add(4.1)).mul(43758.5453)),ln=mix(mix(0.75,1.25,hs),mix(0.3,0.5,hs),od);
+      const dp=r.mul(abs(sin(sn.sub(n).mul(Math.PI/6)))),wd=float(1.2).div(max(uRes.y,1)).add(r.mul(0.004));
+      const ray=exp(dp.div(wd).pow2().negate()).mul(exp(r.div(ln.mul(-0.09)))).mul(mix(1,0.5,od));
+      const star=ray.add(pow(max(abs(cos(an.mul(6))),1e-4),12).mul(0.12).mul(exp(r.div(-0.05)))).mul(uG.star.mul(1.4));
+      const dx=abs(q.x),stk=exp(abs(q.y).div(-0.0022)).mul(exp(dx.div(-0.1)).mul(0.7).add(exp(dx.div(-0.45)).mul(0.3))).mul(uG.streak.mul(0.6));
+      // the glow: white-hot round the disc, golden further out (the warm bloom a low sun throws over whatever stands
+      // in front of it), then a wide warm falloff into the veil
+      const gC=float(0.6).div(float(1).add(r.div(0.016).pow2())),gG=exp(r.div(-0.07)).mul(0.45),gW=exp(r.div(-0.3)).mul(0.1);
+      const glow=uSunC.mul(gC).add(GOLD.mul(gG)).add(mix(uSunC,GOLD,0.5).mul(gW)).mul(uG.glow.mul(2.5));
+      const add=uSunC.mul(vec3(star.add(uG.veil.mul(0.03))).add(ghost).add(halo)).add(glow).add(mix(uSunC,vec3(0.75,0.85,1),0.45).mul(stk));
+      o.assign(clamp(x.mul(float(1).sub(min(V.mul(uG.veil).mul(0.12),0.5))).add(add.mul(V)),0,6e4));});
+    return o;});
   P.setTAA=on=>{if(P.taa===on)return;P.taa=on;lastFull=null;taaN.reset=true;};P.resetTAA=()=>{taaN.reset=true;};const lastCam=new V3(1e9,0,0);
   const sp=new V3(),fw=new V3(),db=new THREE.Vector2(),s0=new THREE.Vector2();
   P.resize=()=>{};
+  // an offscreen pass (rtt) is switched on and off by textureNeedsUpdate, never by updateBeforeType: three registers a
+  // node for updates only if its type isn't 'none' when the shader using it is built, so a pass off at the last
+  // rebuild never rendered again (the shafts, if the sun was off screen then; the garage's depth of field)
+  const gate=(n,on)=>{n.autoUpdate=false;n.textureNeedsUpdate=!!on;};
   P.setMSAA=n=>{if(n===P.msaa)return;P.msaa=n;scenePass.options.samples=n;pipe.needsUpdate=true;};
   P.render=fdt=>{
     // (the plain output has no TAA, so the water stops reflecting its frozen history)
-    if(P.level<=0||WD.mode==='plain'){if(lastFull!==false){setOut(false);lastFull=false;}WREFL_ON.value=0;WD.draw();return;}
+    if(P.level<=0||WD.mode==='plain'){if(lastFull!==false){setOut(false);lastFull=false;}WREFL_ON.value=0;visLast=false;WD.draw();return;}
     if(lastFull!==true){setOut(true);lastFull=true;}
     const jump=camera.position.distanceTo(lastCam)>12;if(jump)taaN.reset=true;lastCam.copy(camera.position);camera.updateProjectionMatrix();taaP0.copy(camera.projectionMatrix);
     const full=P.level>=2,useAO=full&&P.useAO;WREFL_ON.value=P.taa?1:0;
-    uAO.value=useAO?P.ao:0;for(const n of aoNodes)n.updateBeforeType=useAO?'frame':'none';
-    for(const n of bloomNodes)n.updateBeforeType=P.useBl?'frame':'none';
+    uAO.value=useAO?P.ao:0;for(const n of aoNodes)gate(n,useAO);
+    for(const n of bloomNodes)gate(n,P.useBl);
     const e=camera.projectionMatrix.elements;renderer.getDrawingBufferSize(db);uRes.value.copy(db);for(let i=0;i<6;i++)uTx[i].value.set((1<<i)/Math.max(1,db.x),(1<<i)/Math.max(1,db.y));uP5.value=e[5];uPInv.value.copy(camera.projectionMatrixInverse);uNear.value=camera.near;uFar.value=camera.far;uHT.value.set(2/Math.max(1,db.x),2/Math.max(1,db.y));
-    camera.getWorldDirection(fw);const face=fw.dot(sunDir);let sh=0;
-    if(full&&P.useSh&&face>0.05){sp.copy(camera.position).addScaledVector(sunDir,1000).project(camera);
-      const sx=sp.x*0.5+0.5,sy=0.5-sp.y*0.5,edge=Math.max(Math.abs(sx-0.5),Math.abs(sy-0.5));
-      sh=smooth(0.05,0.55,face)*smooth(1.3,0.6,edge);uSun.value.set(sx,sy);}
-    shTex.updateBeforeType=sh>0.01?'frame':'none';
+    renderer.getSize(s0);uAsp.value=s0.x/Math.max(1,s0.y);
+    // the sun's place on screen, for the shafts and the glare (gn: the glare's reach, its centre within 0.16 screen
+    // heights of the frame)
+    camera.getWorldDirection(fw);const face=fw.dot(sunDir);let sh=0,gn=0;
+    if(face>0.02){sp.copy(camera.position).addScaledVector(sunDir,1000).project(camera);
+      const sx=sp.x*0.5+0.5,sy=0.5-sp.y*0.5,edge=Math.max(Math.abs(sx-0.5),Math.abs(sy-0.5));uSun.value.set(sx,sy);
+      if(full&&P.useSh&&face>0.05)sh=smooth(0.05,0.55,face)*smooth(1.3,0.6,edge);
+      gn=1-smooth(0.1,0.16,Math.hypot(Math.max(0,Math.abs(sx-0.5)-0.5)*uAsp.value,Math.max(0,Math.abs(sy-0.5)-0.5)));}
+    gate(shTex,sh>0.01);
     uSh.value=P.shaft*sh;uBl.value=P.useBl?P.bloom:0;uT.value=performance.now()/1000;uDbg.value=P.dbg||0;
     // the display stage (the debug views show the raw buffers, ungraded)
     const T=P.tone;if(T.pw!==exP||renderer.toneMappingExposure!==exE){exP=T.pw;exE=renderer.toneMappingExposure;exV=agxMid(Math.max(0.2,T.pw));}
     uGr.value=uDbg.value>0.5?0:P.grade;uExp.value=exV*2**T.ev;uCon.value=T.con;uLkP.value=Math.max(0.2,T.pw);uLkS.value=T.sat;uVig.value=T.vig;
     // depth of field in the garage only (a product shot, focused on the car): on the road the whole view stays sharp
     const dof=full&&garage.on?0.6:0;uDof.value=dof;uFoc.value=Math.max(3,camera.position.distanceTo(car.pos));
-    for(const n of dofNodes)n.updateBeforeType=dof>0?'frame':'none';
+    for(const n of dofNodes)gate(n,dof>0);
     uSharp.value=Math.min(0.32,0.1+Math.max(0,(window.devicePixelRatio||1)/renderer.getPixelRatio()-1)*0.25)*(P.taa?0.45:1);
-    renderer.getSize(s0);uAsp.value=s0.x/Math.max(1,s0.y);
     // motion blur: a 180-degree shutter at 60 Hz whatever the frame rate (the motion vectors span this frame's time
     // step, so the shutter is scaled by it); none in the garage, under the debug views or below level 2, nor on a cut,
     // whose motion vectors span the jump: the frame the TAA history restarts and the one after, and likewise when the
@@ -6983,7 +7055,22 @@ const PFX=(()=>{
     mbO0.copy(mbO);mbQ0.copy(car.q);mbC0.copy(camera.quaternion);
     uMB.value=full&&!garage.on&&!mbZ&&uDbg.value<0.5?0.5*Math.min(2.4,Math.max(0.6,(1/60)/Math.max(1e-3,fd)))*Math.max(0,P.mb.k||0):0;
     if(mbZ)mbZ--;uMBf.value=mbN=(mbN+1)&63;uMBx.value=Math.min(0.1,Math.max(0,P.mb.max||0));
-    WD.draw();WD.after();
+    // sun glare: eased in and out with the sun's reach (gn) and P.glare.k; none in the garage, under the debug views or
+    // below level 2, and cut at once with the sun behind the camera (its place on screen isn't updated then). The 1x1
+    // visibility renders only while it is on (and once at the start, so its shader is built behind the loading
+    // screen), eased from last frame's value if that is fresh
+    const G=P.glare||{},gon=full&&!garage.on&&uDbg.value<0.5&&face>0.02,gt=gon?gn*gv(G.k)*smooth(-0.01,0.03,sunDir.y):0;
+    flV=gon?flV+(gt-flV)*(1-Math.exp(-Math.min(fd,0.1)/0.08)):0;if(gt===0&&flV<1e-3)flV=0;
+    const vOn=flV>0;visRan=false;uFl.value=flV;gate(sunVis,vOn||!visEver);
+    if(vOn){uVa.value=visLast?1-Math.exp(-Math.min(fd,0.1)/0.07):1;uRot.value=Math.atan2(fw.x,fw.z)*0.5;
+      // (what the scene pass draws at the disc's centre: its radiance times the sky's sun colour, its luminance)
+      let L=1.6e4;try{const c=skyMat.uniforms.sunC.value;L=SUN_DISC.L*(0.2126*c.r+0.7152*c.g+0.0722*c.b);}catch(e){}uVisK.value=1/Math.max(1,L||1);
+      uCq.value.set(((Math.atan2(sunDir.z,sunDir.x)/(2*Math.PI))%1+1)%1,Math.min(1,Math.max(0.004,sunDir.y)));
+      for(const k of GK)uG[k].value=gv(G[k]);}
+    WD.draw();
+    // (this frame's visibility becomes the next frame's previous value)
+    if(visRan)visEver=true;visLast=visRan&&visCp&&vOn;if(visLast)try{renderer.copyTextureToTexture(sunVis.renderTarget.texture,visPrev.texture);}catch(e){visCp=visLast=false;}
+    WD.after();
   };
   return P;
 })();
@@ -8154,10 +8241,10 @@ if(HC&&CIRC.on){const s=CIRC.start;placeCar(s[0],s[1],s[2]);cam.init=false;}
 // surroundings are captured into a second PMREM target and faded into envTex over ~0.6 s, so a new capture never pops.
 // Cheap stand-ins, unlit (the capture scene has no lights): the map's ground from its own height, normal, albedo and
 // baked-sun grids at a 4x coarser step (three meshes, not 136 chunks: a few draws a face), lit as the terrain is (sun x
-// baked visibility, plus the hemisphere), water under the lake's level, the car's own shade under it; the valley's roads
-// and the Alpine patch under the truck (their own geometry); the Alps (their own material, on a sparser index into the
+// baked visibility, plus the hemisphere), water under the lake's level, the car's own shade under it; the valley's roads,
+// the hypercar circuit's asphalt and the Alpine patch under the truck (their own geometry); the Alps (their own material, on a sparser index into the
 // same vertex buffer). A failed capture keeps the last good one; three in a row go back to the sky-and-ground capture.
-Object.assign(ENV,{dyn:false,rt2:null,quad:null,kU:null,ap:null,st:4,fade:0,t0:-1e9,due:0,avg:4,fails:0,at:new V3(1e9,0,0),p:new V3(),every:1.8,idle:10,dist:60,apx:1e9,apz:1e9,
+Object.assign(ENV,{dyn:false,rt2:null,quad:null,kU:null,tN:null,inG:false,stex:null,ap:null,st:4,fade:0,t0:-1e9,due:0,avg:4,fails:0,at:new V3(1e9,0,0),p:new V3(),every:1.8,idle:10,dist:60,apx:1e9,apz:1e9,
   build(){const E=ENV,{Fn,float,vec3,uniform,attribute,positionWorld,positionLocal,cameraPosition,normalize,mix,smoothstep,max,dot,pow,clamp,length,select,step,abs}=TSL;
     const U=E.U;U.sunE=uniform(new THREE.Color());U.skyE=uniform(new THREE.Color());U.gndE=uniform(new THREE.Color());
     const L=vec3(sunDir.x,sunDir.y,sunDir.z),one=float(1);
@@ -8187,6 +8274,14 @@ Object.assign(ENV,{dyn:false,rt2:null,quad:null,kU:null,ap:null,st:4,fade:0,t0:-
       rm.positionNode=positionLocal.add(vec3(0,smoothstep(100,1200,length(positionLocal.xz.sub(cameraPosition.xz))).mul(2).add(0.25),0));
       E.es.add(new THREE.Mesh(RDMESH[0].geometry,rm));}
     if(AP.mesh){E.ap=new THREE.Mesh(AP.mesh.geometry,gm);E.ap.frustumCulled=false;E.es.add(E.ap);}
+    // the hypercar circuit's asphalt (the track and pit lane, then the paler run-off: the materials of its first two
+    // meshes), lifted as the roads are. Without it the hypercar mirrored the Alpine patch's meadow under its own track
+    if(CIRC.on&&CIRC.group)try{const G=CIRC.group,gp=TSL.vec2(G.position.x,G.position.z),mk=k=>{const m=new THREE.MeshBasicNodeMaterial({fog:true});
+        m.colorNode=vec3(0.055*k,0.055*k,0.06*k).mul(light(normalize(attribute('normal','vec3').add(vec3(0,1e-4,0))),one)).mul(shade());
+        m.positionNode=positionLocal.add(vec3(0,smoothstep(100,1200,length(positionLocal.xz.add(gp).sub(cameraPosition.xz))).mul(2).add(0.25),0));return m;};
+      const src=[G.children[0],G.children[1]].map(o=>o&&o.isMesh?o.material:null),cm=[mk(1),mk(1.75)];
+      for(const o of G.children){const i=o.isMesh?src.indexOf(o.material):-1;if(i<0)continue;const m=new THREE.Mesh(o.geometry,cm[i]);m.position.copy(G.position);m.frustumCulled=false;E.es.add(m);}}
+    catch(e){console.warn('env circuit',e);}
     // the Alps: every other spoke and ring of their ring mesh (the patch's ground is in the ring's heights)
     if(ALPS.ok&&ALPS.ring){const {NA,NR}=ALPS.ring,S=NR+1,J=[0],I=[];for(let j=1;j<NR;j+=2)J.push(j);J.push(NR);
       for(let a=0;a<NA;a+=2){const b=(a+2)%NA;for(let q=0;q+1<J.length;q++){const p0=a*S+J[q],p1=b*S+J[q],p2=a*S+J[q+1],p3=b*S+J[q+1];I.push(p0,p1,p2,p1,p3,p2);}}
@@ -8200,27 +8295,36 @@ Object.assign(ENV,{dyn:false,rt2:null,quad:null,kU:null,ap:null,st:4,fade:0,t0:-
   capture(){const E=ENV,p=E.p.copy(car.pos);p.x+=0.013;p.z+=0.007;p.y=Math.max(p.y+0.35,E.gh(p.x,p.z)+0.6);
     E.sky.position.copy(p);if(E.dome)E.dome.position.copy(p);if(E.ap)E.ap.visible=AP.mesh.visible;
     const k=hemi.intensity/LPI;E.U.sunE.value.copy(sun.color).multiplyScalar(sun.intensity/LPI);E.U.skyE.value.copy(hemi.color).multiplyScalar(k);E.U.gndE.value.copy(hemi.groundColor).multiplyScalar(k);
+    E.es.fogNode=scene.fogNode||E.es.fogNode;   // (the world's fog, should it have been replaced since)
     const o={size:E.size,position:p};if(E.rt2)o.renderTarget=E.rt2;
     E.rt2=E.grab(o);E.at.copy(car.pos);E.apx=AP.cx;E.apz=AP.cz;},
   // PMREM of the capture scene. One that throws half way leaves the renderer drawing into the probe with autoClear
   // off (PFX would then draw the frame there too, and stop's own capture would restore that target): put both back
   grab(o){const prev=renderer.getRenderTarget(),ac=renderer.autoClear;skyMat.uniforms.disc.value=0;   // (no second sun in the paint)
     try{return ENV.pm.fromScene(ENV.es,ENV.sigma,ENV.near,ENV.far,o);}finally{skyMat.uniforms.disc.value=1;renderer.autoClear=ac;if(renderer.getRenderTarget()!==prev)renderer.setRenderTarget(prev);}},
-  // envTex moves toward the newest capture by k (alpha blending: envTex is never read while it is drawn into)
-  blend(k){const E=ENV;if(!E.quad){const {vec4,texture,screenUV,uniform}=TSL;E.kU=uniform(1);
+  // envTex moves toward the newest capture (or src, a PMREM of the same size) by k (alpha blending: envTex is never
+  // read while it is drawn into)
+  blend(k,src){const E=ENV,s=src||E.rt2.texture;if(!E.quad){const {vec4,texture,screenUV,uniform}=TSL;E.kU=uniform(1);E.tN=texture(s,screenUV);
       const m=new THREE.MeshBasicNodeMaterial({transparent:true,blending:THREE.NormalBlending,depthTest:false,depthWrite:false,fog:false,toneMapped:false});
-      m.fragmentNode=vec4(texture(E.rt2.texture,screenUV).rgb,E.kU);E.quad=new THREE.QuadMesh(m);}
-    E.kU.value=k;const prev=renderer.getRenderTarget(),ac=renderer.autoClear;
+      m.fragmentNode=vec4(E.tN.rgb,E.kU);E.quad=new THREE.QuadMesh(m);}
+    E.kU.value=k;E.tN.value=s;const prev=renderer.getRenderTarget(),ac=renderer.autoClear;
     try{renderer.autoClear=false;renderer.setRenderTarget(E.rt);E.quad.render(renderer);}finally{renderer.setRenderTarget(prev);renderer.autoClear=ac;}},
   stop(){const E=ENV;E.dyn=false;E.fade=0;
     try{for(const o of E.es.children)if(o!==E.sky&&o!==E.dome)o.visible=false;E.sky.position.set(0,0,0);if(E.dome)E.dome.position.set(0,0,0);
       E.grab({size:E.size,renderTarget:E.rt});}catch(e){console.warn('env',e);}},
+  // the garage: the studio's PMREM copied into envTex, the world's put back on the way out. Swapping m.envMap (as
+  // enterGarage did) changes nothing in r186: a material's environment is built once, from the envMap it is first drawn
+  // with, and shared by every material with the same cache key (which ignores which texture it is). start() takes
+  // studioEnv over, so enterGarage leaves the envMaps alone
+  garage(on){const E=ENV;E.inG=on;if(!E.rt)return;
+    try{if(on){if(E.stex)E.blend(1,E.stex);}else if(E.dyn&&E.rt2){E.blend(1);E.fade=0;}else E.grab({size:E.size,renderTarget:E.rt});}catch(e){console.warn('env garage',e);}},
   start(){const E=ENV;if(!E.pm||!E.rt||!envTex)return;
+    if(studioEnv&&studioEnv!==envTex&&studioEnv.image.width===E.rt.width&&studioEnv.image.height===E.rt.height){E.stex=studioEnv;studioEnv=null;}
     // (the next capture comes on the timer even if the car stays put: a pipeline still compiling from compileAsync is
     // skipped by the renderer, so this first one can lack it)
     try{E.build();E.dyn=true;E.capture();E.blend(1);E.t0=performance.now()/1000-E.idle+E.every;}catch(e){console.warn('env stand-ins',e);E.stop();}},
   // every frame: the fade, then a capture when due (returns true when it captured)
-  live(now,dt){const E=ENV;if(!E.dyn||garage.on)return false;
+  live(now,dt){const E=ENV;if(garage.on!==E.inG)E.garage(garage.on);if(!E.dyn||garage.on)return false;
     if(E.fade>0){E.fade-=dt;try{E.blend(E.fade>0?1-Math.exp(-dt/0.12):1);}catch(e){console.warn('env fade',e);E.stop();return false;}}
     const t=now/1000,used=Math.min(50,Math.max(0,performance.now()-now));E.avg+=(used-E.avg)*0.05;
     // (the timer only once the car has moved or the Alpine patch has been rebuilt: parked, only the clouds change,
