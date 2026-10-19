@@ -1972,7 +1972,7 @@ function fadeTree(mat,imp){if(mat.userData.fadeT)return mat;mat.userData.fadeT=1
   else mat.opacityNode=op.mul(float(1).sub(f));
   return mat;}
 function nearSet(list,parts){
-  const n=list.length,cap=Math.max(1,Math.min(n,1600)),GS=16,cells=new Map(),M=new THREE.Matrix4(),c=new THREE.Color();
+  const n=list.length,cap=Math.max(1,Math.min(n,4500)),GS=16,cells=new Map(),M=new THREE.Matrix4(),c=new THREE.Color();
   const PM=parts.map(()=>new Float32Array(n*16)),PC=parts.map(()=>new Float32Array(n*3));
   list.forEach((t,i)=>{parts.forEach(([,,fill],j)=>{fill(t,M,c);M.toArray(PM[j],i*16);c.toArray(PC[j],i*3);});
     const k=Math.floor(t.x/GS)+','+Math.floor(t.z/GS);if(!cells.has(k))cells.set(k,[]);cells.get(k).push(i);});
@@ -2673,10 +2673,21 @@ function gInfo(x,z){
   else if(inMid(x,z)){const j=oIdx(x,z);GI.sf=OSF[j];GI.tw=OwR[j];GI.ws=OwS[j];GI.wd=OwD[j];GI.wm=0;GI.sun=OSUNV[j];}
   else if(SF_OUT!==null&&!inSq(x,z)){GI.sf=SF_OUT(x,z);GI.tw=0;GI.ws=AMO[2];GI.wd=clamp(0.25+AMO[4]*0.5,0,1);GI.wm=0;GI.sun=AMO[0];}
   else{const j=fIdx(x,z);GI.sf=FSF[j];GI.tw=FwR[j];GI.ws=FwS[j];GI.wd=FwD[j];GI.wm=0;GI.sun=FSUNV[j];}return GI;}
+// The card grass comes in two layers: the near one (14 m tiles, to ~140 m) and a far one (28 m tiles of larger,
+// sparser tufts, to ~280 m), handing over in a dithered band (GX0..GX1 m) and the far one fading out at GF0..GF1 m,
+// in circles round the camera, so the meadow thins with distance instead of stopping at a square of tiles
+const GX0=108,GX1=128,GF0=235,GF1=275;
+const grassBand=(mat,a,b,inv)=>{const {attribute,length,smoothstep,float,cameraPosition}=TSL,d=length(attribute('ipos','vec3').xz.sub(cameraPosition.xz)),f=smoothstep(a,b,d);
+  mat.opacityNode=(mat.opacityNode||float(1)).mul(inv?float(1).sub(f):f);return mat;};
+const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z),sf=g.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;pr*=(1-g.tw)*(1-g.ws)*k;if(c>pr)return false;
+    const sc=(0.75+b*0.7)*s,kk=(a*7.3)%1;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.03*s,z),_gQ,_gS.set(sc,sc*hs*(0.85+kk*0.7),sc));col.copy(gA).lerp(gB,clamp(g.wd*0.6+kk*0.3,0,1)).multiplyScalar(0.72+0.28*g.sun);return true;};
 const grassT=makeTiler({size:14,radius:10,per:560,seed:1,geo:tuftGeo(4,1.25,0.62),
-  mat:tileCull(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45)))),
-  place(x,z,a,b,c,M,col){const g=gInfo(x,z),sf=g.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;pr*=(1-g.tw)*(1-g.ws);if(c>pr)return false;
-    const sc=0.75+b*0.7,kk=(a*7.3)%1;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.03,z),_gQ,_gS.set(sc,sc*(0.85+kk*0.7),sc));col.copy(gA).lerp(gB,clamp(g.wd*0.6+kk*0.3,0,1)).multiplyScalar(0.72+0.28*g.sun);return true;}});
+  mat:tileCull(grassBand(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),GX0,GX1,true),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45))).and(within(ip,GX1+1))),
+  place:grassPlace(1,1,1)});
+const grassF=makeTiler({size:28,radius:10,per:640,seed:5,geo:tuftGeo(3,1.25,0.62),
+  mat:tileCull(grassBand(grassBand(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true),GX0,GX1,false),GF0,GF1,true),
+    ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(GX0-1)).and(within(ip,GF1+1))),
+  place:grassPlace(0.6,1.9,0.7)});   // (wider, not much taller: a far tuft covers more ground, it is no bush)
 const pebT=(()=>{
   const g=new THREE.IcosahedronGeometry(1,0),p=g.attributes.position,cl=[],pr=rng(515),pc=[];
   for(let k=0;k<5;k++){const u=pr()*1.4-0.4,a=pr()*TAU,sq=Math.sqrt(Math.max(0,1-u*u));pc.push([sq*Math.cos(a),u,sq*Math.sin(a),0.45+pr()*0.3]);}
@@ -5681,7 +5692,7 @@ function exitGarage(){
   envMats.forEach(m=>m.envMap=envTex);
   car.pos.copy(garage.saved.pos);car.q.copy(garage.saved.q);car.vel.set(0,0,0);car.w.set(0,0,0);
   for(const w of wheels)w.steer=0;
-  resetWheels();basis();cam.init=false;grassT.reset();pebT.reset();bladeT.reset();for(const ns of NEARSETS)ns.reset();
+  resetWheels();basis();cam.init=false;grassT.reset();grassF.reset();pebT.reset();bladeT.reset();for(const ns of NEARSETS)ns.reset();
   if(garage.fromIntro&&!drive.started)$('intro').hidden=false;
 }
 function poseGarage(dt){
@@ -6611,9 +6622,9 @@ function updateCamera(dt){
    _m.copy(car.pos).addScaledVector(SUN_R,Math.round(a/tx)*tx-a).addScaledVector(SUN_U,Math.round(b/tx)*tx-b);
    sun.target.position.copy(_m);sun.position.copy(_m).addScaledVector(sunDir,140);shadowCenter.value.copy(_m);}
   if(!garage.on){const ST=window.__ST;if(ST){let t=performance.now();const m=k=>{const n=performance.now(),d=n-t;t=n;ST[k]=Math.max(ST[k]||0,d);ST[k+'_s']=(ST[k+'_s']||0)+d;};
-    bgPump(2.5);m('bg');if(AP.tick)AP.tick(3);m('ap');if(OUTR.tick)OUTR.tick();m('outr');if(AFF.tick)AFF.tick();m('aff');updateTerrainLOD();m('lod');updateCells();m('cells');grassT.update();m('grass');pebT.update();m('peb');bladeT.update();m('blade');
+    bgPump(2.5);m('bg');if(AP.tick)AP.tick(3);m('ap');if(OUTR.tick)OUTR.tick();m('outr');if(AFF.tick)AFF.tick();m('aff');updateTerrainLOD();m('lod');updateCells();m('cells');grassT.update();grassF.update();m('grass');pebT.update();m('peb');bladeT.update();m('blade');
     for(const ns of NEARSETS)ns.update(camera.position.x,camera.position.z,uNearR.value);m('near');}
-  else{bgPump(2.5);if(AP.tick)AP.tick(3);if(OUTR.tick)OUTR.tick();if(AFF.tick)AFF.tick();updateTerrainLOD();updateCells();grassT.update();pebT.update();bladeT.update();for(const ns of NEARSETS)ns.update(camera.position.x,camera.position.z,uNearR.value);}
+  else{bgPump(2.5);if(AP.tick)AP.tick(3);if(OUTR.tick)OUTR.tick();if(AFF.tick)AFF.tick();updateTerrainLOD();updateCells();grassT.update();grassF.update();pebT.update();bladeT.update();for(const ns of NEARSETS)ns.update(camera.position.x,camera.position.z,uNearR.value);}
     if(drive.started)CIRC.tick();}
   uViewPos.value.copy(camera.position);camera.getWorldDirection(uViewDir.value);
 }
@@ -7119,16 +7130,16 @@ const PFX=(()=>{
   return P;
 })();
 // ---- graphics quality: always the highest, no tiers and no stepping down. Past the old 울트라: grass blades to 42 m,
-// grass to 140 m, pebbles to 70 m, near trees to 150 m, the finest terrain 1.5x as far, the frame at up to 2x the CSS
+// grass to 140 m and larger far tufts to 275 m, pebbles to 70 m, near trees to 240 m, the finest terrain 2x as far, the frame at up to 2x the CSS
 // resolution (~8 MP). The status panel shows the frame rate.
 const QUAL=(()=>{
-  const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,peb:7,near:150,lodK:0.0048};
+  const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,grassFar:10,peb:7,near:240,lodK:0.0036};
   const Q={fps:0,fa:0,fn:0};
   Q.apply=()=>{const px=Math.max(1,innerWidth*innerHeight);
     renderer.setPixelRatio(Math.max(0.5,Math.min(window.devicePixelRatio||1,t.pr,Math.sqrt(t.px/px))));
     PFX.useAO=PFX.useSh=PFX.useBl=true;if(PFX.setMSAA)PFX.setMSAA(t.msaa);
     uNearR.value=t.near;LOD_K=t.lodK;FAR_MAX=1e9;PHOTO.hi.value=1;uGB.value.set(t.gb[0],t.gb[1]);
-    bladeT.setRadius(t.blades);if(bladeT.mesh)bladeT.mesh.visible=true;grassT.setRadius(t.grass);pebT.setRadius(t.peb);
+    bladeT.setRadius(t.blades);if(bladeT.mesh)bladeT.mesh.visible=true;grassT.setRadius(t.grass);grassF.setRadius(t.grassFar);pebT.setRadius(t.peb);
     resize();Q.show();};
   Q.show=()=>{const el=$('gfx');if(el)el.textContent=`${t.name} · ${Q.fps||'—'} fps`;};
   Q.tick=raw=>{if(raw>0.25)return;
