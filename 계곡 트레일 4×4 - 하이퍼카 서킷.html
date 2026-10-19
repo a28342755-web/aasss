@@ -6971,6 +6971,17 @@ const PFX=(()=>{
         sm.addAssign(S.tap(c).mul(a));ws.addAssign(a);});
       o.assign(sm.div(ws));});
     return o;});
+  // ---- contrast-adaptive sharpening (AMD's CAS, order 40, after the TAA that softens the frame): a 5-tap cross, each
+  // pixel sharpened only as far as its neighbourhood's headroom allows (so edges never ring), in a compressed range
+  // (c/(1+c), so HDR highlights don't drive it); faded where the motion blur has streaked the pixel. It replaces the
+  // unsharp mask before the TAA (uSharp, kept for the frame without TAA)
+  const uCAS=uniform(0.4);P.cas={k:0.4};   // k: 0 (CAS's 1/8 peak) .. 1 (its 1/5)
+  P.addFX('sharpen',40,(x,S)=>{const t=uTx[0],u=S.u,pc=v=>v.div(v.add(1)),c0=S.tap(u);
+    const c=pc(c0),n=pc(S.tap(u.add(vec2(0,t.y)))),s=pc(S.tap(u.sub(vec2(0,t.y)))),e=pc(S.tap(u.add(vec2(t.x,0)))),w=pc(S.tap(u.sub(vec2(t.x,0))));
+    const mn=min(min(min(n,s),min(e,w)),c),mx=max(max(max(n,s),max(e,w)),c);
+    const wt=clamp(min(mn,vec3(1).sub(mx)).div(max(mx,1e-4)),0,1).sqrt().mul(uCAS.mul(-0.075).sub(0.125));
+    const o=clamp(c.add(n.add(s).add(e).add(w).mul(wt)).div(wt.mul(4).add(1)),0,0.999);
+    return clamp(x.add(o.div(float(1).sub(o)).sub(c0).mul(float(1).sub(S.mbk||float(0)))),0,6e4);});
   // ---- sun glare (order 300, linear light): staring into the low sun the lens flares - a wide soft glow, a starburst,
   // a few ghosts, a thin streak, and a veil that lifts the blacks. How much of the sun is in view comes first: 24 taps
   // over its disc into a 1x1 target: open sky by the shafts' depth test, times the brightness against the disc's own,
@@ -7069,7 +7080,8 @@ const PFX=(()=>{
     // depth of field in the garage only (a product shot, focused on the car): on the road the whole view stays sharp
     const dof=full&&garage.on?0.6:0;uDof.value=dof;uFoc.value=Math.max(3,camera.position.distanceTo(car.pos));
     for(const n of dofNodes)gate(n,dof>0);
-    uSharp.value=Math.min(0.32,0.1+Math.max(0,(window.devicePixelRatio||1)/renderer.getPixelRatio()-1)*0.25)*(P.taa?0.45:1);
+    uSharp.value=P.taa?0:Math.min(0.32,0.1+Math.max(0,(window.devicePixelRatio||1)/renderer.getPixelRatio()-1)*0.25);
+    uCAS.value=Math.min(1,(P.cas.k??0.4)+Math.max(0,(window.devicePixelRatio||1)/renderer.getPixelRatio()-1)*0.3);
     // motion blur: a 180-degree shutter at 60 Hz whatever the frame rate (the motion vectors span this frame's time
     // step, so the shutter is scaled by it); none in the garage, under the debug views or below level 2, nor on a cut,
     // whose motion vectors span the jump: the frame the TAA history restarts and the one after, and likewise when the
