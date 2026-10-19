@@ -1525,8 +1525,10 @@ const sunDir=new V3(-0.66,0.36,-0.62).normalize();
    fc.assign(mix(fc,fogC.mul(vec3(0.86,0.93,1.06)),smoothstep(0,0.35,vd.y).mul(0.5)));
    return fog(fc,fogF);})();}
 const LPI=Math.PI,PL=137;   // legacy -> physical light units (studio points: legacy falloff at ~8 m)
-const hemi=new THREE.HemisphereLight(C('#b3c9e6'),C('#5b4f3b'),0.8*LPI);scene.add(hemi);
-const sun=new THREE.DirectionalLight(C('#ffcf98'),3.0*LPI);
+// the world's sun and sky (one pair of values: the garage puts these back on the way out)
+const SUN_I=3.0*LPI,HEMI_I=0.8*LPI;
+const hemi=new THREE.HemisphereLight(C('#b3c9e6'),C('#5b4f3b'),HEMI_I);scene.add(hemi);
+const sun=new THREE.DirectionalLight(C('#ffcf98'),SUN_I);
 sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
 const sc=sun.shadow.camera;sc.left=-50;sc.right=50;sc.top=50;sc.bottom=-50;sc.near=1;sc.far=280;
 sun.shadow.bias=-0.0002;sun.shadow.normalBias=0.03;
@@ -1610,9 +1612,12 @@ const CLOUD=(()=>{const W=1024,H=320,NB=8,BASE=1800,TOP=5200,SIG=0.03,STEPS=52;
         draw(NB);return true;}catch(e){console.warn('clouds',e);return false;}},
     update(cam,t){U.cam.value.copy(cam);U.t.value=t;draw(1);}};})();
 const cloudsOK=await CLOUD.init();try{window.__CLOUD=CLOUD;}catch(_){}
+// the sun's disc: its angular radius (0.53 degrees across) and its radiance at the centre (times sunC), a third of the
+// way to the HDR ceiling (6e4): the real sun is ~1e5 times the sky, which no buffer here holds; the bloom spreads it
+const SUN_DISC={R:0.004625,L:2.0e4};
 // sky with drifting clouds
-const skyMat=(()=>{const {Fn,If,Loop,float,vec2,vec3,uniform,positionLocal,normalize,mix,smoothstep,pow,max,dot,clamp,fract,sin,floor}=TSL;
-  const U={top:uniform(C('#2a62b8')),horizon:uniform(C('#b7cde6')),ground:uniform(FOG.clone()),sunC:uniform(C('#ffe4bc')),sunDir:uniform(sunDir),uTime:uniform(0)};
+const skyMat=(()=>{const {Fn,If,Loop,float,vec2,vec3,uniform,positionLocal,normalize,mix,smoothstep,pow,max,dot,clamp,fract,sin,floor,cross,length,sqrt,exp,fwidth}=TSL;
+  const U={top:uniform(C('#2a62b8')),horizon:uniform(C('#b7cde6')),ground:uniform(FOG.clone()),sunC:uniform(C('#ffe4bc')),sunDir:uniform(sunDir),uTime:uniform(0),disc:uniform(1)};
   const h2=p=>fract(sin(dot(p,vec2(127.1,311.7))).mul(43758.5453));
   const vn=p=>{const i=floor(p),f0=fract(p),f=f0.mul(f0).mul(float(3).sub(f0.mul(2)));
     return mix(mix(h2(i),h2(i.add(vec2(1,0))),f.x),mix(h2(i.add(vec2(0,1))),h2(i.add(vec2(1,1))),f.x),f.y);};
@@ -1633,14 +1638,48 @@ const skyMat=(()=>{const {Fn,If,Loop,float,vec2,vec3,uniform,positionLocal,norma
       const sh=clamp(c0.sub(cf(uv.add(U.sunDir.xz.mul(0.07)))).mul(4).add(0.62),0.3,1.25);
       const cc=mix(vec3(0.5,0.52,0.58),vec3(1.1,1.04,0.96),sh).add(U.sunC.mul(pow(s,6).mul(0.5).mul(cov.oneMinus())));
       c.assign(mix(c,cc,cov.mul(0.92)));});
-    c.addAssign(U.sunC.mul(pow(s,900).mul(30).mul(cov.oneMinus())));
+    // the sun: a crisp disc of its real size, the rim darker and redder (limb darkening), and a tight aureole fading
+    // into the lobes above. The angle comes from atan2(|d x s|, d.s): 1-cos is ~1e-5 at the rim, too fine for floats.
+    // Edge over about a pixel (fwidth). U.disc is 0 while the environment map is captured: the DirectionalLight
+    // already draws the sun's highlight on glossy paint, a disc in the map would be a second sun
+    const th=TSL.atan(length(cross(d,U.sunDir)),max(dot(d,U.sunDir),1e-6)).toVar(),rd=th.div(SUN_DISC.R).toVar();
+    const aa=max(fwidth(rd),0.04),mu=sqrt(max(float(1).sub(rd.mul(rd)),0));
+    const disc=float(1).sub(vec3(0.5,0.6,0.72).mul(float(1).sub(mu))).mul(float(1).sub(smoothstep(float(1).sub(aa),float(1).add(aa),rd))).mul(SUN_DISC.L);
+    const aur=exp(th.div(-0.0045)).mul(50).add(float(6).div(float(1).add(th.div(0.012).pow2())));
+    c.addAssign(U.sunC.mul(disc.add(aur)).mul(cov.oneMinus()).mul(U.disc));
     return c;})();
   m.uniforms=U;   // the old interface: skyMat.uniforms.x.value
   return m;})();
 const sky=W(new THREE.Mesh(new THREE.SphereGeometry(5500,32,16),skyMat));
 sky.frustumCulled=false;sky.renderOrder=-1;scene.add(sky);
+// ---- what the cars reflect (their envMap, envTex). A capture of the sky alone put the bright haze under the horizon
+// into every door, sill and window, and lit the undersides blue-white. Under the horizon the capture scene has a dome
+// of lit ground instead (the valley's mean albedo under the sun and sky, darker straight down where the car shades
+// it), with a thin band of haze only at the horizon. Once the world is built, ENV.start (near the end) adds the
+// ground, roads and Alps round the car and keeps recapturing as it moves.
+const ENV=(()=>{const es=new THREE.Scene(),E={es,sky:null,dome:null,U:{},pm:null,rt:null,size:256,sigma:0.02,near:0.1,far:60000};
+  // PMREMGenerator sets its cube camera's near and far without updating its projection: update it here
+  es.onBeforeRender=(r,s,cam)=>{if(cam&&cam.isPerspectiveCamera)cam.updateProjectionMatrix();};
+  E.sky=new THREE.Mesh(new THREE.SphereGeometry(50,32,16),skyMat);E.sky.renderOrder=-2;E.sky.frustumCulled=false;es.add(E.sky);
+  // (should the ground fail to build, the capture is the sky's alone, as before)
+  try{const {Fn,vec3,uniform,positionLocal,normalize,mix,smoothstep,pow,max,dot}=TSL;es.fogNode=scene.fogNode;
+    const alb=[0,0,0];{let n=0;for(let i=0;i<COL.length;i+=3*97){alb[0]+=COL[i];alb[1]+=COL[i+1];alb[2]+=COL[i+2];n++;}
+      for(let c=0;c<3;c++)alb[c]=n&&alb[c]>0?alb[c]/n:[0.1,0.12,0.045][c];}
+    // (radiance = albedo x irradiance/PI, as the terrain's diffuse: ~70% of the ground in sun, the hemisphere above)
+    const lit=sun.color.clone().multiplyScalar(SUN_I/LPI*sunDir.y*0.7).add(hemi.color.clone().multiplyScalar(HEMI_I/LPI)).multiply(new THREE.Color(alb[0],alb[1],alb[2]));
+    const U=E.U;Object.assign(U,{lit:uniform(lit),under:uniform(lit.clone().multiplyScalar(0.25)),haze:uniform(FOG),sunDir:uniform(sunDir)});
+    const gm=new THREE.MeshBasicNodeMaterial({side:THREE.BackSide,depthWrite:false,fog:false});
+    gm.colorNode=Fn(()=>{const d=normalize(positionLocal).toVar(),sa=max(dot(d,U.sunDir),0);
+      // the haze is the fog's own colour (warmer and brighter toward the sun), ~2 degrees deep
+      const hz=U.haze.mul(mix(vec3(1),vec3(1.32,1.12,0.86),pow(sa,3).mul(0.95))).mul(pow(sa,14).mul(1.6).add(1));
+      return mix(mix(U.lit,U.under,smoothstep(-0.5,-0.9,d.y)),hz,smoothstep(-0.035,0,d.y));})();
+    E.dome=new THREE.Mesh(new THREE.SphereGeometry(48,32,8,0,Math.PI*2,Math.PI/2,Math.PI/2),gm);E.dome.renderOrder=-1;E.dome.frustumCulled=false;es.add(E.dome);}
+  catch(e){console.warn('env ground',e);}
+  return E;})();
 let envTex=null;
-try{const pm=new THREE.PMREMGenerator(renderer);const es=new THREE.Scene();es.add(new THREE.Mesh(new THREE.SphereGeometry(50,32,16),skyMat));envTex=pm.fromScene(es,0.03).texture;pm.dispose();}catch(e){envTex=null;}
+// (captured without the sun's disc and aureole: skyMat's U.disc; ENV.grab does the same for every later capture)
+try{const pm=new THREE.PMREMGenerator(renderer);const es=ENV.es;skyMat.uniforms.disc.value=0;ENV.rt=pm.fromScene(es,ENV.sigma,ENV.near,ENV.far,{size:ENV.size});envTex=ENV.rt.texture;ENV.pm=pm;}catch(e){envTex=null;}
+skyMat.uniforms.disc.value=1;
 
 function tileTexture(seed,lo,hi,dots){
   const S=256,cv=document.createElement('canvas');cv.width=cv.height=S;const ctx=cv.getContext('2d');const img=ctx.createImageData(S,S);
@@ -5615,7 +5654,7 @@ function enterGarage(){
 function exitGarage(){
   if(!garage.on)return;garage.on=false;setXray(false);
   $('garage').hidden=true;app.classList.remove('garage');
-  setWorld(true);studio.visible=false;studioLights.forEach(l=>l.intensity=0);hemi.intensity=0.8*LPI;sun.intensity=2.8*LPI;
+  setWorld(true);studio.visible=false;studioLights.forEach(l=>l.intensity=0);hemi.intensity=HEMI_I;sun.intensity=SUN_I;
   envMats.forEach(m=>m.envMap=envTex);
   car.pos.copy(garage.saved.pos);car.q.copy(garage.saved.q);car.vel.set(0,0,0);car.w.set(0,0,0);
   for(const w of wheels)w.steer=0;
@@ -6559,9 +6598,9 @@ function updateCamera(dt){
 // ---- post-processing. The frame is drawn into a multisampled float target that keeps its depth, then finished in a
 // few full-screen passes: ambient occlusion from the depth (contact shadow under the truck, in the wheel wells, at the
 // roots of grass and trees, in rock crevices), light shafts where the sun breaks through branches and over ridges,
-// bloom on glints, and a film-like grade (gentle contrast, natural greens, cool shadows and warm highlights, vignette,
-// fine grain). Level 2 = everything, 1 = grade and bloom only, 0 = straight to the screen; frames that run long step
-// the level down.
+// bloom on glints; then the temporal anti-aliasing, and after it the display stage: a film-like grade (natural greens,
+// cool shadows and warm highlights, vignette), an AgX tone curve with a punchy look, fine grain, all watched by a
+// fail-soft watchdog. Level 2 = everything, 1 = grade and bloom only, 0 = straight to the screen.
 const PFX=(()=>{
   const {Fn,Loop,float,vec2,vec3,vec4,uniform,pass,uv,screenCoordinate,rtt,getViewPosition,perspectiveDepthToViewZ,logarithmicDepthToViewZ,viewZToPerspectiveDepth,cameraNear,cameraFar,cameraProjectionMatrixInverse,
     dot,cross,normalize,abs,sign,cos,sin,select,mix,smoothstep,exp,exp2,log2,pow,max,min,clamp,fract,length,step,convertToTexture,renderOutput}=TSL;
@@ -6701,37 +6740,222 @@ const PFX=(()=>{
     c.mulAssign(mix(1,aoTex.r,uAO));
     c.addAssign(uSunC.mul(shTex.r).mul(uSh));
     c.addAssign(bl.rgb.mul(uBl));
-    // the grade happens in linear light before tone mapping: a gentle contrast curve around mid grey, the
-    // yellow-greens that read as plastic pulled back, cool shade and warm light, and a vignette
-    const l=dot(c,vec3(0.2126,0.7152,0.0722)).toVar();
-    const yg=smoothstep(0.02,0.25,c.g.sub(c.b).div(l.add(0.02))).mul(smoothstep(-0.05,0.15,c.g.sub(c.r).div(l.add(0.02))));
-    // (a cinematic grade: richer colour, a firmer curve, teal in the shade and gold in the light)
-    const g1=mix(vec3(l),c,mix(1.14,0.98,yg));
-    const g2=exp2(log2(max(g1,vec3(1e-5)).div(0.18)).mul(1.17)).mul(0.18);
-    const g3=g2.mul(mix(vec3(0.94,0.985,1.07),vec3(1.06,1.0,0.92),smoothstep(0.02,0.5,l)));
-    const q=uv().sub(0.5),g4=g3.mul(float(1).sub(pow(dot(q,q).mul(1.9),1.3).mul(0.26)));
-    const graded=mix(c,g4,uGr);
-    const dbgc=mix(mix(graded,vec3(aoTex.r),step(0.5,uDbg)),vec3(shTex.r),step(1.5,uDbg));
+    // ungraded linear light: the grade, vignette and tone curve run after the TAA (the display stage below), so the
+    // vignette isn't reprojected with the history and the water, which reflects the history, isn't graded twice
+    const dbgc=mix(mix(c,vec3(aoTex.r),step(0.5,uDbg)),vec3(shTex.r),step(1.5,uDbg));
     return vec4(dbgc,1);})();
-  // tone mapping and sRGB are applied by the pipeline's output transform; a dithering grain on top
-  const taaN=new TAAN(convertToTexture(final),dep,velTex,camera);WREFL.value=taaN.hist.texture;
-  // (and a fine film grain that moves with every frame, strongest in the mid-tones)
-  const grainOf=src=>{const g=renderOutput(src);return Fn(()=>{const n=fract(dot(screenCoordinate.xy,vec2(0.06711056,0.00583715)).mul(52.9829189)).sub(0.5);
-    const fg=fract(sin(dot(screenCoordinate.xy.add(fract(uT.mul(7.13)).mul(vec2(311.7,183.3))),vec2(12.9898,78.233))).mul(43758.5453)).sub(0.5);
-    const lm=dot(g.rgb,vec3(0.3,0.59,0.11)),amt=lm.mul(float(1).sub(lm)).mul(4).mul(3.2/255);
-    return vec4(g.rgb.add(n.mul(0.9/255)).add(fg.mul(amt)),1);})();};
-  const grainT=grainOf(taaN),grainN=grainOf(final);P.taa=true;
+  const beauty=convertToTexture(final),taaN=new TAAN(beauty,dep,velTex,camera);WREFL.value=taaN.hist.texture;
+  // ---- the grade, in linear light: a contrast curve around mid grey, the yellow-greens that read as plastic pulled
+  // back, teal in the shade and gold in the light; then a vignette
+  const lumW=vec3(0.2126,0.7152,0.0722);
+  const gradeOf=(c,con)=>{const l=dot(c,lumW).toVar();
+    const yg=smoothstep(0.02,0.25,c.g.sub(c.b).div(l.add(0.02))).mul(smoothstep(-0.05,0.15,c.g.sub(c.r).div(l.add(0.02))));
+    const g1=mix(vec3(l),c,mix(1.14,0.98,yg));
+    const g2=exp2(log2(max(g1,vec3(1e-5)).div(0.18)).mul(con)).mul(0.18);
+    return g2.mul(mix(vec3(0.94,0.985,1.07),vec3(1.06,1.0,0.92),smoothstep(0.02,0.5,l)));};
+  const uVig=uniform(0.26),vignette=(c,k)=>{const q=uv().sub(0.5);return c.mul(float(1).sub(pow(dot(q,q).mul(1.9),1.3).mul(k)));};
+  // dither and a fine film grain that moves with every frame, strongest in the mid-tones (on the display values, last)
+  const vtGrain=Fn(([g,p,t])=>{const n=fract(dot(p,vec2(0.06711056,0.00583715)).mul(52.9829189)).sub(0.5);
+    const fg=fract(sin(dot(p.add(fract(t.mul(7.13)).mul(vec2(311.7,183.3))),vec2(12.9898,78.233))).mul(43758.5453)).sub(0.5);
+    const lm=dot(g,vec3(0.3,0.59,0.11)),amt=lm.mul(float(1).sub(lm)).mul(4).mul(3.2/255);
+    return g.add(n.mul(0.9/255)).add(fg.mul(amt));}).setLayout({name:'vtGrain',type:'vec3',inputs:[{name:'g',type:'vec3'},{name:'p',type:'vec2'},{name:'t',type:'float'}]});
+  // (three catches a throw while a material is built - a bad node, a wrong call - and draws a black stand-in, logging
+  // only 'TSL: ...', which names no material: setOut marks the stage and the probe pending, and a zero uniform each
+  // output carries clears its mark when it really renders, so a mark still set after the draw is a failed build)
+  const pend={s:0,p:0},mkS=uniform(0).onRenderUpdate(()=>{pend.s=0;}),mkP=uniform(0).onRenderUpdate(()=>{pend.p=0;});
+  // the previous output stage, kept as the watchdog's known-good fallback: the grade at its old contrast, ACES and sRGB
+  // through the pipeline's tone mapping (renderer.toneMapping), grain
+  const grainOf=(src,probe)=>Fn(()=>{const c=clamp(src.rgb,0,6e4).toVar(),g=renderOutput(vec4(mix(c,vignette(gradeOf(c,1.17),uVig),uGr),1));
+    return vec4(vtGrain(g.rgb,screenCoordinate.xy,uT.add(probe?mkP:mkS)),1);})();
+  // ---- AgX (three r186's agxToneMapping, ported for its look) with a 'punchy' ASC-CDL look on the curve's output,
+  // still in AgX's log encoding: the per-channel power deepens the blue sky and warms sunlit ground, the saturation
+  // gives back the colour AgX's inset takes out. Hues stay put as they brighten (no ACES skew of blue to purple)
+  const {mat3}=TSL;
+  const AGI=mat3(vec3(0.856627153315983,0.137318972929847,0.11189821299995),vec3(0.0951212405381588,0.761241990602591,0.0767994186031903),vec3(0.0482516061458583,0.101439036467562,0.811302368396859));
+  const AGO=mat3(vec3(1.1271005818144368,-0.1413297634984383,-0.14132976349843826),vec3(-0.11060664309660323,1.157823702216272,-0.11060664309660294),vec3(-0.016493938717834573,-0.016493938717834257,1.2519364065950405));
+  const S2R=mat3(vec3(0.6274,0.0691,0.0164),vec3(0.3293,0.9195,0.0880),vec3(0.0433,0.0113,0.8956)),R2S=mat3(vec3(1.6605,-0.1246,-0.0182),vec3(-0.5876,1.1329,-0.1006),vec3(-0.0728,-0.0083,1.1187));
+  const vtAgx=Fn(([c,ex,pw,sat])=>{const v=clamp(log2(max(AGI.mul(S2R.mul(c.mul(ex))),vec3(1e-10))).add(12.47393).div(16.5),0,1).toVar(),v2=v.mul(v).toVar(),v4=v2.mul(v2).toVar();
+    const s=v4.mul(v2).mul(15.5).sub(v4.mul(v).mul(40.14)).add(v4.mul(31.96)).sub(v2.mul(v).mul(6.868)).add(v2.mul(0.4298)).add(v.mul(0.1191)).sub(0.00232);
+    const p=pow(max(s,vec3(0)),vec3(pw)).toVar(),l=dot(p,lumW);
+    return clamp(R2S.mul(pow(max(AGO.mul(mix(vec3(l),p,sat)),vec3(0)),vec3(2.2))),0,1);})
+    .setLayout({name:'vtAgx',type:'vec3',inputs:[{name:'c',type:'vec3'},{name:'ex',type:'float'},{name:'pw',type:'float'},{name:'sat',type:'float'}]});
+  // mid grey (0.18) lands where ACES put it (at the renderer's exposure, 1.02), whatever the look's power: the AgX
+  // exposure is solved on the CPU (~1.66 for power 1.3; P.tone.ev shifts it in stops)
+  const agxMid=pw=>{const sg=x=>15.5*x**6-40.14*x**5+31.96*x**4-6.868*x**3+0.4298*x**2+0.1191*x-0.00232,a=0.18*renderer.toneMappingExposure/0.6;
+    const t=(a*(a+0.0245786)-0.000090537)/(a*(0.983729*a+0.4329510)+0.238081);let lo=-4,hi=4;
+    for(let i=0;i<40;i++){const m=(lo+hi)/2,x=Math.min(1,Math.max(0,(Math.log2(0.18)+m+12.47393)/16.5));if(Math.max(0,sg(x))**(pw*2.2)<t)lo=m;else hi=m;}
+    return 2**((lo+hi)/2);};
+  const uExp=uniform(1),uCon=uniform(1.35),uLkP=uniform(1.3),uLkS=uniform(1.2);let exP=NaN,exE=NaN,exV=1;
+  // con: the grade's contrast exponent. AgX is flatter than three's ACES fit at mid grey (log-log slope 0.87 against
+  // 1.24, even with the look), so it rises from 1.17: scene 0.02 / 0.05 / 1.0 land on 11 / 47 / 227 (8-bit) against
+  // 13 / 41 / 235 before, highlights rolling off instead of clipping
+  P.tone={ev:0,con:1.35,pw:1.3,sat:1.2,vig:0.26};
+  // ---- the display stage, after the TAA: lens and display effects, the grade, the tone curve, then the sRGB transfer,
+  // dither and grain. Effects register with P.addFX(name,order,fn): fn(x,S) runs while the shader is built and returns
+  // the new linear colour. S.src is the anti-aliased frame, S.tap(uv) reads it (clamped, at level 0 so it may sit in a
+  // branch; S.lod0(n.sample(uv)) does the same for an effect's own reads; an effect may wrap S.tap for the ones after
+  // it), S.u is the pixel's uv, S.vel/S.dep the motion vectors (NDC: the uv offset to the previous frame
+  // is -vel.xy*(0.5,-0.5), as the TAA reads them) and the depth (reversed or logarithmic: read it through viewZ), and
+  // S.tex(node) must wrap any other texture an effect samples (an rtt), so the watchdog's probe can build the same stage
+  // from plain textures.
+  // Order: resampling effects below 100 (motion blur, chromatic aberration, sharpening), lens light below 500 (glare,
+  // flare), grade 500, vignette 600, tone curve 900. Each effect is dropped on its own if it fails (watchdog below)
+  const FX=[];
+  // (keeping the uv and level of a node wrapped after its .sample())
+  const plain=n=>n&&n.isTextureNode&&!(n.passNode&&n.passNode.isPassNode)?TSL.texture(n.value,n.uvNode,n.levelNode):n;
+  // (a read at an explicit level 0 - these targets have no mips, so nothing changes - is legal after an early-out, in
+  // non-uniform control flow, where WGSL's derivative-uniformity check is on: three switches it off except on Firefox.
+  // Set on the sampled node itself: a pass texture's clone() drops its uv, so .sample(u).level(0) would lose u)
+  const lod0=n=>{n.levelNode=float(0);return n;};
+  const stageOf=(src0,list,probe)=>Fn(()=>{const tex=probe?plain:n=>n,src=tex(src0);
+    const S={src,probe,tex,u:uv(),vel:velTex,dep,toned:false,lod0,tap:u=>clamp(lod0(src.sample(u)).rgb,0,6e4)};
+    let x=S.tap(S.u);
+    for(const f of list){if(f.bad)continue;try{const y=f.fn(x,S);if(y)x=y;}catch(e){WD.threw(f,e);}}
+    // (with the tone curve dropped, the pipeline's own ACES)
+    const g=renderOutput(vec4(x,1),S.toned?THREE.NoToneMapping:null,null);
+    return vec4(vtGrain(g.rgb,screenCoordinate.xy,uT.add(probe?mkP:mkS)),1);})();
+  P.taa=true;let lastFull=null;
   const pipe=new THREE.RenderPipeline(renderer);pipe.outputColorTransform=false;
-  const setOut=full=>{pipe.outputNode=full?(P.taa?grainT:grainN):renderOutput(col);pipe.needsUpdate=true;};
+  // ---- fail-soft watchdog. A failure is a throw while the stage is built or drawn (or a build three caught and drew a
+  // stand-in for: pend above), a shader or pipeline error three reports for the display passes, or the probe (the stage
+  // evaluated again at 16x16 points into a float target, read back asynchronously every 8 frames) seeing a NaN, nothing
+  // drawn, or a black frame while the sun is up. Effects in a new graph are
+  // on trial until it has run 45 frames and passed 2 probes. A failure with one effect on trial drops it; with several,
+  // the proven ones run alone and the rest come back one at a time, so the culprit is found; a proven graph that fails
+  // is re-proven once, then the old output (grainOf) takes over, and if that fails too, the plain one (renderOutput(col)).
+  // A NaN in the anti-aliased frame itself resets the TAA history; if it stays, or the frame stays black while the scene
+  // isn't, the plain output too. Each is logged once
+  // (WebGL 2 renders to a float target only with EXT_color_buffer_float; without it the probe would read back zeros and
+  // fail every graph, so there is none and a graph is proven by its frames alone)
+  const PRF=!renderer.backend.isWebGLBackend||renderer.backend.extensions.has('EXT_color_buffer_float');
+  const PR=16,prRT=new THREE.RenderTarget(PR,PR,{depthBuffer:false,type:THREE.FloatType}),prQ=new THREE.QuadMesh(new THREE.NodeMaterial());
+  prQ.material.name='VTProbe';prQ.name='VTProbe';
+  const WD={mode:'stage',ver:0,fv:-1,fr:0,np:0,ok:new Set(),trial:[],queue:[],refail:0,dBad:0,upNaN:0,upBlk:0,busy:false,pk:0,said:new Set(),rs:{},ps:{}};
+  const say=m=>{if(WD.said.has(m))return;WD.said.add(m);console.warn('PFX watchdog: '+m);};
+  // (an effect that throws while its shader is built is dropped at once; the rest of that build may be broken, so its
+  // later errors are not held against the others)
+  WD.threw=(f,e)=>{if(f.bad)return;f.bad=true;WD.fv=WD.ver;WD.trial=WD.trial.filter(t=>t!==f);WD.ok.delete(f);say(`display effect '${f.name}' dropped (${e&&e.message||e})`);lastFull=null;};
+  // a failure of graph version v (one per version: a broken graph reports itself several times)
+  WD.fail=(why,v=WD.ver)=>{if(WD.mode==='plain'||v!==WD.ver||WD.fv===WD.ver)return;WD.fv=WD.ver;say(why);WD.dBad=0;
+    const wait=s=>FX.filter(f=>s.has?s.has(f):s.includes(f)).concat(WD.queue).filter((f,i,a)=>a.indexOf(f)===i).sort((a,b)=>a.ord-b.ord);
+    if(WD.mode==='safe'){WD.mode='plain';say('falling back to the plain output');}
+    else if(WD.trial.length===1){const f=WD.trial.pop();f.bad=true;say(`display effect '${f.name}' dropped`);if(WD.queue.length)WD.trial.push(WD.queue.shift());}
+    else if(WD.trial.length>1){WD.queue=wait(WD.trial);WD.trial=[];}
+    else if(WD.ok.size&&WD.refail++<1){WD.queue=wait(WD.ok);WD.ok.clear();}
+    else{WD.mode='safe';say('falling back to the previous output stage');}
+    lastFull=null;};
+  // the effects still in the running: proven, or on trial
+  const live=()=>FX.filter(f=>!f.bad&&(WD.ok.has(f)||WD.trial.includes(f)));
+  // the output graph (s: the frame it starts from, L: the effects), and the same for the probe from plain textures
+  const outOf=(s,L,probe)=>WD.mode==='safe'?grainOf(probe?plain(s):P.taa?taaN:s,probe):stageOf(s,L,probe);
+  // the probe: rgb = the displayed colour (before the sRGB step), a = the anti-aliased frame's luminance; its last four
+  // columns hold the scene's own luminance instead, to tell a broken TAA/composite from a dark view
+  const probeOf=(s,L)=>{const o=outOf(s,L,true);return Fn(()=>{const lt=dot(plain(s).sample(uv()).rgb,lumW);
+    return select(screenCoordinate.x.lessThan(PR-4),vec4(o.rgb,lt),vec4(dot(clamp(colRaw.sample(uv()).rgb,0,6e4),lumW),0,0,lt));})();};
+  WD.read=(a,v)=>{WD.busy=false;if(v!==WD.ver||WD.mode==='plain')return;
+    // (no black test under the debug views: the shafts buffer is black away from the sun)
+    const st=(a.length-PR*4)/(PR-1),sunUp=sunDir.y>0&&sun.intensity>0&&!((P.dbg||0)>0.5);let n=0,dl=0,dm=0,dNaN=0,uNaN=0,ul=0,sl=0,ns=0;
+    for(let y=0;y<PR;y++)for(let x=0;x<PR;x++){const i=y*st+x*4,t=a[i+3];if(!Number.isFinite(t))uNaN++;else ul+=t;
+      if(x>=PR-4){if(Number.isFinite(a[i])){sl+=a[i];ns++;}continue;}
+      if(!(Number.isFinite(a[i])&&Number.isFinite(a[i+1])&&Number.isFinite(a[i+2]))){dNaN++;continue;}
+      const l=0.2126*a[i]+0.7152*a[i+1]+0.0722*a[i+2];dl+=l;dm=Math.max(dm,l);n++;}
+    ul/=PR*PR;sl/=Math.max(1,ns);
+    if(uNaN){taaN.reset=true;if(++WD.upNaN>=4){WD.mode='plain';say('NaN in the anti-aliased frame persists: plain output');lastFull=null;}return;}
+    WD.upNaN=0;
+    // all zero, alpha and the scene's columns too: the probe's draw was skipped (its target is cleared to transparent
+    // black, and a drawn probe never gives all zeros, the dither alone lifts half its pixels): a failed pipeline, by
+    // night as well as by day
+    const blank=!dNaN&&dm===0&&ul===0&&sl===0;
+    if(!blank&&sunUp&&ul<1e-4){if(sl>0.01){taaN.reset=true;if(++WD.upBlk>=6){WD.mode='plain';say('the anti-aliased frame is black while the scene is not: plain output');lastFull=null;}}return;}
+    WD.upBlk=0;
+    if(blank||dNaN||(sunUp&&ul>0.01&&dl/Math.max(1,n)<0.002&&dm<0.01)){if(++WD.dBad>=2)WD.fail(dNaN?'NaN in the display stage':blank?'the display stage draws nothing':'the display stage outputs black',v);return;}
+    WD.dBad=0;WD.np++;};
+  // three's console output: forwarded unchanged; shader and pipeline errors naming a display pass count as failures.
+  // WebGPU reports them asynchronously, labelled with the material's name (renderPipeline_<name>_<id>, and
+  // fragment_<name> for the shader module; uncaptured device errors arrive here too, through renderer.onError's
+  // default), so the stage's and the probe's materials are named after the graph version (VTStage<v>, VTProbe<v>)
+  // and an error that arrives after a rebuild is held against the graph that caused it
+  if(THREE.setConsoleFunction){const con0=THREE.getConsoleFunction?THREE.getConsoleFunction():null;
+    THREE.setConsoleFunction((ty,msg,...p)=>{
+      if(con0)con0(ty,msg,...p);else{const f=console[ty]||console.log;if(p[0]&&p[0].isStackTrace)f(p[0].getError(msg));else f(msg,...p);}
+      const m=String(msg),k=ty==='error'&&/pipeline creation failed|WGSL|shader|Uncaptured/i.test(m)&&/VT(?:Stage|Probe)(\d+)|_RenderPipeline(?![A-Za-z])|vtGrain|vtAgx/.exec(m);
+      if(k)WD.fail('GPU error in the display stage: '+m.slice(0,160),k[1]!==undefined?+k[1]:WD.ver);});
+    // (WebGL: a failed program comes through here instead, at once; the display stage's carry its vtGrain function)
+    renderer.debug.onShaderError=(gl,pg,vs,fs)=>{const B=renderer.backend,er=(s,t)=>B._getShaderErrors?B._getShaderErrors(gl,s,t):(gl.getShaderInfoLog(s)||'');
+      console.error('THREE.WebGLProgram: Shader Error '+gl.getError()+'\n'+(gl.getProgramInfoLog(pg)||'')+'\n'+er(vs,'vertex')+'\n'+er(fs,'fragment'));
+      if(/vtGrain/.test(gl.getShaderSource(fs)||''))WD.fail('shader error in the display stage');};}
+  // draw, catching a throw: the renderer's state is put back (pipe.render swaps the tone mapping and colour space, and
+  // a pass may have been left bound) and the TAA's jitter is taken off the camera
+  WD.draw=()=>{THREE.RendererUtils.saveRendererState(renderer,WD.rs);
+    try{pipe.render();if(pend.s){const v=pend.s;pend.s=0;WD.fail('the display stage failed to build',v);}}catch(e){THREE.RendererUtils.restoreRendererState(renderer,WD.rs);
+      if(taaN.jit){const v=taaN.jit.v;if(v)camera.setViewOffset(v.fullWidth,v.fullHeight,v.offsetX,v.offsetY,v.width,v.height);else camera.clearViewOffset();taaN.jit=null;}
+      if(WD.mode==='plain'||lastFull===false)throw e;WD.fail('the display stage threw: '+(e&&e.message||e));}};
+  // after a full frame: prove the graph on trial, admit the next waiting effect, and now and then send a probe
+  WD.after=()=>{WD.fr++;if(WD.mode==='plain'||lastFull!==true)return;
+    if((WD.trial.length||WD.queue.length)&&WD.mode==='stage'&&WD.fr>=45&&WD.np>=(PRF?2:0)){for(const f of WD.trial)WD.ok.add(f);WD.trial=[];
+      if(WD.queue.length){WD.trial.push(WD.queue.shift());lastFull=null;}}
+    if(!PRF||WD.busy||(++WD.pk&7))return;WD.busy=true;const v=WD.ver;
+    try{THREE.RendererUtils.resetRendererState(renderer,WD.ps);renderer.setClearColor(0,0);renderer.setRenderTarget(prRT);prQ.render(renderer);THREE.RendererUtils.restoreRendererState(renderer,WD.ps);
+      if(pend.p){pend.p=0;WD.busy=false;WD.fail('the display probe failed to build',v);return;}
+      renderer.readRenderTargetPixelsAsync(prRT,0,0,PR,PR).then(a=>WD.read(a,v),()=>{WD.busy=false;});}
+    catch(e){THREE.RendererUtils.restoreRendererState(renderer,WD.ps);WD.busy=false;say('probe failed: '+(e&&e.message||e));}};
+  const setOut=full=>{WD.ver++;WD.fr=WD.np=WD.dBad=0;pend.s=pend.p=0;
+    const qm=pipe._quadMesh&&pipe._quadMesh.material;if(qm)qm.name='VTStage'+WD.ver;
+    if(full&&WD.mode!=='plain'){const s=P.taa?taaN.getTextureNode():beauty,L=live();pipe.outputNode=outOf(s,L,false);pend.s=pend.p=WD.ver;
+      prQ.material.fragmentNode=probeOf(s,L);prQ.material.name='VTProbe'+WD.ver;prQ.material.needsUpdate=true;}
+    else pipe.outputNode=renderOutput(col);
+    pipe.needsUpdate=true;};
+  P.addFX=(name,ord,fn)=>{const f={name,ord,fn,bad:false};FX.push(f);FX.sort((a,b)=>a.ord-b.ord);WD.trial.push(f);lastFull=null;return f;};
+  P.fx=FX;P.wd=WD;   // (for inspection: the effects, and the watchdog's state)
+  // the grade, the vignette and the tone curve are the stage's first effects
+  // (in: non-negative, as a resampling effect before it may undershoot and l+0.02 must not reach 0; out: the contrast
+  // curve lifts a 6e4 highlight to ~6e6, so back under the HDR ceiling for the effects after it)
+  P.addFX('grade',500,x=>{const c=clamp(x,0,6e4);return clamp(mix(c,gradeOf(c,uCon),uGr),0,6e4);});
+  P.addFX('vignette',600,x=>vignette(x,uVig.mul(uGr)));
+  P.addFX('tone',900,(x,S)=>{const y=vtAgx(x,uExp,uLkP,uLkS);S.toned=true;return y;});
+  // ---- motion blur (order 20, before the other resamplers): the world streaks past at speed while the truck, which
+  // the camera carries along (motion ~0), stays crisp. 14 taps along the pixel's own motion (the velocity MRT, NDC
+  // current minus previous, to uv as the TAA reads it), centred, stratified and jittered by interleaved gradient noise
+  // that moves with the frame. Each tap is weighed by depth and motion (McGuire et al. 2012, 'A reconstruction filter
+  // for plausible motion blur'): a nearer tap counts only where its own blur reaches this pixel, a farther one where
+  // this pixel's motion uncovers it, one at about the same depth only where its blur reaches too - so the still truck
+  // never smears into the road racing past it, nor the road over the truck (its pixels don't move: nothing to do).
+  // Length: a 180-degree shutter at 60 Hz (uMB, from P.render), at most P.mb.max of the screen; under half a pixel
+  // the pixel is left alone. S.tap still reads the unblurred frame (a gather can't be re-run per read): S.mbk (0..1,
+  // how blurred the pixel is) lets the resamplers after it fade out where the frame is streaked
+  const uMB=uniform(0),uMBf=uniform(0),uMBx=uniform(0.03);let mbZ=2,mbT=0,mbN=0;
+  const mbO=new V3(),mbO0=new V3(),mbQ0=new THREE.Quaternion(),mbC0=new THREE.Quaternion();
+  P.mb={k:1,max:0.03};   // k: shutter scale (1 = 180 degrees), max: the longest streak, as a fraction of the screen
+  P.addFX('motion blur',20,(x,S)=>{const {If,sqrt}=TSL,N=14,u=S.u,lm=uMBx.mul(max(uRes.x,uRes.y));
+    // the streak in pixels, clamped (an Inf/NaN motion, from a vertex behind the camera, fails the test: no streak)
+    const bv=c=>{const v=lod0(S.vel.sample(c)).xy.mul(vec2(0.5,-0.5)).mul(uRes).mul(uMB),l2=dot(v,v),ok=l2.lessThan(1e10);
+      return select(ok,v.mul(min(1,lm.div(max(sqrt(select(ok,l2,0)),1e-4)))),vec2(0));};
+    const D=bv(u).toVar(),L=length(D).toVar(),o=x.toVar();S.mbk=smoothstep(0.5,8,L);
+    If(L.greaterThan(0.5),()=>{
+      // soft depth zone: 10% of the distance (the road within a streak's reach of the truck is farther than it or
+      // inside the zone, so the truck counts as nearer or level, and either way its stillness keeps it out; only
+      // well below, beyond any streak's reach, is the road nearer by more, which would count it as uncovered)
+      const wX=viewZ(S.dep.sample(u).x).negate().toVar(),ez=wX.mul(0.1).add(0.05).toVar(),rX=L.mul(0.5).toVar(),du=D.div(uRes).toVar();
+      const j=fract(float(52.9829189).mul(fract(dot(screenCoordinate.xy.add(uMBf.mul(5.588238)),vec2(0.06711056,0.00583715)))));
+      const sm=x.toVar(),ws=float(1).toVar();
+      Loop(N,({i})=>{const t=float(i).add(j).div(N).sub(0.5),c=u.add(du.mul(t)),d=abs(t).mul(L).toVar();
+        const rY=length(bv(c)).mul(0.5).toVar(),dz=viewZ(S.dep.sample(c).x).negate().sub(wX).div(ez).toVar();
+        const bk=smoothstep(1,2,dz),fr=smoothstep(1,2,dz.negate());
+        const a=fr.mul(clamp(float(1).sub(d.div(max(rY,1e-4))),0,1))                                  // nearer: its blur's cone
+          .add(bk.mul(clamp(float(1).sub(d.div(rX)),0,1)))                                             // farther: uncovered
+          .add(float(1).sub(bk).sub(fr).mul(float(1).sub(smoothstep(rY.mul(0.95),rY.mul(1.05).add(1e-4),d))));  // level: both move
+        sm.addAssign(S.tap(c).mul(a));ws.addAssign(a);});
+      o.assign(sm.div(ws));});
+    return o;});
   P.setTAA=on=>{if(P.taa===on)return;P.taa=on;lastFull=null;taaN.reset=true;};P.resetTAA=()=>{taaN.reset=true;};const lastCam=new V3(1e9,0,0);
-  let lastFull=null;
   const sp=new V3(),fw=new V3(),db=new THREE.Vector2(),s0=new THREE.Vector2();
   P.resize=()=>{};
   P.setMSAA=n=>{if(n===P.msaa)return;P.msaa=n;scenePass.options.samples=n;pipe.needsUpdate=true;};
-  P.render=()=>{
-    if(P.level<=0){if(lastFull!==false){setOut(false);lastFull=false;}pipe.render();return;}
+  P.render=fdt=>{
+    // (the plain output has no TAA, so the water stops reflecting its frozen history)
+    if(P.level<=0||WD.mode==='plain'){if(lastFull!==false){setOut(false);lastFull=false;}WREFL_ON.value=0;WD.draw();return;}
     if(lastFull!==true){setOut(true);lastFull=true;}
-    if(camera.position.distanceTo(lastCam)>12)taaN.reset=true;lastCam.copy(camera.position);camera.updateProjectionMatrix();taaP0.copy(camera.projectionMatrix);
+    const jump=camera.position.distanceTo(lastCam)>12;if(jump)taaN.reset=true;lastCam.copy(camera.position);camera.updateProjectionMatrix();taaP0.copy(camera.projectionMatrix);
     const full=P.level>=2,useAO=full&&P.useAO;WREFL_ON.value=P.taa?1:0;
     uAO.value=useAO?P.ao:0;for(const n of aoNodes)n.updateBeforeType=useAO?'frame':'none';
     for(const n of bloomNodes)n.updateBeforeType=P.useBl?'frame':'none';
@@ -6741,13 +6965,25 @@ const PFX=(()=>{
       const sx=sp.x*0.5+0.5,sy=0.5-sp.y*0.5,edge=Math.max(Math.abs(sx-0.5),Math.abs(sy-0.5));
       sh=smooth(0.05,0.55,face)*smooth(1.3,0.6,edge);uSun.value.set(sx,sy);}
     shTex.updateBeforeType=sh>0.01?'frame':'none';
-    uSh.value=P.shaft*sh;uBl.value=P.useBl?P.bloom:0;uGr.value=P.grade;uT.value=performance.now()/1000;uDbg.value=P.dbg||0;
+    uSh.value=P.shaft*sh;uBl.value=P.useBl?P.bloom:0;uT.value=performance.now()/1000;uDbg.value=P.dbg||0;
+    // the display stage (the debug views show the raw buffers, ungraded)
+    const T=P.tone;if(T.pw!==exP||renderer.toneMappingExposure!==exE){exP=T.pw;exE=renderer.toneMappingExposure;exV=agxMid(Math.max(0.2,T.pw));}
+    uGr.value=uDbg.value>0.5?0:P.grade;uExp.value=exV*2**T.ev;uCon.value=T.con;uLkP.value=Math.max(0.2,T.pw);uLkS.value=T.sat;uVig.value=T.vig;
     // depth of field in the garage only (a product shot, focused on the car): on the road the whole view stays sharp
     const dof=full&&garage.on?0.6:0;uDof.value=dof;uFoc.value=Math.max(3,camera.position.distanceTo(car.pos));
     for(const n of dofNodes)n.updateBeforeType=dof>0?'frame':'none';
     uSharp.value=Math.min(0.32,0.1+Math.max(0,(window.devicePixelRatio||1)/renderer.getPixelRatio()-1)*0.25)*(P.taa?0.45:1);
     renderer.getSize(s0);uAsp.value=s0.x/Math.max(1,s0.y);
-    pipe.render();
+    // motion blur: a 180-degree shutter at 60 Hz whatever the frame rate (the motion vectors span this frame's time
+    // step, so the shutter is scaled by it); none in the garage, under the debug views or below level 2, nor on a cut,
+    // whose motion vectors span the jump: the frame the TAA history restarts and the one after, and likewise when the
+    // camera's offset from the truck (a new view), its turn or the truck's (put back on its wheels) jumps in a frame
+    const mt=performance.now(),fd=fdt>0?fdt:(mt-mbT)/1000;mbT=mt;mbO.subVectors(camera.position,car.pos);
+    if((P.taa?taaN.reset:jump)||mbO.distanceToSquared(mbO0)>2.25||Math.abs(car.q.dot(mbQ0))<0.966||Math.abs(camera.quaternion.dot(mbC0))<0.966)mbZ=2;
+    mbO0.copy(mbO);mbQ0.copy(car.q);mbC0.copy(camera.quaternion);
+    uMB.value=full&&!garage.on&&!mbZ&&uDbg.value<0.5?0.5*Math.min(2.4,Math.max(0.6,(1/60)/Math.max(1e-3,fd)))*Math.max(0,P.mb.k||0):0;
+    if(mbZ)mbZ--;uMBf.value=mbN=(mbN+1)&63;uMBx.value=Math.min(0.1,Math.max(0,P.mb.max||0));
+    WD.draw();WD.after();
   };
   return P;
 })();
@@ -7467,8 +7703,10 @@ function tick(now){
   try{updateHUD(dt,vF,wade);teleDraw(dt);}catch(err){showErr(err);}
   try{updateAudio(dt,fx.sp,fx.slipSum,fx.loose,fx.splash);}catch(err){showErr(err);}
   try{flyHUD(dt);npTick(dt);}catch(err){showErr(err);}
-  if(cloudsOK)CLOUD.update(camera.position,clock);
-  if(!window.__noRender)PFX.render();
+  // the reflections recaptured round the car now and then (a frame that does so leaves its band of cloud to the next)
+  const envCap=!window.__noRender&&ENV.live(now,dt);
+  if(cloudsOK&&!envCap)CLOUD.update(camera.position,clock);
+  if(!window.__noRender)PFX.render(dt);
 }
 // if the GPU driver drops the WebGL context (too much load), say so (no lighter reload: the quality stays the highest)
 const gpuLost=()=>{
@@ -7609,7 +7847,7 @@ try{
     else if(Math.max(Math.abs(x),Math.abs(z))<S0){A=a0;B=b0;W_=N;H_=N;u=(x+S0)/(2*S0)*N;v=(z+S0)/(2*S0)*N;}
     else{A=a1;B=b1;W_=N;H_=N;u=(x+S1)/(2*S1)*N;v=(z+S1)/(2*S1)*N;}
     const k=(clamp(u|0,0,W_-1)+clamp(v|0,0,H_-1)*W_)*4;for(let c=0;c<3;c++){o[c]=A[k+c]/255;o[3+c]=B[k+c]/255;}return o;};
-  ALPS.mesh=mesh;ALPS.patch=pmesh;ALPS.ok=true;ALPS.hAt=hAt;if(RANGE_OLD){scene.remove(RANGE_OLD);RANGE_OLD.geometry.dispose();}
+  ALPS.mesh=mesh;ALPS.patch=pmesh;ALPS.ring={NA,NR};ALPS.ok=true;ALPS.hAt=hAt;if(RANGE_OLD){scene.remove(RANGE_OLD);RANGE_OLD.geometry.dispose();}
 }catch(e){console.warn('alps',e);}
 try{window.__ALPS=ALPS;}catch(_){}
 // ---- driving in the Alps --------------------------------------------------------------------------------------------
@@ -7830,7 +8068,7 @@ if(ALPS.ok){
       C_[k*3]=tc.r;C_[k*3+1]=tc.g;C_[k*3+2]=tc.b;const rk=AMO[4]*(1-sn);S_[k*4]=Math.max(0,1-rk-sn);S_[k*4+1]=0;S_[k*4+2]=rk;S_[k*4+3]=sn;V_[k]=0.35+0.65*AMO[0];}}
     P_0.set(P2);N_0.set(N2);C_0.set(C2);S_0.set(S2);V_0.set(V2);AP.cx=cx;AP.cz=cz;
     for(const nm of['position','normal','color','splat','sunv'])g.attributes[nm].needsUpdate=true;}
-  const P_0=P_,N_0=N_,C_0=C_,S_0=S_,V_0=V_;AP.job=buildJob;
+  const P_0=P_,N_0=N_,C_0=C_,S_0=S_,V_0=V_;AP.job=buildJob;AP.mesh=apMesh;
   AP.build=(cx,cz)=>{for(const _ of buildJob(cx,cz));};
   // the far Alpine forest: billboards from ~480 m to 3.4 km (see the top of this change)
   if(ALPFAR)try{const MAXF=120000,{attribute,cameraPosition,cameraViewMatrix,vec3,vec4,length,normalize,max,smoothstep,dot}=TSL;
@@ -7912,6 +8150,89 @@ if(ALPS.ok){
 }
 // the hypercar starts on the circuit's grid, in pole position
 if(HC&&CIRC.on){const s=CIRC.start;placeCar(s[0],s[1],s[2]);cam.init=false;}
+// ---- the reflections round the car (ENV, the capture scene by the sky). Every ~1.8 s, or 60 m of travel, the car's
+// surroundings are captured into a second PMREM target and faded into envTex over ~0.6 s, so a new capture never pops.
+// Cheap stand-ins, unlit (the capture scene has no lights): the map's ground from its own height, normal, albedo and
+// baked-sun grids at a 4x coarser step (three meshes, not 136 chunks: a few draws a face), lit as the terrain is (sun x
+// baked visibility, plus the hemisphere), water under the lake's level, the car's own shade under it; the valley's roads
+// and the Alpine patch under the truck (their own geometry); the Alps (their own material, on a sparser index into the
+// same vertex buffer). A failed capture keeps the last good one; three in a row go back to the sky-and-ground capture.
+Object.assign(ENV,{dyn:false,rt2:null,quad:null,kU:null,ap:null,st:4,fade:0,t0:-1e9,due:0,avg:4,fails:0,at:new V3(1e9,0,0),p:new V3(),every:1.8,idle:10,dist:60,apx:1e9,apz:1e9,
+  build(){const E=ENV,{Fn,float,vec3,uniform,attribute,positionWorld,positionLocal,cameraPosition,normalize,mix,smoothstep,max,dot,pow,clamp,length,select,step,abs}=TSL;
+    const U=E.U;U.sunE=uniform(new THREE.Color());U.skyE=uniform(new THREE.Color());U.gndE=uniform(new THREE.Color());
+    const L=vec3(sunDir.x,sunDir.y,sunDir.z),one=float(1);
+    const light=(n,vis)=>U.sunE.mul(max(dot(n,L),0).mul(vis)).add(mix(U.gndE,U.skyE,n.y.mul(0.5).add(0.5)));
+    const shade=()=>mix(0.3,1,smoothstep(1.4,3.6,length(positionWorld.xz.sub(cameraPosition.xz))));
+    // ground: albedo x light; under the lake's level, water mirroring the sky (Schlick, as the puddles do)
+    const gm=new THREE.MeshBasicNodeMaterial({fog:true});
+    gm.colorNode=Fn(()=>{const g=attribute('color','vec3').mul(light(normalize(attribute('normal','vec3')),attribute('sunv','float')));
+      const c=clamp(normalize(positionWorld.sub(cameraPosition)).y.negate(),0,1),fr=pow(one.sub(c),5).mul(0.98).add(0.02);
+      const w=mix(U.skyE.mul(vec3(0.01,0.02,0.025)),mix(skyMat.uniforms.horizon,skyMat.uniforms.top,pow(c,0.45)),fr);
+      // (only where the lake's plane reaches: it ends 200 m past the outer grid, and far ground below its level is dry)
+      const lake=smoothstep(WATER_Y+0.3,WATER_Y-0.1,positionWorld.y).mul(step(max(abs(positionWorld.x),abs(positionWorld.z)),OHALF+200));
+      return mix(g,w,lake).mul(shade());})();
+    const grid=(H,NR,CL,SV,nv,cell,x0,hole)=>{const st=E.st,m=Math.floor((nv-1)/st)+1,P=new Float32Array(m*m*3),Nm=new Float32Array(m*m*3),A=new Float32Array(m*m*3),S=new Float32Array(m*m),I=[];
+      for(let j=0;j<m;j++)for(let i=0;i<m;i++){const gi=Math.min(nv-1,i*st)+Math.min(nv-1,j*st)*nv,k=i+j*m;S[k]=SV[gi];
+        P[k*3]=x0+Math.min(nv-1,i*st)*cell;P[k*3+1]=H[gi];P[k*3+2]=x0+Math.min(nv-1,j*st)*cell;for(let c=0;c<3;c++){Nm[k*3+c]=NR[gi*3+c];A[k*3+c]=CL[gi*3+c];}}
+      const s=st*cell;for(let j=0;j<m-1;j++)for(let i=0;i<m-1;i++){if(Math.max(Math.abs(x0+(i+0.5)*s),Math.abs(x0+(j+0.5)*s))<hole)continue;const a=i+j*m;I.push(a,a+m,a+1,a+1,a+m,a+m+1);}
+      const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('normal',new THREE.BufferAttribute(Nm,3));
+      g.setAttribute('color',new THREE.BufferAttribute(A,3));g.setAttribute('sunv',new THREE.BufferAttribute(S,1));g.setIndex(I);g.computeBoundingSphere();E.es.add(new THREE.Mesh(g,gm));};
+    grid(HT,NRM,COL,SUNV,NV,CELL,-HALF,0);grid(OHT,ONRM,OCOL,OSUNV,ONV,OCELL,-OHM,HALF);grid(FHT,FNRM,FCOL,FSUNV,FNV,FCELL,FX0,OHM);
+    if(RDMESH[0]){const rk=attribute('rk','vec4'),rm=new THREE.MeshBasicNodeMaterial({fog:true});
+      const alb=select(rk.x.greaterThan(2.5).and(rk.x.lessThan(3.5)),vec3(0.15,0.13,0.1),vec3(0.055,0.055,0.06));
+      // (a hair of up in the normal: computeVertexNormals leaves a zero normal on a vertex with only degenerate
+      // triangles, and one NaN texel spreads through the whole PMREM)
+      rm.colorNode=alb.mul(light(normalize(attribute('normal','vec3').add(vec3(0,1e-4,0))),one)).mul(shade());
+      // lifted clear of the coarser ground, more with distance (as the game lifts its far roads over the rings)
+      rm.positionNode=positionLocal.add(vec3(0,smoothstep(100,1200,length(positionLocal.xz.sub(cameraPosition.xz))).mul(2).add(0.25),0));
+      E.es.add(new THREE.Mesh(RDMESH[0].geometry,rm));}
+    if(AP.mesh){E.ap=new THREE.Mesh(AP.mesh.geometry,gm);E.ap.frustumCulled=false;E.es.add(E.ap);}
+    // the Alps: every other spoke and ring of their ring mesh (the patch's ground is in the ring's heights)
+    if(ALPS.ok&&ALPS.ring){const {NA,NR}=ALPS.ring,S=NR+1,J=[0],I=[];for(let j=1;j<NR;j+=2)J.push(j);J.push(NR);
+      for(let a=0;a<NA;a+=2){const b=(a+2)%NA;for(let q=0;q+1<J.length;q++){const p0=a*S+J[q],p1=b*S+J[q],p2=a*S+J[q+1],p3=b*S+J[q+1];I.push(p0,p1,p2,p1,p3,p2);}}
+      const src=ALPS.mesh.geometry,g=new THREE.BufferGeometry();g.setAttribute('position',src.attributes.position);g.setIndex(I);g.boundingSphere=src.boundingSphere.clone();
+      const m=new THREE.Mesh(g,ALPS.mesh.material);m.frustumCulled=false;E.es.add(m);}},
+  // the stand-in ground's height under a point (the highest corner of its coarse cell): the capture stays above it
+  gh(x,z){const m=Math.max(Math.abs(x),Math.abs(z)),G=m<HALF?[HT,NV,CELL,-HALF]:m<OHM?[OHT,ONV,OCELL,-OHM]:m<-FX0?[FHT,FNV,FCELL,FX0]:null;if(!G)return -1e9;
+    const [H,nv,cl,x0]=G,st=ENV.st,i=Math.floor((x-x0)/(cl*st))*st,j=Math.floor((z-x0)/(cl*st))*st;let h=-1e9;
+    for(const a of[0,st])for(const b of[0,st])h=Math.max(h,H[Math.min(nv-1,Math.max(0,i+a))+Math.min(nv-1,Math.max(0,j+b))*nv]);return h;},
+  // (a hair off the grid lines: a vertex exactly in the cube camera's plane upsets software rasterisers)
+  capture(){const E=ENV,p=E.p.copy(car.pos);p.x+=0.013;p.z+=0.007;p.y=Math.max(p.y+0.35,E.gh(p.x,p.z)+0.6);
+    E.sky.position.copy(p);if(E.dome)E.dome.position.copy(p);if(E.ap)E.ap.visible=AP.mesh.visible;
+    const k=hemi.intensity/LPI;E.U.sunE.value.copy(sun.color).multiplyScalar(sun.intensity/LPI);E.U.skyE.value.copy(hemi.color).multiplyScalar(k);E.U.gndE.value.copy(hemi.groundColor).multiplyScalar(k);
+    const o={size:E.size,position:p};if(E.rt2)o.renderTarget=E.rt2;
+    E.rt2=E.grab(o);E.at.copy(car.pos);E.apx=AP.cx;E.apz=AP.cz;},
+  // PMREM of the capture scene. One that throws half way leaves the renderer drawing into the probe with autoClear
+  // off (PFX would then draw the frame there too, and stop's own capture would restore that target): put both back
+  grab(o){const prev=renderer.getRenderTarget(),ac=renderer.autoClear;skyMat.uniforms.disc.value=0;   // (no second sun in the paint)
+    try{return ENV.pm.fromScene(ENV.es,ENV.sigma,ENV.near,ENV.far,o);}finally{skyMat.uniforms.disc.value=1;renderer.autoClear=ac;if(renderer.getRenderTarget()!==prev)renderer.setRenderTarget(prev);}},
+  // envTex moves toward the newest capture by k (alpha blending: envTex is never read while it is drawn into)
+  blend(k){const E=ENV;if(!E.quad){const {vec4,texture,screenUV,uniform}=TSL;E.kU=uniform(1);
+      const m=new THREE.MeshBasicNodeMaterial({transparent:true,blending:THREE.NormalBlending,depthTest:false,depthWrite:false,fog:false,toneMapped:false});
+      m.fragmentNode=vec4(texture(E.rt2.texture,screenUV).rgb,E.kU);E.quad=new THREE.QuadMesh(m);}
+    E.kU.value=k;const prev=renderer.getRenderTarget(),ac=renderer.autoClear;
+    try{renderer.autoClear=false;renderer.setRenderTarget(E.rt);E.quad.render(renderer);}finally{renderer.setRenderTarget(prev);renderer.autoClear=ac;}},
+  stop(){const E=ENV;E.dyn=false;E.fade=0;
+    try{for(const o of E.es.children)if(o!==E.sky&&o!==E.dome)o.visible=false;E.sky.position.set(0,0,0);if(E.dome)E.dome.position.set(0,0,0);
+      E.grab({size:E.size,renderTarget:E.rt});}catch(e){console.warn('env',e);}},
+  start(){const E=ENV;if(!E.pm||!E.rt||!envTex)return;
+    // (the next capture comes on the timer even if the car stays put: a pipeline still compiling from compileAsync is
+    // skipped by the renderer, so this first one can lack it)
+    try{E.build();E.dyn=true;E.capture();E.blend(1);E.t0=performance.now()/1000-E.idle+E.every;}catch(e){console.warn('env stand-ins',e);E.stop();}},
+  // every frame: the fade, then a capture when due (returns true when it captured)
+  live(now,dt){const E=ENV;if(!E.dyn||garage.on)return false;
+    if(E.fade>0){E.fade-=dt;try{E.blend(E.fade>0?1-Math.exp(-dt/0.12):1);}catch(e){console.warn('env fade',e);E.stop();return false;}}
+    const t=now/1000,used=Math.min(50,Math.max(0,performance.now()-now));E.avg+=(used-E.avg)*0.05;
+    // (the timer only once the car has moved or the Alpine patch has been rebuilt: parked, only the clouds change,
+    // and every E.idle s is plenty for them; each capture costs a PMREM and ~0.6 s of fading)
+    const age=t-E.t0,m2=E.at.distanceToSquared(car.pos),ap=AP.cx!==E.apx||AP.cz!==E.apz;
+    if(!((age>E.every&&(m2>0.25||ap))||age>E.idle||(age>0.4&&m2>E.dist*E.dist))){E.due=0;return false;}
+    if(!E.due)E.due=t;
+    // never on top of a frame already carrying heavy work (tiles refilled, ground rebuilt), unless it has waited 1.5 s
+    if(used>E.avg*1.4+1.5&&t-E.due<1.5)return false;
+    E.t0=t;E.due=0;
+    try{E.capture();E.fails=0;E.fade=0.6;}catch(e){console.warn('env capture',e);E.fade=0;if(++E.fails>=3)E.stop();}   // (no fading toward a half-drawn rt2)
+    return true;}});
 // ---- off-road routes: A* over the overview's 40 m grid. A step is refused past a grade of 0.46 or onto bare rock;
 // otherwise it costs its length times the ground's factor (snow, rock, forest, water) plus the grade squared
 const AST={g:null};
@@ -8030,6 +8351,7 @@ if(ALPS.ok){const N=OV.N,E=OV.E,d=2*E/N,H=new Float32Array(N*N),img=new ImageDat
 try{if(!window.__vtNoCompile)await Promise.race([renderer.compileAsync(scene,camera).catch(e=>console.warn(e)),new Promise(r=>setTimeout(r,1500))]);}catch(e){console.warn(e);}
 {const init=J=>{if(J&&!JP.ok)try{jpInit(J);}catch(e){console.warn('Jolt init',e);}};
   await Promise.race([joltP.then(init),new Promise(r=>setTimeout(r,15000))]);joltP.then(init);}
+ENV.start();   // the reflections' world round the car: built and first captured behind the loading screen
 QUAL.apply();
 requestAnimationFrame(frame);
 for(const id of['start','introView'])$(id).disabled=false;$('start').textContent='시동 걸기';
