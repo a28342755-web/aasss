@@ -2945,7 +2945,7 @@ function updateCells(){windTick();PETALS.tick();for(const c of propCells){const 
   for(const c of FARCELLS){const d=Math.hypot(c.x-camera.position.x,c.z-camera.position.z);c.m.visible=d>110&&d<FAR_MAX;}}
 
 /* ================= VEHICLE PHYSICS SETUP ================= */
-const MASS=HC?1770:SC?1690:2250,IX=SC?2300:3900,IY=SC?2650:4300,IZ=SC?560:1150;
+const MASS=HC?1770:SC?1690:2560,IX=SC?2300:4440,IY=SC?2650:4890,IZ=SC?560:1310;   // (4x4: a G 63's kerb weight)
 // (the 4x4 is the off-road model's: its 35" mud terrains, 0.4495 m)
 const RAD=SC?0.352:0.4495,WHEEL_I=SC?1.25:2.5,SUSP=SC?0.15:0.52,MOUNT_Y=SC?-0.03:-0.33,STATIC=SC?0.075:0.22;
 // unsprung mass per corner (wheel, 35" tyre, hub, brake, share of the solid axle); the body carries the rest
@@ -3032,7 +3032,7 @@ const kaLoad=Fz=>{const f=Math.max(Fz,200)/FZ0;return Math.sin(2*Math.atan(f/1.9
 // tread slowly, and the pressure follows the air); camber thrust per radian relative to cornering stiffness
 const T_AMB=22,KCAM=0.08;
 const RAYS=[-0.95,-0.62,-0.3,0,0.3,0.62,0.95].map(a=>[Math.cos(a),Math.sin(a)]);
-const BRAKE_F=SC?2600:3200,BRAKE_R=SC?1600:2100,HAND=SC?2400:5200;
+const BRAKE_F=SC?2600:3650,BRAKE_R=SC?1600:2400,HAND=SC?2400:5900;
 // 4.4 L twin-turbo V8, torque converter (K-factor, lock-up clutch), 8-speed automatic
 const IDLE=SC?950:700,LIMIT=HC?9500:SC?8700:6300,VMAX=SC?97:52,REV_VMAX=SC?8:7;
 const IE=SC?0.21:0.32,KTC=95,KTC_R=118,TC_LU=SC?120:45;
@@ -4809,7 +4809,7 @@ const rtiBlocks=[0,3].map(i=>{const m=new THREE.Mesh(rbox(0.72,1,0.66,0.03),new 
 const garage={xray:false,close:false,on:false,yaw:0.75,pitch:0.2,dist:7.6,spin:true,flex:false,flexT:0,steer:false,steerT:0,top:false,turn:0.4,saved:null,fromIntro:false};
 
 /* ================= FX ================= */
-const PMAX=3600;
+const PMAX=5600;
 const P={x:new Float32Array(PMAX),y:new Float32Array(PMAX),z:new Float32Array(PMAX),vx:new Float32Array(PMAX),vy:new Float32Array(PMAX),vz:new Float32Array(PMAX),
   life:new Float32Array(PMAX),max:new Float32Array(PMAX),s0:new Float32Array(PMAX),s1:new Float32Array(PMAX),a0:new Float32Array(PMAX),grav:new Float32Array(PMAX),drag:new Float32Array(PMAX),head:0};
 const pPos=new Float32Array(PMAX*3),pCol=new Float32Array(PMAX*3),pSize=new Float32Array(PMAX),pAlpha=new Float32Array(PMAX),pSeed=new Float32Array(PMAX*2);
@@ -4904,10 +4904,10 @@ const FOAM=(()=>{const N=320,S=128,cv=document.createElement('canvas');cv.width=
 const WATER_C=C('#e4edf1'),MIST_C=C('#f2f5f6');let bowT=0,splCD=0;
 // the plunge: a crown of drops thrown up and out round the hull, sheets of spray rising and spreading, a ring of foam and
 // big rings on the water - all as strong as the plunge (k 0..1: its sinking speed and its speed through the water)
-function splashBurst(k){const _b=new V3(),n=Math.round(70+260*k),m=Math.round(8+24*k);
+function splashBurst(k){const _b=new V3(),n=Math.round(160+560*k),m=Math.round(8+24*k);
   for(let i=0;i<n;i++){const a=Math.random()*TAU,rr=0.85+Math.random()*0.35;_b.set(Math.cos(a)*(BOX_HW+0.3)*rr,0,Math.sin(a)*(BOX_HL+0.2)*rr).applyQuaternion(car.q);
     const l=Math.hypot(_b.x,_b.z)||1,out=(1.5+Math.random()*4)*(0.6+k),up=(2+Math.random()*5.5)*(0.45+k);
-    emit(car.pos.x+_b.x,WATER_Y+0.12,car.pos.z+_b.z,car.vel.x*0.35+_b.x/l*out,up,car.vel.z*0.35+_b.z/l*out,WATER_C,0.05,0.07+Math.random()*0.12,0.8+Math.random()*0.8,0.9,9.8,0.35,2);}
+    emit(car.pos.x+_b.x,WATER_Y+0.12,car.pos.z+_b.z,car.vel.x*0.35+_b.x/l*out,up,car.vel.z*0.35+_b.z/l*out,WATER_C,0.02,0.035+Math.random()*0.05,0.8+Math.random()*0.8,0.9,9.8,0.35,2);}
   for(let i=0;i<m;i++){const a=Math.random()*TAU;_b.set(Math.cos(a)*(BOX_HW+0.4),0,Math.sin(a)*(BOX_HL+0.3)).applyQuaternion(car.q);const l=Math.hypot(_b.x,_b.z)||1,out=0.8+Math.random()*2.2*(0.5+k);
     emit(car.pos.x+_b.x,WATER_Y+0.4+Math.random()*0.6,car.pos.z+_b.z,car.vel.x*0.3+_b.x/l*out,1.5+Math.random()*3.5*(0.4+k),car.vel.z*0.3+_b.z/l*out,MIST_C,1,(3+Math.random()*3)*(0.6+k*0.7),1.3+Math.random()*1.1,0.42,1.6,1.1,3);}
   for(let i=0;i<10;i++){const a=i/10*TAU;_b.set(Math.cos(a)*(BOX_HW+0.6),0,Math.sin(a)*(BOX_HL+0.5)).applyQuaternion(car.q);FOAM.add(car.pos.x+_b.x,car.pos.z+_b.z,1.5,3.5+3*k,4+2*k,0.85);}
@@ -6544,7 +6544,7 @@ function updateVisuals(dt){
     slipSum+=slip;if(S.loose||w.surf===S_TRAIL||w.surf===S_DIRT)loose=true;
     const inWater=WET(w.cp.x,w.cp.z)&&w.center.y-RAD*0.3<WATER_Y&&terrainH(w.cp.x,w.cp.z)<WATER_Y;
     let rate=0;
-    if(inWater){rate=v*14+slip*8;splash+=v+slip;
+    if(inWater){rate=v*30+slip*16;splash+=v+slip;
       // where the tyre cuts the surface: rings spreading behind it (with the hull's, a wake), mist off it at speed
       w.rip=(w.rip||0)-dt;if(w.rip<=0&&(v>0.6||slip>1)){w.rip=0.18;RIP.add(w.cp.x,WATER_Y+0.02,w.cp.z,0.7,2.4+v*0.2,1.7,0.28);}
       if(v>3&&Math.random()<dt*(v*2.2)){const k=Math.random();emit(w.cp.x,WATER_Y+0.35,w.cp.z,car.vel.x*0.5+w.sG.x*(k-0.5)*3,0.8+k*1.6,car.vel.z*0.5+w.sG.z*(k-0.5)*3,MIST_C,0.7,2.6+v*0.1,1.2+k*0.8,0.3,0.4,1.3,3);}
@@ -6553,12 +6553,12 @@ function updateVisuals(dt){
     else if(w.surf===S_ROCK)rate=slip*2.5;
     else if(w.surf===S_ASPH)rate=slip>2?(slip-2)*14:0;   // tyre smoke only when a wheel spins or skids
     else rate=v*(w.surf===S_GRASS?0.6:w.surf===S_SAND?2.6:1.8)+slip*8;
-    w.emit+=Math.min(rate,120)*dt;
+    w.emit+=Math.min(rate,inWater?260:120)*dt;
     while(w.emit>=1){w.emit-=1;
       const rx=(Math.random()-0.5),rz=(Math.random()-0.5);
       // water thrown off the tread: a rooster tail of drops up and back off the turning tyre, a few out to the side
       if(inWater){const th=-Math.sign(w.omega||1)*Math.min(7,Math.abs(w.omega*RAD)*0.5+slip*0.6),sd=(Math.random()-0.5)*2.6;
-        emit(w.cp.x+rx*0.5,WATER_Y+0.08,w.cp.z+rz*0.5,car.vel.x*0.55+w.fG.x*th+w.sG.x*sd,1.4+Math.random()*3.4,car.vel.z*0.55+w.fG.z*th+w.sG.z*sd,WATER_C,0.06,0.1+Math.random()*0.12,0.7+Math.random()*0.5,0.85,9.8,0.25,2);}
+        emit(w.cp.x+rx*0.5,WATER_Y+0.08,w.cp.z+rz*0.5,car.vel.x*0.55+w.fG.x*th+w.sG.x*sd,1.4+Math.random()*3.4,car.vel.z*0.55+w.fG.z*th+w.sG.z*sd,WATER_C,0.025,0.04+Math.random()*0.05,0.7+Math.random()*0.5,0.85,9.8,0.25,2);}
       else if(w.surf===S_MUD){const back=-Math.sign(w.omega)*Math.min(8,slip)*0.7;
         emit(w.cp.x+rx*0.3,w.cp.y+0.1,w.cp.z+rz*0.3,w.fG.x*back+w.sG.x*rx*2,1.2+Math.random()*2.8,w.fG.z*back+w.sG.z*rx*2,S.dust,0.09,0.13,1.1,0.95,9.8,0.3);}
       // burnt rubber: dense white-grey smoke rolling off the tyre, swelling for seconds and drifting up and away
@@ -6581,9 +6581,9 @@ function updateVisuals(dt){
      if(sv>0.45||(sP<0.02&&av0>5)){splashBurst(clamp(Math.max(0,-car.vel.y)*0.16+av0*0.045+sv*0.12,0.15,1));splCD=0.9;}}}
   if(car.sub>0.04&&!garage.on&&WET(car.pos.x,car.pos.z)){const vF=car.vel.dot(car.fwd),av=Math.abs(vF);bowT-=dt;
     for(const sx of[1,-1]){_a.set(sx*(BOX_HW+0.05),0,Math.sign(vF||1)*(BOX_HL-0.1)).applyQuaternion(car.q).add(car.pos);
-      if(av>1){const nf=Math.min(9,av*dt*20*Math.min(1,car.sub*3)),n=Math.floor(nf)+(Math.random()<nf%1?1:0);
+      if(av>1){const nf=Math.min(20,av*dt*44*Math.min(1,car.sub*3)),n=Math.floor(nf)+(Math.random()<nf%1?1:0);
         for(let k=0;k<n;k++){const out=1+av*0.25+Math.random()*1.5;
-          emit(_a.x,WATER_Y+0.1,_a.z,car.vel.x*0.6+car.left.x*sx*out,1.2+av*0.18+Math.random()*1.6,car.vel.z*0.6+car.left.z*sx*out,WATER_C,0.06,0.1+Math.random()*0.14,0.8+Math.random()*0.5,0.85,9.8,0.3,2);}
+          emit(_a.x,WATER_Y+0.1,_a.z,car.vel.x*0.6+car.left.x*sx*out,1.2+av*0.18+Math.random()*1.6,car.vel.z*0.6+car.left.z*sx*out,WATER_C,0.025,0.04+Math.random()*0.06,0.8+Math.random()*0.5,0.85,9.8,0.3,2);}
         if(av>3&&Math.random()<dt*av*1.6)emit(_a.x,WATER_Y+0.5,_a.z,car.vel.x*0.6+car.left.x*sx*(1.5+Math.random()*2),0.9+Math.random()*1.4,car.vel.z*0.6+car.left.z*sx*(1.5+Math.random()*2),MIST_C,0.9,3+av*0.12,1.3+Math.random()*0.7,0.3,0.5,1.2,3);
         if(Math.random()<dt*(2+av*1.5))FOAM.add(_a.x+car.left.x*sx*0.3,_a.z+car.left.z*sx*0.3,0.8,2+av*0.25,3+Math.random()*2,Math.min(0.85,0.35+av*0.06));}}
     if(bowT<=0){bowT=av>1?0.14:0.7;
