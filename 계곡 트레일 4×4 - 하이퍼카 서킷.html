@@ -3036,13 +3036,13 @@ const BRAKE_F=SC?2600:3200,BRAKE_R=SC?1600:2100,HAND=SC?2400:5200;
 // 4.4 L twin-turbo V8, torque converter (K-factor, lock-up clutch), 8-speed automatic
 const IDLE=SC?950:700,LIMIT=HC?9500:SC?8700:6300,VMAX=SC?97:52,REV_VMAX=SC?8:7;
 const IE=SC?0.21:0.32,KTC=95,KTC_R=118,TC_LU=SC?120:45;
-const GEARS=SC?[0,3.91,2.44,1.81,1.46,1.19,0.97,0.86]:[0,4.70,3.14,2.10,1.67,1.29,1.00,0.84,0.67],NG=SC?7:8,REV=SC?2.9:3.3,FINAL=SC?2.86:4.30,LOW=SC?1:2.57,EFF=SC?0.92:0.9;
+const GEARS=SC?[0,3.91,2.44,1.81,1.46,1.19,0.97,0.86]:[0,4.70,3.14,2.10,1.67,1.29,1.00,0.84,0.67],NG=SC?7:8,REV=SC?2.9:3.3,FINAL=SC?2.86:4.30,LOW=SC?1:2.93,EFF=SC?0.92:0.9;   // (4x4 low range as the G-Class's transfer case: 59:1 crawl)
 // low range: highest gear the gearbox will use (about 60 km/h), fastest the transfer case can be shifted into 4L,
 // hill-descent target speed; steering: the cornering load a held steering key asks for at speed
 const LOW_TOP=4,LOW_SHIFT_V=3,HDC_V=1.5,STEER_G=SC?9.5:5.2,MAXLOCK=SC?0.5:0.6;
 // crawl traction control (4L): wheel slip speed allowed before it brakes a tyre and trims the engine, m/s + per m/s
 const TC_LOW=[0.3,0.1];
-const TQ=SC?[[0,0],[800,330],[1500,420],[2500,500],[3500,580],[4500,640],[5500,690],[6750,720],[7500,712],[8250,684],[8700,650],[9200,420]]:[[0,0],[600,260],[1000,470],[1500,680],[2000,750],[4500,750],[5500,690],[6000,610],[6500,420]];
+const TQ=SC?[[0,0],[800,330],[1500,420],[2500,500],[3500,580],[4500,640],[5500,690],[6750,720],[7500,712],[8250,684],[8700,650],[9200,420]]:[[0,0],[600,300],[1000,560],[1500,780],[2500,850],[3500,850],[4500,820],[5500,750],[6000,670],[6500,450]];   // (4x4: as the G 63's biturbo V8)
 // the hypercar: the V12 with three electric motors (they fill the bottom of the curve), 740 kW (1,006 PS) at 9,000 rpm
 if(HC)TQ.splice(0,TQ.length,[0,0],[800,560],[1500,760],[2500,860],[3500,900],[4500,910],[5500,900],[6500,880],[7500,850],[8250,820],[9000,785],[9500,740],[9900,450]);
 const FZ0=MASS*9.81/4;
@@ -5130,6 +5130,8 @@ function soil(w,dt){
   let mu=S.mu+Math.min(0.22,S.coh*A/Fz);
   // summer tyres with shallow tread: little bite on loose ground, less in mud
   if(SC){if(S.loose||!S.pave&&S.zc>0)mu*=0.8;if(w.surf===S_MUD)mu*=0.7;}
+  // the 4x4's 35" mud terrains: deep, open lugs that bite into loose ground and clear themselves in mud
+  else{if(S.loose||!S.pave&&S.zc>0)mu*=1.12;if(w.surf===S_MUD)mu*=1.2;}
   if(w.center.y<WYAT(w.center.x,w.center.z))mu*=0.95;
   if(!S.loose&&S.zc===0)mu*=clamp(1-0.04*((w.Tt-75)/55)**2,0.86,1);   // rubber on rock / asphalt: temperature window
   const pr=w.pAir/TY.psi[air];
@@ -5265,8 +5267,10 @@ function tires(dt){
   let ex=0;const tcOn=drive.tc&&drive.started,vCar=car.vel.dot(car.fwd);
   for(const w of wheels)w.tcB=0;
   // in low range it works as crawl traction: the slip target sits just past peak grip and it may pull the engine
-  // right down, so a 45:1 crawl ratio climbs instead of digging four spinning tyres into the slope
-  const low=drive.mode===2,s0=SC?0.35:low?TC_LOW[0]:1.3,s1=SC?0.08:low?TC_LOW[1]:0.18,kB=low?2200:SC?1600:1400,kC=low?0.9:SC?0.8:0.45,cMin=low?0.05:SC?0.15:0.22;
+  // right down, so a 59:1 crawl ratio climbs instead of digging four spinning tyres into the slope. In 4H below ~18 km/h
+  // it does the same (as the G-Class's 4ETS brakes a spinning wheel at once), so open differentials on a twisted climb
+  // still drive the wheels that grip
+  const low=drive.mode===2||(!SC&&drive.mode===1&&Math.abs(car.vel.dot(car.fwd))<5),s0=SC?0.35:low?TC_LOW[0]:1.3,s1=SC?0.08:low?TC_LOW[1]:0.18,kB=low?2200:SC?1600:1400,kC=low?0.9:SC?0.8:0.45,cMin=low?0.05:SC?0.15:0.22;
   if(tcOn)for(let i=drive.mode===0?2:0;i<4;i++){const w=wheels[i],vx=w.contact?w.vx:vCar,e=(drive.gear<0?-1:1)*(w.omega*RAD-vx)-(s0+s1*Math.abs(vx));if(e>0){ex=Math.max(ex,e);w.tcB=Math.min(2600,e*kB);}}
   drive.tcCut+=((ex>0?clamp(1-ex*kC,cMin,1):1)-drive.tcCut)*Math.min(1,dt*25);
   // stability control (on with TC): past ~0.5 g of cornering it brakes the outside front wheel and trims torque,
@@ -5670,7 +5674,7 @@ function computeSpecs(){
     ['서스펜션','앞뒤 솔리드 액슬 · 4링크 · 트랙바'],['링크 지오메트리',(g=>`앤티 다이브 ${g.ad}% · 앤티 스쿼트 ${g.as}%`)(suspStatic())],['롤 센터 앞 / 뒤',(g=>`${g.rcF} / ${g.rcR} mm`)(suspStatic())],['쇽 업소버','질소 충전 · 바이패스 · 유압 범프 스톱'],['주행 보조','오토 홀드 · HDC · 4L 크롤 트랙션'],['서스펜션 스트로크',`${Math.round(SUSP*1000)} mm`],['액슬 굴절 한계',`±${(Math.atan(SUSP/(2*SPR_Y))*DEG).toFixed(0)}°`],['최저 지상고',`${Math.round(clr)} mm`],['접근각 / 이탈각',`${approach.toFixed(0)}° / ${depart.toFixed(0)}°`],['램프각',`${brk.toFixed(0)}°`]];
 }
 $('gSpec').innerHTML=computeSpecs().map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
-$('introSpec').innerHTML=[['그래픽',RENDER_API],['물리','<i id="physApi" style="font-style:normal">'+JP.api+'</i> · TMeasy'],['지도','6 km × 6 km'],['초파리 뇌','뉴런 6,865'],...(SC?[['엔진',`V12 ${Math.round(PEAK.kw)} kW`],['최대 토크','720 N·m'],['변속기','7단 DCT'],['서스펜션','더블 위시본']]:[['엔진',`V8 ${Math.round(PEAK.kw)} kW`],['최대 토크','750 N·m'],['저속 기어비','2.57 : 1'],['서스펜션','520 mm']])].map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join('');
+$('introSpec').innerHTML=[['그래픽',RENDER_API],['물리','<i id="physApi" style="font-style:normal">'+JP.api+'</i> · TMeasy'],['지도','6 km × 6 km'],['초파리 뇌','뉴런 6,865'],...(SC?[['엔진',`V12 ${Math.round(PEAK.kw)} kW`],['최대 토크','720 N·m'],['변속기','7단 DCT'],['서스펜션','더블 위시본']]:[['엔진',`V8 ${Math.round(PEAK.kw)} kW`],['최대 토크','850 N·m'],['저속 기어비','2.93 : 1'],['서스펜션','520 mm']])].map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join('');
 $('swatches').innerHTML=PAINTS.map(([n,h],i)=>`<button type="button" aria-label="${n}" title="${n}" aria-pressed="${i===0}" style="background:${h}"></button>`).join('');
 document.querySelectorAll('#swatches button').forEach((b,i)=>b.addEventListener('click',()=>setPaint(i)));
 const pressT=(id,key)=>{const b=$(id);b.addEventListener('click',()=>{garage[key]=!garage[key];b.setAttribute('aria-pressed',String(garage[key]));});};
@@ -5753,7 +5757,7 @@ const KEYLIST=(SC?k=>k.filter(([a])=>!/^(1 2 3|L|X|P)$/.test(a)):k=>k)([
   ['Space','사이드 브레이크'],['1 2 3','2H · 4H · 4L 저속 (4L은 10 km/h 이하)'],['L','디퍼렌셜 잠금'],['X','경사로 저속 제어(HDC) 켜기/끄기'],['T','트랙션·주행 안정 제어 켜기/끄기'],['P','타이어 공기압 35 ↔ 18 psi'],
   ['F','초파리 뇌 자율 주행 켜기/끄기'],['N','지도 · 초파리 목적지 고르기'],['B','하이퍼카 서킷 그리드로 이동 (랩 타임 기록)'],['C','카메라: 추적 · 운전석(초파리 운전 중엔 조수석) · 휠 · 자유'],['V','주행 중 3D 뷰 (드래그 회전)'],['G','차고 · 3D 쇼룸'],['K','차체 색상 바꾸기'],['R','차량 복구'],['M','소리 끄기'],['J','텔레메트리: 서스펜션 → 타이어'],['H','조작법 보기']]);
 for(const id of['introKeys','helpKeys']){const el=$(id);el.innerHTML=KEYLIST.map(([k,v])=>`<span>${k.split(' ').map(s=>`<kbd>${s}</kbd>`).join('')}</span><span>${v}</span>`).join('');}
-const MODE_NAMES=['2H · 후륜 구동','4H · 고속 4륜 구동','4L · 저속 4륜 구동 (감속비 2.57)'];
+const MODE_NAMES=['2H · 후륜 구동','4H · 고속 4륜 구동','4L · 저속 4륜 구동 (감속비 2.93)'];
 function setMode(m){if(SC){toast('상시 4륜 구동 · 전자식 센터 커플링 (앞 최대 600 N·m)');return;}
   // like a real transfer case, low range only engages at a crawl
   if(m===2&&drive.mode!==2&&Math.abs(car.vel.dot(car.fwd))>LOW_SHIFT_V){toast('4L 전환은 10 km/h 이하에서만 됩니다 — 속도를 줄이세요');return;}
