@@ -6675,8 +6675,16 @@ const PFX=(()=>{
   // bloom: a soft-knee bright pass at half resolution, a chain of 4-tap downsamples, tent upsamples added back
   const uTx=[0,1,2,3,4,5].map(()=>uniform(new THREE.Vector2(0.01,0.01)));
   const tap4=(src,tx,k)=>src.sample(uv().add(tx.mul(vec2(-k,-k)))).add(src.sample(uv().add(tx.mul(vec2(k,-k))))).add(src.sample(uv().add(tx.mul(vec2(-k,k))))).add(src.sample(uv().add(tx.mul(vec2(k,k))))).mul(0.25);
-  // (a low knee: the bright sky and sunlit metal glow softly, as a camera lens veils them, not only the glints)
-  const bright=rtt(Fn(()=>{const c=min(tap4(colRaw,uTx[0],0.5).rgb,64),m=max(c.r,max(c.g,c.b)),k0=clamp(m.sub(0.42),0,0.6),k=k0.mul(k0).div(m.mul(0.5).add(1e-4));
+  // (a low knee: the bright sky and sunlit metal glow softly, as a camera lens veils them, not only the glints. The
+  // first downsample is the 13-tap one of Jimenez's Call of Duty: Advanced Warfare talk, each of its five boxes weighted
+  // by 1/(1+luma) - Karis's average - so a lone glint on paint or water can't make the glow flicker as it crosses pixels;
+  // over an evenly bright area it is the plain mean)
+  const bright=rtt(Fn(()=>{const t=(x,y)=>min(colRaw.sample(uv().add(uTx[0].mul(vec2(x,y)))).rgb,64);
+    const q=[[-2,-2],[0,-2],[2,-2],[-1,-1],[1,-1],[-2,0],[0,0],[2,0],[-1,1],[1,1],[-2,2],[0,2],[2,2]].map(([x,y])=>t(x,y));
+    let sum=vec3(0),ws=float(0);
+    for(const [g,wk] of [[[3,4,8,9],0.5],[[0,1,5,6],0.125],[[1,2,6,7],0.125],[[5,6,10,11],0.125],[[6,7,11,12],0.125]]){
+      const a=q[g[0]].add(q[g[1]]).add(q[g[2]]).add(q[g[3]]).mul(0.25),w=float(wk).div(dot(a,vec3(0.2126,0.7152,0.0722)).add(1));sum=sum.add(a.mul(w));ws=ws.add(w);}
+    const c=sum.div(ws),m=max(c.r,max(c.g,c.b)),k0=clamp(m.sub(0.42),0,0.6),k=k0.mul(k0).div(m.mul(0.5).add(1e-4));
     return vec4(c.mul(k),1);})()).setResolutionScale(0.5);
   const dn=[bright];for(let i=1;i<5;i++){const src=dn[i-1];dn.push(rtt(Fn(()=>tap4(src,uTx[i],1))()).setResolutionScale(0.5/(1<<i)));}
   const ups=[];let upN=dn[4];for(let i=3;i>=0;i--){const src=upN,base=dn[i],tx=uTx[i+2];
