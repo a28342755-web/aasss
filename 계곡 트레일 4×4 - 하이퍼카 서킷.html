@@ -8055,6 +8055,29 @@ if(ALPS.ok){
   // camera, piers under the decks; their nodes in the fly's road graph; their lines on the maps.
   if(ALPS_RD&&RD_A40)try{
     const R=ALPS_RD,hAt=ALPS.hAt;
+    // ---- the Mont Blanc trail. No road climbs Mont Blanc, so a gravel track does: 35 km from the junction in Les
+    // Houches to the summit (4,808 m). Its line was laid offline on this same ground (the 20 m Mont Blanc patch) by a
+    // search that holds the grade under 18% and pays for every turn, so it climbs in long legs and hairpins (its corners,
+    // delta-coded in decimetres, below). Here the corners are rounded into arcs of up to 12 m and the line resampled every
+    // 8 m; then it joins the roads as one more way, of its own class (narrow, gravel, 21% at most)
+    const MBK=[2.6,3.3,3,9,1.2,0.21];let MBN=-1;
+    try{const E=[111115,50152,3128,117,3708,1391,7645,6193,1854,695,2234,84,1457,-662,1787,67,2384,894,893,34,530,198,3128,2534,794,298,-281,348,-182,82,82,182,1341,50,728,-330,1126,-1391,-596,1589,-1970,2433,-365,165,-893,-33,347,281,1341,50,529,199,447,17,182,-83,1408,-1737,-994,2648,-282,347,-182,83,-893,-33,-365,165,-281,348,-199,529,-281,348,-447,-17,-265,-99,1042,844,447,17,182,-83,282,-348,182,-82,-33,894,-199,529,-282,348,265,99,182,-83,563,-695,364,-165,447,17,365,-166,281,-347,99,-265,282,-348,199,-529,563,-695,397,-1059,17,-447,596,-1589,282,-348,910,-413,894,33,265,99,347,282,-264,-99,-447,-17,264,99,3823,3097,1589,596,695,563,-563,695,-546,248,-894,-33,-530,-199,-447,-17,265,100,1043,844,529,199,-447,-17,-1853,-696,-348,-281,166,364,695,563,265,100,695,562,529,199,-447,-16,265,99,-894,-33,-1324,-497,1043,844,265,100,-447,-17,-530,-199,695,563,530,199,447,16,-182,83,-894,-33,-265,-100,347,282,265,99,894,34,-182,82,-894,-33,-529,-199,347,282,265,99,894,33,-182,83,-894,-33,265,99,893,34,911,-414,2234,83,182,-82,894,33,-1274,579,-1341,-50,265,99,-894,-33,-1457,662,-894,-34,-265,-99,-1737,-1407,-795,-299,696,563,-447,-16,-182,82,-282,348,-1690,4502,-1688,2085,-2186,992,-447,-16,-364,165,-447,-17,-529,-199,-1788,-66,-347,-282,248,547,347,281,1059,398,696,563,529,198,-3575,-133,-265,-99,-347,-282,-166,-364,34,-894,-199,530,-34,893,249,547,347,281,1059,398,348,281,1853,696,1341,50,1457,-662,1788,67,546,-248,1126,-1390,199,-530,16,-447,298,-794,282,-348,728,-330,1341,50,4237,1590,347,281,83,182,-2913,1324,-2815,3475,-365,165,-893,-33,1324,497,2234,83,530,199,447,17,2118,795,447,17,530,198,695,563,331,729,695,563,264,99,1341,50,-563,695,-4734,2151,-894,-34,-265,-99,-695,-563,-1788,-67,-728,331,-894,-33,-364,165,-4022,-150,695,563,2118,795,348,281,1075,2368,-50,1340,-497,1324,-1341,-50,-264,-99,-348,-281,-83,-183,17,-446,398,-1060,16,-447,-82,-182,-282,348,-347,-282,-3129,-116,-794,-299,-447,-16,-1589,-597,-894,-33,530,199,2432,1970,-3177,-1192,2780,2251,265,100,1340,50,348,281,-99,265,-563,695,-348,-281,-894,-34,-546,248,-447,-16,-1738,-1408,910,2003,695,563,1060,398,347,281,248,547,695,563,-265,-100,-446,-16,-348,-282,-265,-99,-894,-34,348,282,265,99,347,282,248,546,348,282,-84,2234,-496,-1093,-347,-281,-265,-99,-447,-17,-348,-282,-165,-364,-17,447,745,1639,-34,894,348,281,413,911,-347,-282,-265,-99,-695,-563,-1324,-497,-347,-281,-166,-365,50,-1340,-298,794,-33,894,413,910,2085,1689,414,911,-50,1340,-348,-281,-165,-364,-348,-282,-264,-99,-299,794,-844,1043,-83,2234,165,365,347,281,497,1093,-17,446,-364,166,-2682,-100,-1059,-398,-695,-563,-83,-182,117,-3128,-1406,-3096,-347,-281,-497,-1093,-347,-281,-199,529,-50,1341,165,364,-16,447,165,364,348,282,82,182,-16,447,-100,265,-281,347,-364,166,-894,-34,-182,83,-563,695,-1093,496,-281,348,-50,1340,827,1821,-67,1788,99,-265,282,-347,364,-166,447,17,348,281,-447,-16,-282,347,-99,265,-67,1788,199,-530,281,-347,447,16,530,199,347,281,-264,-99,-447,-17,-182,83,-282,348,-50,1340,199,-529,281,-348,-198,530,-34,894,199,-530,281,-348,447,17,348,282,165,364,1738,1407,529,199,894,33,265,100,4469,167,265,99,347,281,1241,2732,-17,447,-198,529,-563,695,-696,1854,100,-2681,-331,-729,-695,-563,-1589,-596,-447,-17,795,298,1390,1126,83,183,-50,1340,-299,795,34,-894,-497,1324,-282,347,-695,-563,-794,-298,-348,-281,265,99,447,17,364,-166,282,-347,99,-265,17,-447,-83,-182,-695,-563,-894,-33,-281,347,794,298],V=[];
+      {let x=0,z=0;for(let i=0;i<E.length;i+=2){x+=E[i];z+=E[i+1];V.push([x/10,z/10]);}}
+      // (from the road junction nearest its first point)
+      let a=-1,bd=1e18;for(let i=0;i<R.nodes.length;i++){const d=(R.nodes[i][0]-V[0][0])**2+(R.nodes[i][1]-V[0][1])**2;if(d<bd){bd=d;a=i;}}
+      if(a>=0&&bd<60*60){V[0]=[R.nodes[a][0],R.nodes[a][1]];const C=[V[0]];
+        for(let k=1;k<V.length-1;k++){const [x0,y0]=V[k-1],[x1,y1]=V[k],[x2,y2]=V[k+1],L1=Math.hypot(x1-x0,y1-y0),L2=Math.hypot(x2-x1,y2-y1);
+          const d1x=(x1-x0)/L1,d1y=(y1-y0)/L1,d2x=(x2-x1)/L2,d2y=(y2-y1)/L2,cr=d1x*d2y-d1y*d2x,ph=Math.atan2(Math.abs(cr),d1x*d2x+d1y*d2y);
+          if(ph<0.05){C.push(V[k]);continue;}
+          const T=Math.min(12*Math.tan(ph/2),0.45*Math.min(L1,L2)),r=T/Math.tan(ph/2),sg=cr>0?1:-1,ax=x1-d1x*T,ay=y1-d1y*T,cx=ax-d1y*sg*r,cy=ay+d1x*sg*r;
+          const a0=Math.atan2(ay-cy,ax-cx),m=Math.max(2,Math.floor(ph*r/3)+1);for(let q=0;q<=m;q++){const t=a0+sg*ph*q/m;C.push([cx+r*Math.cos(t),cy+r*Math.sin(t)]);}}
+        C.push(V[V.length-1]);
+        const P=[C[0]];let acc=0;for(let k=1;k<C.length;k++){const [x0,y0]=C[k-1],[x1,y1]=C[k],L=Math.hypot(x1-x0,y1-y0);let t=0;
+          while(acc+L-t>=8){t+=8-acc;acc=0;P.push([x0+(x1-x0)*t/L,y0+(y1-y0)*t/L]);}acc+=L-t;}
+        if(Math.hypot(P[P.length-1][0]-C[C.length-1][0],P[P.length-1][1]-C[C.length-1][1])>1)P.push(C[C.length-1]);
+        const enc=[];let px=0,pz=0;for(const [x,z] of P){const qx=Math.round(x*10),qz=Math.round(z*10);enc.push(qx-px,qz-pz);px=qx;pz=qz;}
+        const b=R.nodes.length;R.nodes.push([px/10,pz/10]);MBN=R.names.length;R.names.push('몽블랑 정상 트레일');R.ways.push([4,a,b,MBN,enc,[0,P.length]]);}}
+    catch(e){console.warn('mont blanc trail',e);}
     // [paved half-width, edge, shader class, cruise m/s, keep-right offset, max grade]
     const KC=[[5.0,5.9,7,36,1.9,0.07],[4.6,5.5,7,30.5,1.8,0.08],[3.6,4.7,1,25,1.8,0.1],[3.3,4.3,1,22,1.65,0.12],[2.9,3.7,1,18,1.45,0.14]];
     const LINK=[3.4,4.1,7,19,0,0.09],TWO1=[3.8,4.9,1,27,1.8,0.08];   // a ramp; a trunk road on one carriageway
@@ -8064,7 +8087,7 @@ if(ALPS.ok){
       {let x=0,z=0;for(let i=0;i<n;i++){x+=enc[2*i];z+=enc[2*i+1];X[i]=x/10;Z[i]=z/10;}}
       {let o=0;for(let k=0;k<rl.length;k+=2)for(let q=0;q<rl[k+1]&&o<n;q++)F[o++]=rl[k];}
       let dual=0,link=0;for(let i=0;i<n;i++){if(F[i]&8)dual++;if(F[i]&4)link++;}
-      const K=link*2>n?LINK:c===0?KC[0]:c===1?(dual*2>n?KC[1]:TWO1):c===2&&dual*2>n?KC[1]:KC[c];
+      const K=MBN>=0&&nm===MBN?MBK:link*2>n?LINK:c===0?KC[0]:c===1?(dual*2>n?KC[1]:TWO1):c===2&&dual*2>n?KC[1]:KC[c];
       for(let i=0;i<n;i++){H[i]=hAt(X[i],Z[i]);if(i)S[i]=S[i-1]+Math.hypot(X[i]-X[i-1],Z[i]-Z[i-1]);}
       let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;for(let i=0;i<n;i++){x0=Math.min(x0,X[i]);x1=Math.max(x1,X[i]);z0=Math.min(z0,Z[i]);z1=Math.max(z1,Z[i]);}
       WS.push({c,a,b,nm,n,X,Z,F,H,S,K,bx:[x0,x1,z0,z1]});NH[a]+=H[0];NC[a]++;NH[b]+=H[n-1];NC[b]++;}
@@ -8176,9 +8199,9 @@ if(ALPS.ok){
         if(be<0.5){let sw=0,sh=0;for(let j=0;j<CN;j++){const E=SG[CS[j]*7+6]+0.5,dh=Math.abs(CH[j]-lv);if(CD[j]>=E||dh>=2.6)continue;const u=(E-CD[j])/E,w=(u*u+1e-4)*smooth(2.6,1.2,dh);sw+=w;sh+=w*CH[j];}h=sw>0?sh/sw:lv;}
         else{const bw=clamp(Math.abs(h-bh)*1.4,5,28),w=smooth(SG[CS[bj]*7+6]+0.5,SG[CS[bj]*7+6]+0.5+bw,CD[bj]);h=bh+(h-bh)*w;}}
       return h>cap?cap:h;};
-    const SF0=SF_OUT;SF_OUT=(x,z)=>{const q=OUTR_AT(x,z,0);if(q&&q.d<q.hw)return S_ASPH;return SF0(x,z);};
+    const SF0=SF_OUT;SF_OUT=(x,z)=>{const q=OUTR_AT(x,z,0);if(q&&q.d<q.hw)return q.w<WS.length&&WS[q.w].K===MBK?S_TRAIL:S_ASPH;return SF0(x,z);};
     const ZK=['고속도로','간선도로','국도','지방도','군도'],ZO=ZONE_OUT;
-    ZONE_OUT=(x,z)=>{const q=OUTR_AT(x,z,1);if(q&&q.d<q.hw+3){const w=WS[q.w<WS.length?q.w:PADW[q.w-WS.length]],nm=R.names[w.nm];return(nm?nm+' · ':'')+(w.K===LINK?'연결로':ZK[w.c])+(q.fl&1?' · 다리':q.fl&2?' · 터널 구간':'');}return ZO(x,z);};
+    ZONE_OUT=(x,z)=>{const q=OUTR_AT(x,z,1);if(q&&q.d<q.hw+3){const w=WS[q.w<WS.length?q.w:PADW[q.w-WS.length]],nm=R.names[w.nm];return(nm?nm+' · ':'')+(w.K===LINK?'연결로':w.K===MBK?'산악 트레일':ZK[w.c])+(q.fl&1?' · 다리':q.fl&2?' · 터널 구간':'');}return ZO(x,z);};
     // asphalt: ribbons in 2 km tiles (the valley's road material; lines faded out at junctions), piers under decks
     const TL=new Map(),pierGeo=new THREE.BoxGeometry(1.5,1,1.5),pierMat=new THREE.MeshStandardNodeMaterial({color:0x8f8b84,roughness:0.92});
     const tile=(x,z)=>{const k=Math.floor(x/2048)*1000+Math.floor(z/2048);let T=TL.get(k);if(!T)TL.set(k,T={P:[],U:[],K:[],I:[],vi:0,pier:[],wall:{P:[],N:[],I:[]},cx:(Math.floor(x/2048)+0.5)*2048,cz:(Math.floor(z/2048)+0.5)*2048});return T;};
@@ -8221,9 +8244,9 @@ if(ALPS.ok){
     const MCOL=['#e8b04a','#e8b04a','#ece2c4','#cfc9bc','#b9b2a2'],ORD=WS.map((_,i)=>i).sort((a,b)=>WS[b].c-WS[a].c);
     OUTR_DRAW=(cx,x0,z0,S,N)=>{const k=N/S,x1=x0+S,z1=z0+S;cx.save();cx.lineCap='round';cx.lineJoin='round';
       for(const pass of[0,1])for(const wi of ORD){const w=WS[wi];if(w.bx[0]>x1||w.bx[1]<x0||w.bx[2]>z1||w.bx[3]<z0)continue;
-        const px=2*w.K[1]*k,st=px<0.6?4:1;if(w.c===4&&px<0.35)continue;
+        const px=2*w.K[1]*k,st=px<0.6?4:1,mb=w.K===MBK;if(w.c===4&&px<0.35&&!mb)continue;
         cx.beginPath();for(let i=0;i<w.n;i+=st){const a=(w.X[i]-x0)*k,b=(w.Z[i]-z0)*k;i?cx.lineTo(a,b):cx.moveTo(a,b);}cx.lineTo((w.X[w.n-1]-x0)*k,(w.Z[w.n-1]-z0)*k);
-        cx.strokeStyle=pass?MCOL[w.c]:'#26262a';cx.lineWidth=pass?Math.max(0.9,px):Math.max(1.8,px+1.4);cx.stroke();}
+        cx.strokeStyle=pass?(mb?'#e8743c':MCOL[w.c]):'#26262a';cx.lineWidth=pass?Math.max(mb?1.4:0.9,px):Math.max(mb?2.4:1.8,px+1.4);cx.stroke();}
       cx.restore();};
     OUTR.ways=WS;OUTR.names=R.names;try{window.__OUTR=OUTR;window.__OUTR_AT=OUTR_AT;}catch(_){}
   }catch(e){console.warn('roads beyond the map',e);OUTR_AT=null;OUTR_DRAW=null;}
@@ -8509,7 +8532,7 @@ function offPlan(goal,s){if(!OV.ready||!OV.H)return null;astInit();const gc=astS
 try{window.__offPlan=offPlan;window.__astSnap=astSnap;}catch(_){}
 // Alpine destinations (in the list with the others)
 function alpsPlaces(){const L=[['cham','샤모니 몽블랑',45.9235,6.8695,1],['houch','레 우슈',45.8906,6.7989,1],['stg','생제르베레뱅',45.8920,6.7125,1],['sall','살랑슈',45.9357,6.6317,1],
-    ['praz','프라쉬르아를리',45.8375,6.5710,1],['arav','아라비스 고개',45.8725,6.4646,1],['cont','레 콩타민몽주아',45.8216,6.7275,1],['joly','몽 졸리 능선',45.8455,6.6675,0],['prar','프라리옹 고원',45.8740,6.7640,0]];
+    ['praz','프라쉬르아를리',45.8375,6.5710,1],['arav','아라비스 고개',45.8725,6.4646,1],['cont','레 콩타민몽주아',45.8216,6.7275,1],['joly','몽 졸리 능선',45.8455,6.6675,0],['prar','프라리옹 고원',45.8740,6.7640,0],['mb','몽블랑 정상 (트레일)',45.8326,6.8652,1]];
   for(const[id,label,lat,lon,rd]of L){const[x,z]=geoXZ(lat,lon);if(Math.max(Math.abs(x),Math.abs(z))>OV.E-800||FLY_PLACES.some(p=>p.id==='al_'+id))continue;
     let g={id:'al_'+id,label,x,z,off:true,alps:true};
     // on a road within 350 m: that point of the road, reached by road
