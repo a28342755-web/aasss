@@ -2950,6 +2950,11 @@ const MASS=HC?1770:SC?1690:2560,IX=SC?2300:4440,IY=SC?2650:4890,IZ=SC?560:1310; 
 const RAD=SC?0.352:0.4495,WHEEL_I=SC?1.25:2.5,SUSP=SC?0.15:0.52,MOUNT_Y=SC?-0.03:-0.33,STATIC=SC?0.075:0.22;
 // unsprung mass per corner (wheel, 35" tyre, hub, brake, share of the solid axle); the body carries the rest
 const MU_W=SC?47:92,MB=MASS-4*MU_W;
+// the 4x4 stands on the off-road model's narrow track (1.48 m) with its centre of mass 1.09 m up: a static stability
+// factor of 0.68, so it tipped at 0.68 g or on a 34-degree side slope. The tyres' side forces reach the body ROLL_LIFT
+// higher (as low ballast would do: the roll moment they give it is that of a centre of mass ~0.8 m up, a G-Class's,
+// stability factor ~0.92); the forces themselves, and so the grip and the car's path, are unchanged
+const ROLL_LIFT=SC?0:0.29;
 // long-travel coil-overs: soft springs preloaded so the wheel sits mid-travel (0.22 m bump used, 0.30 m droop left).
 // The set-up can be changed in the garage: spring rate, ride height, compression / rebound damping, anti-roll bar
 // (0: disconnects itself in 4L · 1: always connected · 2: disconnected).
@@ -5350,7 +5355,7 @@ function tires(dt){
     {const a=w.i>>1,A=axleS[a];_r.subVectors(w.cp,car.pos);const cz=_r.dot(car.fwd)-AXZ[a],cy=_r.dot(car.up);
       w.jack=_F.dot(car.fwd)*antiRatio(A.k[w.side>0?0:1],cz,cy);
       _p.copy(w.cp).addScaledVector(car.left,-w.side*(HALF_TRACK-LINK_X));_F.copy(car.up).multiplyScalar(w.jack);addForceAt(_F,_p);}
-    _p.copy(w.cp).addScaledVector(car.up,axleS[w.i>>1].rc);addForceAt(_t,_p);}
+    _p.copy(w.cp).addScaledVector(car.up,axleS[w.i>>1].rc+ROLL_LIFT);addForceAt(_t,_p);}
   }
 }
 // each axle is a rigid beam: heave from the sum of spring and tyre forces, roll from their moments about its centre
