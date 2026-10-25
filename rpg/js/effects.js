@@ -665,9 +665,14 @@
     const h = Math.ceil(ctx.canvas.height / K);
     if (!layer || layer.width !== w || layer.height !== h) layer = S.makeCanvas(w, h);
     const lc = layer.getContext("2d");
+    lc.setTransform(1, 0, 0, 1, 0, 0);
     lc.clearRect(0, 0, w, h);
+    /* 카메라 이동(translate)이 걸려 있으면 작은 판에도 같은 이동을 1/K로 건다 */
+    const m = ctx.getTransform();
+    lc.setTransform(1, 0, 0, 1, Math.round(m.e / K), Math.round(m.f / K));
     draw(lc);
     ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(layer, 0, 0, w * K, h * K);
     ctx.restore();

@@ -150,13 +150,20 @@
   }
 
   /* 흰색 실루엣 (피격 깜빡임용) */
+  /* 같은 그림·색이면 다시 만들지 않는다(피격 번쩍임은 매 프레임 그린다) */
+  const silCache = new WeakMap();
   function silhouette(cv, color) {
+    let byColor = silCache.get(cv);
+    if (!byColor) { byColor = new Map(); silCache.set(cv, byColor); }
+    const hit = byColor.get(color || "#ffffff");
+    if (hit) return hit;
     const out = makeCanvas(cv.width, cv.height);
     const ctx = out.getContext("2d");
     ctx.drawImage(cv, 0, 0);
     ctx.globalCompositeOperation = "source-in";
     ctx.fillStyle = color || "#ffffff";
     ctx.fillRect(0, 0, out.width, out.height);
+    byColor.set(color || "#ffffff", out);
     return out;
   }
 
@@ -1458,12 +1465,12 @@
     }
     return writePixels(w, h, res);
   }
-  /* factor: 2, 3, 4 */
+  /* factor: 2, 3, 4, 6 */
   function monsterBig(name, factor) {
     const key = `mb${name}|${factor}`;
     if (cache.has(key)) return cache.get(key);
     const base = monsterPlain(name);
-    const up = factor === 3 ? scale3x(base) : factor === 4 ? scale2x(scale2x(base)) : scale2x(base);
+    const up = factor === 3 ? scale3x(base) : factor === 4 ? scale2x(scale2x(base)) : factor === 6 ? scale3x(scale2x(base)) : scale2x(base);
     const out = autoShade(up, factor);
     cache.set(key, out);
     return out;

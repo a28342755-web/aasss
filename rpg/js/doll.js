@@ -299,7 +299,9 @@
     p.anim = anim;
     switch (anim) {
       case "idle":
-        p.bob = f % 2;
+        /* 4박자 숨쉬기: 올라갔다 잠깐 머문다 */
+        p.bob = [0, 1, 1, 0][f % 4];
+        if (side && f % 4 === 2) { p.hF[1] += 0.5; p.hB[1] += 0.5; }
         break;
       case "walk":
         p.bob = f % 2;
@@ -314,6 +316,20 @@
       case "jump":
         if (f === 0 || f === 2) { p.bob = 3; set("hF", side ? 22 : 15, 39); set("hB", side ? 28 : 33, 39); }
         else { p.bob = -7; p.fF[1] = 46; p.fB[1] = 47; if (side) { p.fF[0] = 21; p.fB[0] = 27; } set("hF", side ? 18 : 13, 27); set("hB", side ? 28 : 35, 27); }
+        break;
+      case "fall":
+        p.bob = -3;
+        if (side) { set("fF", 20, 50); set("fB", 28, 48.5); set("hF", 15.5, 29); set("hB", 30, 28); }
+        else { p.fF[1] = 50; p.fB[1] = 50; set("hF", 12, 30); set("hB", 36, 30); }
+        break;
+      case "land":
+        p.bob = 3; set("hF", side ? 19 : 14, 40); set("hB", side ? 29 : 34, 40);
+        if (side) { set("fF", 18.5, 52); set("fB", 29, 52); }
+        break;
+      case "climb":
+        /* 등을 보이고 밧줄을 번갈아 잡는다 */
+        if (f % 2) { set("hF", 16, 22); set("hB", 32, 29); p.fF[1] = 50; }
+        else { set("hF", 16, 29); set("hB", 32, 22); p.fB[1] = 50; }
         break;
       case "windup":
         p.shift = 1; set("hF", 28.5, 25); p.wAng = 35;
@@ -1121,7 +1137,7 @@
 
   const cache = new Map();
   const CACHE_MAX = 2400;
-  /* view: down|up|left|right, anim: idle|walk|jump|windup|strike|follow|cast|hurt|victory */
+  /* view: down|up|left|right, anim: idle|walk|jump|fall|land|climb|windup|strike|follow|cast|hurt|victory */
   function frame(job, dir, anim, f, scale) {
     const k = scale || 1;
     const key = `${job.id}|${dir}|${anim}|${f}|${k}`;
