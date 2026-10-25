@@ -2,143 +2,36 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <!-- HEAD:START -->
 <title>삼천의 운명</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="3,000개의 직업 중 하나가 무작위로 정해지는 턴제 전투 RPG">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Song+Myung&family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<meta name="description" content="3,000개의 직업 중 하나가 무작위로 정해지는 2D 도트 RPG">
 <!-- HEAD:END -->
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <!-- BODY:START -->
-<div class="app" id="app">
-
-  <!-- 타이틀 -->
-  <section class="screen" id="scr-title">
-    <header class="title-head">
-      <p class="eyebrow">직업 3,000종 · 무작위 운명 RPG</p>
-      <h1 class="game-title">삼천의 운명</h1>
-      <p class="lede">운명의 석판이 3,000개의 직업 가운데 하나를 골라 줍니다. 광전사로 태어날 수도, 양봉가로 태어날 수도 있습니다. 주어진 직업으로 던전을 얼마나 깊이 내려갈 수 있을까요?</p>
-    </header>
-    <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
-    <nav class="title-menu" aria-label="메인 메뉴">
-      <button class="btn btn-primary btn-lg" id="btn-new" type="button">운명 뽑기 <span class="btn-sub" id="new-sub"></span></button>
-      <button class="btn" id="btn-continue" type="button" hidden>이어하기 <span class="btn-sub" id="continue-sub"></span></button>
-      <button class="btn" id="btn-codex" type="button">직업 도감 <span class="btn-sub" id="codex-sub"></span></button>
-      <button class="btn" id="btn-hall" type="button">명예의 전당 <span class="btn-sub" id="hall-sub"></span></button>
-    </nav>
-    <dl class="facts" id="facts"></dl>
-  </section>
-
-  <!-- 운명 뽑기 -->
-  <section class="screen" id="scr-roll" hidden>
-    <div class="topline">
-      <button class="link-btn" id="roll-back" type="button">← 처음으로</button>
-      <span id="roll-note">운명의 석판</span>
-    </div>
-    <article class="tablet" id="tablet">
-      <div class="tablet-top">
-        <span class="tablet-no" id="tab-no">No.----</span>
-        <span class="rarity-tag" id="tab-rarity">?</span>
-      </div>
-      <div class="tablet-family"><span class="seal" id="tab-seal">運</span><span id="tab-family">계열</span></div>
-      <h2 class="tablet-name" id="tab-name">운명을 읽는 중</h2>
-      <p class="tablet-origin" id="tab-origin"></p>
-    </article>
-    <div id="roll-body"></div>
-    <form class="roll-form" id="roll-form" autocomplete="off">
-      <label for="hero-name">모험가 이름</label>
-      <div class="name-row">
-        <input id="hero-name" name="hero-name" maxlength="10">
-        <button class="btn" id="name-dice" type="button">무작위</button>
-      </div>
-      <div class="roll-actions">
-        <button class="btn btn-primary" id="btn-accept" type="submit">이 운명으로 시작</button>
-        <button class="btn" id="btn-reroll" type="button">다시 굴리기 <span class="btn-sub" id="reroll-left"></span></button>
-      </div>
-    </form>
-  </section>
-
-  <!-- 마을 -->
-  <section class="screen" id="scr-town" hidden>
-    <header class="hero-head" id="hero-head"></header>
-    <div class="depth-card" id="depth-card"></div>
-    <div class="town-grid">
-      <button class="btn btn-primary btn-lg" id="t-dungeon" type="button">던전으로 <span class="btn-sub" id="t-dungeon-sub"></span></button>
-      <button class="btn" id="t-train" type="button">수련 사냥 <span class="btn-sub" id="t-train-sub"></span></button>
-      <button class="btn" id="t-inn" type="button">여관 <span class="btn-sub" id="t-inn-sub"></span></button>
-      <button class="btn" id="t-shop" type="button">상점</button>
-      <button class="btn" id="t-sheet" type="button">내 정보</button>
-    </div>
-    <p class="town-msg" id="town-msg" role="status"></p>
-    <div class="topline">
-      <button class="link-btn" id="t-codex" type="button">직업 도감</button>
-      <button class="link-btn" id="t-menu" type="button">저장하고 처음으로</button>
-    </div>
-  </section>
-
-  <!-- 전투 -->
-  <section class="screen" id="scr-battle" hidden>
-    <div class="topline">
-      <span id="b-floor"></span>
-      <button class="link-btn" id="b-skills" type="button">기술 설명</button>
-    </div>
-    <article class="foe" id="foe">
-      <div class="foe-head"><h2 class="foe-name" id="foe-name"></h2><span class="foe-lv" id="foe-lv"></span></div>
-      <div class="chips" id="foe-tags"></div>
-      <div class="bar"><i id="foe-bar"></i></div>
-      <div class="hp-label"><span>HP</span><span id="foe-hp"></span></div>
-      <div class="chips" id="foe-status"></div>
-      <div class="pop-layer" id="foe-pop"></div>
-    </article>
-    <ol class="battle-log" id="b-log" aria-live="polite"></ol>
-    <article class="me" id="me">
-      <div class="me-head"><span class="me-name" id="me-name"></span><span class="me-job" id="me-job"></span></div>
-      <div class="bar-row"><span>HP</span><div class="bar"><i id="me-hpbar"></i></div><span id="me-hp"></span></div>
-      <div class="bar-row"><span>MP</span><div class="bar mp"><i id="me-mpbar"></i></div><span id="me-mp"></span></div>
-      <div class="chips" id="me-status"></div>
-      <div class="pop-layer" id="me-pop"></div>
-    </article>
-    <div class="actions" id="actions"></div>
-    <div class="result" id="b-result" hidden></div>
-  </section>
-
-  <!-- 직업 도감 -->
-  <section class="screen" id="scr-codex" hidden>
-    <div class="topline">
-      <button class="link-btn" id="codex-back" type="button">← 돌아가기</button>
-      <span id="codex-progress"></span>
-    </div>
-    <h2 class="screen-title">직업 도감</h2>
-    <div class="filters">
-      <input id="cx-q" type="search" placeholder="직업·기술 이름으로 찾기" aria-label="직업 검색">
-      <select id="cx-fam" aria-label="계열"></select>
-      <select id="cx-rar" aria-label="등급"></select>
-      <label class="check" for="cx-found"><input type="checkbox" id="cx-found"> 만나 본 직업만 보기</label>
-    </div>
-    <p class="cx-count" id="cx-count"></p>
-    <ol class="codex-list" id="cx-list"></ol>
-    <button class="btn" id="cx-more" type="button">더 보기</button>
-  </section>
-
-  <!-- 명예의 전당 -->
-  <section class="screen" id="scr-hall" hidden>
-    <div class="topline"><button class="link-btn" id="hall-back" type="button">← 처음으로</button><span id="hall-count"></span></div>
-    <h2 class="screen-title">명예의 전당</h2>
-    <ol class="hall-list" id="hall-list"></ol>
-  </section>
-</div>
-
-<div class="modal" id="modal" hidden>
-  <div class="modal-backdrop" data-close></div>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <button class="modal-x" type="button" data-close aria-label="닫기">×</button>
-    <div id="modal-body"></div>
+<div id="game">
+  <div id="screen">
+    <canvas id="cv" aria-label="게임 화면"></canvas>
+    <div id="hud"></div>
+    <div id="ui"></div>
+    <div id="fade"></div>
   </div>
+  <div id="pad" hidden>
+    <div class="dpad">
+      <button type="button" class="pk up" data-k="up" aria-label="위">▲</button>
+      <button type="button" class="pk left" data-k="left" aria-label="왼쪽">◀</button>
+      <button type="button" class="pk right" data-k="right" aria-label="오른쪽">▶</button>
+      <button type="button" class="pk down" data-k="down" aria-label="아래">▼</button>
+    </div>
+    <div class="abtns">
+      <button type="button" class="pk bbtn" data-k="b" aria-label="취소 또는 메뉴">B</button>
+      <button type="button" class="pk abtn" data-k="a" aria-label="결정 또는 조사">A</button>
+    </div>
+  </div>
+  <p id="keys-hint">방향키·WASD 이동 · Z/Enter/Space 결정·조사 · X/Esc 메뉴·취소</p>
 </div>
 <!-- BODY:END -->
 <!-- SCRIPTS:START -->
@@ -146,7 +39,11 @@
 <script src="js/data-world.js"></script>
 <script src="js/jobs.js"></script>
 <script src="js/engine.js"></script>
-<script src="js/ui.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/doll.js"></script>
+<script src="js/world.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/game.js"></script>
 <!-- SCRIPTS:END -->
 </body>
 </html>

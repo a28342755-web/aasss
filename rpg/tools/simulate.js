@@ -27,7 +27,7 @@ F.rng = seeded(20261025);
 
 const SAMPLES = Number(process.argv[2]) || 600;
 const FLOOR_CAP = 120;
-const BATTLE_CAP = 1500;
+const BATTLE_CAP = 4000;
 
 function chooseAction(p, b) {
   const d = E.derive(p);
@@ -69,17 +69,33 @@ function visitTown(p) {
   }
 }
 
+/* 한 층에 떠도는 몬스터 MONSTERS_PER_FLOOR마리를 잡고, 10층마다 보스를 잡은 뒤 계단으로 내려간다 */
+const MONSTERS_PER_FLOOR = 3;
+
+function fight(p, opts) {
+  const b = E.startBattle(p, opts);
+  let turns = 0;
+  while (!b.result && turns++ < 200) E.act(p, b, chooseAction(p, b));
+  return b.result === "win";
+}
+
 function runLife(job) {
   const p = E.newPlayer(job, "시뮬");
   let battles = 0;
+  E.enterFloor(p, 1);
   while (battles < BATTLE_CAP && p.floor <= FLOOR_CAP) {
     visitTown(p);
+    let cleared = 0;
     for (;;) {
-      const b = E.startBattle(p);
+      const boss = p.floor % 10 === 0;
+      const opts = { floor: p.floor, monster: boss && cleared >= MONSTERS_PER_FLOOR ? E.pickMonster(p.floor, true) : E.pickMonster(p.floor, false) };
       battles++;
-      let turns = 0;
-      while (!b.result && turns++ < 200) E.act(p, b, chooseAction(p, b));
-      if (b.result === "lose" || !b.result) return { p, battles, dead: true };
+      if (!fight(p, opts)) return { p, battles, dead: true };
+      cleared++;
+      if (cleared > MONSTERS_PER_FLOOR - (boss ? 0 : 1)) {
+        E.enterFloor(p, p.floor + 1);
+        cleared = 0;
+      }
       const d = E.derive(p);
       if (p.hp < d.maxHp * 0.5 || p.floor > FLOOR_CAP || battles >= BATTLE_CAP) break;
     }

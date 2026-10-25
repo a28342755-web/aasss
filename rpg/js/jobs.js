@@ -224,6 +224,8 @@
     passive: f.passive, el: f.el, count: f.count, baseCount: f.bases.length
   }));
   FATES.MOD_COUNT = mods.length;
+  FATES.MODIFIER_EL = {};
+  mods.forEach((m) => { if (m.el && m.el !== "phys") FATES.MODIFIER_EL[m.name] = m.el; });
   FATES.BASE_COUNT = allBases.length;
   FATES.jobById = (id) => jobs[id - 1] || null;
 })(typeof window !== "undefined" ? window : globalThis);
