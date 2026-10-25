@@ -1,6 +1,6 @@
 /*
  * 삼천의 운명 — 전투·성장 엔진 (DOM 없이 동작)
- * UI와 밸런스 시뮬레이션(tools/simulate.js)이 같은 코드를 쓴다.
+ * 게임 화면과 자동 플레이 봇(tools/autoplay.js)이 같은 코드를 쓴다.
  */
 (function (root) {
   "use strict";
@@ -167,10 +167,10 @@
     const prefix = floor > 100 ? "심연의 " : floor > 50 ? "광폭한 " : "";
     /* 처음 몇 층은 몸 풀기: 부딪힘 피해가 12층까지 서서히 오른다 */
     const ramp = 0.6 + 0.4 * Math.min(1, (lv - 1) / 11);
-    const maxHp = Math.round((40 + lv * 16 + lv * lv * 0.5) * m.hp * (boss ? 32 : 1.6));
+    const maxHp = Math.round((40 + lv * 16 + lv * lv * 0.5) * m.hp * (boss ? 34 : 1.8));
     return {
       name: prefix + m.name, base: m.name, lv, boss, maxHp, hp: maxHp,
-      atk: Math.round((7 + lv * 2.6 + lv * lv * 0.05) * m.atk * 2.6 * ramp),
+      atk: Math.round((7 + lv * 2.6 + lv * lv * 0.07) * m.atk * 3 * ramp),
       def: Math.round((2 + lv * 1.4) * m.def),
       el: m.el, weak: m.weak, resist: m.resist, traits: m.traits.slice(),
       exp: Math.round((10 + lv * 5) * 0.3 * (boss ? 30 : 1)),
