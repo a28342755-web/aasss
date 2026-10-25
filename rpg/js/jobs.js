@@ -226,6 +226,9 @@
   FATES.MOD_COUNT = mods.length;
   FATES.MODIFIER_EL = {};
   mods.forEach((m) => { if (m.el && m.el !== "phys") FATES.MODIFIER_EL[m.name] = m.el; });
+  /* 수식어 이름 → 단계·속성 (캐릭터 겉모습을 정할 때 쓴다) */
+  FATES.MODS = {};
+  mods.forEach((m) => { FATES.MODS[m.name] = { name: m.name, tier: m.tier, el: m.el }; });
   FATES.BASE_COUNT = allBases.length;
   FATES.jobById = (id) => jobs[id - 1] || null;
 })(typeof window !== "undefined" ? window : globalThis);
