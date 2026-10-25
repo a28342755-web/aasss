@@ -66,17 +66,30 @@
   /* ── 그림 분석: 픽셀을 피부(1)·무채색(2)·색(3)으로 나누고, 얼굴 위치·머리 꼭대기·주된 옷 색을 찾는다 ──
      아직 못 읽었으면 null, 픽셀을 읽을 수 없으면(교차 출처) false */
   const infos = {};
-  function analyze(id) {
-    if (infos[id] !== undefined) return infos[id];
-    const img = image(id);
-    if (!ready(img)) return null;
-    const w = img.naturalWidth;
-    const h = img.naturalHeight;
+  function pixels(src, w, h) {
     const cv = canvas(w, h);
     const g = cv.getContext("2d");
-    g.drawImage(img, 0, 0);
-    let data;
-    try { data = g.getImageData(0, 0, w, h).data; } catch (e) { infos[id] = false; return false; }
+    g.drawImage(src, 0, 0);
+    try { return g.getImageData(0, 0, w, h).data; } catch (e) { return null; }
+  }
+  /* key: 그림 id 또는 "몸id+머리id"(머리를 바꿔 단 그림) */
+  function analyze(key) {
+    if (infos[key] !== undefined) return infos[key];
+    const src = source(key);
+    if (!src) return src;
+    const w = src.width || src.naturalWidth;
+    const h = src.height || src.naturalHeight;
+    const data = pixels(src, w, h);
+    infos[key] = data ? measure(data, w, h, src.face || faceAt(key)) : false;
+    if (infos[key] && src.hairMask) src.hairMask.forEach((v, i) => { if (v) infos[key].kind[i] = 4; });
+    return infos[key];
+  }
+  /* 직접 잰 얼굴 위치(heroes.HEAD_AT)를 얼굴 정보로 */
+  function faceAt(id) {
+    const at = H.HEAD_AT[id];
+    return at ? { x: at[0], y: at[1] - at[2] * 0.42, w: at[2], top: at[1] - at[2] * 0.9, chin: at[1] } : null;
+  }
+  function measure(data, w, h, hint) {
     const kind = new Uint8Array(w * h);
     const c = [0, 0, 0];
     let vx = 0;
@@ -110,8 +123,8 @@
     }
     const pct = (arr, q) => arr[Math.min(arr.length - 1, Math.floor(arr.length * q))];
     /* 얼굴: 위쪽 피부 픽셀의 중심 가까이에 모인 덩어리(손은 떨어져 있어 빠진다) */
-    let face = null;
-    if (fx.length > 30) {
+    let face = hint || null;
+    if (!face && fx.length > 30) {
       const mx = pct(fx.slice().sort((a, b) => a - b), 0.5);
       const my = pct(fy.slice().sort((a, b) => a - b), 0.5);
       const R = Math.max(w, h) * 0.17;
@@ -122,11 +135,11 @@
         xs.sort((a, b) => a - b);
         ys.sort((a, b) => a - b);
         const fw = Math.min(w * 0.3, Math.max(w * 0.14, pct(xs, 0.92) - pct(xs, 0.08)));
-        face = { x: pct(xs, 0.5), y: pct(ys, 0.5), w: fw, top: pct(ys, 0.06) };
+        face = { x: pct(xs, 0.5), y: pct(ys, 0.5), w: fw, top: pct(ys, 0.06), chin: pct(ys, 0.96) };
       }
     }
     const bare = !!face;
-    if (!face) face = { x: w * 0.5, y: h * 0.28, w: w * 0.24, top: h * 0.16 };
+    if (!face) face = { x: w * 0.5, y: h * 0.28, w: w * 0.24, top: h * 0.16, chin: h * 0.38 };
     /* 머리 꼭대기: 얼굴 위 기둥에서 가장 높은 불투명 픽셀(모자 포함) */
     let top = face.top;
     const x0 = Math.max(0, Math.round(face.x - face.w * 0.4));
@@ -157,15 +170,247 @@
         if (data[p + 3] > 150 && kind[y * w + x] !== 1) { hc[0] += data[p]; hc[1] += data[p + 1]; hc[2] += data[p + 2]; hc[3]++; }
       }
     }
-    infos[id] = {
+    return {
       w, h, kind, face, top, bare,
       dom: (((Math.atan2(vy, vx) / TAU) % 1) + 1) % 1,
       body: bodyN ? bodyX / bodyN : w * 0.46,
       hair: hc[3] ? hex(hc[0] / hc[3], hc[1] / hc[3], hc[2] / hc[3]) : "#4a3428",
       skin: sk[3] ? hex(sk[0] / sk[3], sk[1] / sk[3], sk[2] / sk[3]) : "#f4d0b8"
     };
-    return infos[id];
   }
+
+  /* ── 머리 바꿔 달기 ──
+     머리 = 목선(턱 조금 아래) 위에서 얼굴과 이어진 덩어리. 무기 자루·지팡이처럼 가는 것은 한 번 깎아 낸 뒤
+     얼굴과 이어진 부분만 다시 불려서 떼어 낸다. 몸 쪽 그림은 제 머리를 지우고 다른 그림의 머리를 턱에 맞춰 붙인다 */
+  function boxPass(m, w, h, k, all, horizontal) {
+    const out = new Uint8Array(w * h);
+    const n = horizontal ? w : h;
+    const lines = horizontal ? h : w;
+    const ps = new Int32Array(n + 1);
+    for (let l = 0; l < lines; l++) {
+      const at = (j) => (horizontal ? l * w + j : j * w + l);
+      for (let j = 0; j < n; j++) ps[j + 1] = ps[j] + m[at(j)];
+      for (let j = 0; j < n; j++) {
+        const a = Math.max(0, j - k);
+        const b = Math.min(n, j + k + 1);
+        const sum = ps[b] - ps[a];
+        out[at(j)] = all ? (b - a === 2 * k + 1 && sum === b - a ? 1 : 0) : sum > 0 ? 1 : 0;
+      }
+    }
+    return out;
+  }
+  const erode = (m, w, h, k) => boxPass(boxPass(m, w, h, k, true, true), w, h, k, true, false);
+  const dilate = (m, w, h, k) => boxPass(boxPass(m, w, h, k, false, true), w, h, k, false, false);
+  const heads = {};
+  function headOf(id) {
+    if (heads[id] !== undefined) return heads[id];
+    const inf = analyze(id);
+    if (!inf) return inf;
+    const img = image(id);
+    const { w, h } = inf;
+    const data = H.HEAD_AT[id] ? pixels(img, w, h) : null;
+    if (!data) return (heads[id] = false);
+    const f = faceAt(id);
+    if (!f) return (heads[id] = false);
+    const fw = f.w;
+    const chin = f.chin;
+    const cut = Math.min(h - 1, Math.round(chin + fw * 0.1));
+    const R = new Uint8Array(w * h);
+    for (let y = 0; y <= cut; y++) {
+      /* 모자 챙 높이는 넓게, 얼굴 높이는 머리카락까지, 턱 아래 띠에서는 목 둘레만(어깨는 빼고) */
+      const lim = y > chin - fw * 0.1 ? fw * 0.55 : y < f.top - fw * 0.15 ? fw * 2.4 : fw * 1.8;
+      for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] > 60 && Math.abs(x - f.x) <= lim) R[y * w + x] = 1;
+    }
+    const k = Math.max(2, Math.round(fw * 0.1));
+    const E = erode(R, w, h, k);
+    /* 얼굴 가운데에서 가장 가까운 남은 픽셀부터 채우기 */
+    let seed = -1;
+    for (let r = 0; r < fw && seed < 0; r++) {
+      for (let y = Math.round(f.y) - r; y <= Math.round(f.y) + r && seed < 0; y++) {
+        for (let x = Math.round(f.x) - r; x <= Math.round(f.x) + r; x++) {
+          if (x >= 0 && y >= 0 && x < w && y < h && E[y * w + x]) { seed = y * w + x; break; }
+        }
+      }
+    }
+    if (seed < 0) return (heads[id] = false);
+    const C = new Uint8Array(w * h);
+    const stack = [seed];
+    C[seed] = 1;
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % w;
+      [i - 1, i + 1, i - w, i + w].forEach((j) => {
+        if (j < 0 || j >= w * h || C[j] || !E[j]) return;
+        if ((j === i - 1 && x === 0) || (j === i + 1 && x === w - 1)) return;
+        C[j] = 1;
+        stack.push(j);
+      });
+    }
+    const D = dilate(C, w, h, k);
+    let x0 = w;
+    let y0 = h;
+    let x1 = 0;
+    let y1 = 0;
+    for (let i = 0; i < w * h; i++) {
+      D[i] &= R[i];
+      if (D[i]) { const x = i % w; const y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    const cutCv = canvas(w, h);
+    const ersCv = canvas(w, h);
+    const g1 = cutCv.getContext("2d");
+    const g2 = ersCv.getContext("2d");
+    const a = g1.createImageData(w, h);
+    const b = g2.createImageData(w, h);
+    /* 몸 쪽에서 지울 곳: 머리, 그리고 머리 둘레에 남는 부스러기(머리카락 끝, 반투명 가장자리, 작은 조각) */
+    const D2 = dilate(D, w, h, 1);
+    const near = dilate(D, w, h, Math.max(3, k * 2));
+    const seen = new Uint8Array(w * h);
+    const small = Math.max(24, fw * fw * 0.12);
+    for (let i = 0; i < w * h; i++) {
+      if (seen[i] || !R[i] || D2[i]) continue;
+      const comp = [i];
+      seen[i] = 1;
+      let touch = false;
+      for (let q = 0; q < comp.length; q++) {
+        const j = comp[q];
+        if (near[j]) touch = true;
+        const x = j % w;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const nx = x + ox;
+            const n = j + oy * w + ox;
+            if (nx < 0 || nx >= w || n < 0 || n >= w * h || seen[n] || !R[n] || D2[n]) continue;
+            seen[n] = 1;
+            comp.push(n);
+          }
+        }
+      }
+      if (touch && comp.length <= small) comp.forEach((j) => { D2[j] = 1; });
+    }
+    for (let i = 0, p = 0; i < w * h; i++, p += 4) {
+      for (let c = 0; c < 4; c++) { a.data[p + c] = data[p + c]; b.data[p + c] = data[p + c]; }
+      if (!D[i]) a.data[p + 3] = 0;
+      if (D2[i] || (near[i] && data[p + 3] <= 60)) b.data[p + 3] = 0;
+    }
+    g1.putImageData(a, 0, 0);
+    g2.putImageData(b, 0, 0);
+    /* 머리카락 색: 얼굴 양옆(모자·머릿수건을 써도 보이는 곳)의 평균 */
+    const sc = [0, 0, 0, 0];
+    for (let y = Math.round(f.y - fw * 0.25); y <= chin; y++) {
+      for (let x = Math.round(f.x - fw * 0.85); x <= Math.round(f.x + fw * 0.85); x++) {
+        if (x < 0 || y < 0 || x >= w || y >= h || Math.abs(x - f.x) < fw * 0.5) continue;
+        const i = y * w + x;
+        const p = i * 4;
+        if (data[p + 3] > 150 && inf.kind[i] !== 1 && Math.max(data[p], data[p + 1], data[p + 2]) > 40) { sc[0] += data[p]; sc[1] += data[p + 1]; sc[2] += data[p + 2]; sc[3]++; }
+      }
+    }
+    const side = [0, 0, 0];
+    if (sc[3]) toHsv(sc[0] / sc[3], sc[1] / sc[3], sc[2] / sc[3], side);
+    else { const hx = parseInt(inf.hair.slice(1), 16); toHsv(hx >> 16, (hx >> 8) & 255, hx & 255, side); }
+    /* 머리를 지운 뒤에도 몸에 남는 긴 머리카락: 지운 자리 바로 바깥에서 머리카락 색과 같은 픽셀을 따라간다.
+       새 머리를 달면 이 부분을 새 머리카락 색으로 칠한다(지우면 몸에 구멍이 난다) */
+    const c = [0, 0, 0];
+    const hairHsv = side;
+    let long = null;
+    if (hairHsv[1] > 0.15 && hairHsv[2] > 0.3) {
+      const like = (i) => {
+        const p = i * 4;
+        if (data[p + 3] <= 60 || D2[i]) return false;
+        toHsv(data[p], data[p + 1], data[p + 2], c);
+        const dh = Math.abs(c[0] - hairHsv[0]);
+        return Math.min(dh, 1 - dh) < 0.05 && Math.abs(c[1] - hairHsv[1]) < 0.3 && Math.abs(c[2] - hairHsv[2]) < 0.35;
+      };
+      long = new Uint8Array(w * h);
+      const ring = dilate(D2, w, h, 3);
+      const st = [];
+      for (let i = 0; i < w * h; i++) if (ring[i] && like(i)) { long[i] = 1; st.push(i); }
+      while (st.length) {
+        const i = st.pop();
+        const x = i % w;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const n = i + oy * w + ox;
+            if (x + ox < 0 || x + ox >= w || n < 0 || n >= w * h || long[n] || !like(n)) continue;
+            long[n] = 1;
+            st.push(n);
+          }
+        }
+      }
+    }
+    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, w, h, face: f, long, hairHsv, side };
+    return heads[id];
+  }
+  /* 몸 그림에 다른 그림의 머리를 단 새 그림. anchorX는 발밑 x(원래 그림의 0.46 지점) */
+  const composed = {};
+  function compose(bodyId, headId) {
+    const key = bodyId + "+" + headId;
+    if (composed[key] !== undefined) return composed[key];
+    const bh = headOf(bodyId);
+    const hh = headOf(headId);
+    if (bh === null || hh === null) return null;
+    if (!bh || !hh) return (composed[key] = image(bodyId));
+    const s = Math.max(0.7, Math.min(1.45, bh.fw / hh.fw));
+    const dx = bh.cx - hh.cx * s;
+    const dy = bh.chin - hh.chin * s;
+    const L = Math.floor(Math.min(0, dx + hh.x0 * s));
+    const T = Math.floor(Math.min(0, dy + hh.y0 * s));
+    const Rr = Math.ceil(Math.max(bh.w, dx + (hh.x1 + 1) * s));
+    const W = Rr - L;
+    const Hh = bh.h - T;
+    /* 몸: 남은 긴 머리카락을 새 머리카락 색으로 */
+    let body = bh.erased;
+    if (bh.long) {
+      body = canvas(bh.w, bh.h);
+      const gb = body.getContext("2d");
+      gb.drawImage(bh.erased, 0, 0);
+      const im = gb.getImageData(0, 0, bh.w, bh.h);
+      const c = [0, 0, 0];
+      const vk = Math.max(0.35, Math.min(2.2, (hh.side[2] + 0.05) / (bh.hairHsv[2] + 0.05)));
+      for (let i = 0; i < bh.w * bh.h; i++) {
+        if (!bh.long[i]) continue;
+        const p = i * 4;
+        toHsv(im.data[p], im.data[p + 1], im.data[p + 2], c);
+        toRgb(hh.side[0], Math.min(1, hh.side[1] * (0.5 + c[1])), Math.min(1, c[2] * vk), c);
+        im.data[p] = c[0];
+        im.data[p + 1] = c[1];
+        im.data[p + 2] = c[2];
+      }
+      gb.putImageData(im, 0, 0);
+    }
+    const cv = canvas(W, Hh);
+    const g = cv.getContext("2d");
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(body, -L, -T);
+    g.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
+    cv.anchorX = bh.w * 0.46 - L;
+    /* 칠한 긴 머리카락 자리를 기억해 두면, 직업별 머리카락 색을 입힐 때 같이 칠해진다 */
+    if (bh.long) {
+      const hl = canvas(W, Hh);
+      const gh = hl.getContext("2d");
+      gh.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
+      const cover = gh.getImageData(0, 0, W, Hh).data;
+      cv.hairMask = new Uint8Array(W * Hh);
+      for (let i = 0; i < bh.w * bh.h; i++) {
+        if (!bh.long[i]) continue;
+        const x = (i % bh.w) - L;
+        const y = Math.floor(i / bh.w) - T;
+        const j = y * W + x;
+        if (cover[j * 4 + 3] < 40) cv.hairMask[j] = 1;
+      }
+    }
+    const hf = hh.face;
+    cv.face = { x: dx + hf.x * s - L, y: dy + hf.y * s - T, w: hf.w * s, top: dy + hf.top * s - T, chin: dy + hf.chin * s - T };
+    composed[key] = cv;
+    return cv;
+  }
+  /* 분석·색칠의 바탕 그림: 그림 id면 원래 그림, "몸+머리"면 합친 그림. 아직 못 읽었으면 null */
+  function source(key) {
+    const plus = key.indexOf("+");
+    if (plus < 0) { const img = image(key); return ready(img) ? img : null; }
+    return compose(key.slice(0, plus), key.slice(plus + 1));
+  }
+  const srcKey = (job, lk) => H.heroArtId(job) + (lk.head ? "+" + lk.head : "");
 
   /* ── 옷·피부 색 바꾸기 (원래 크기에서 한 번) ── */
   /* [색상, 원래 채도에 곱할 값, 더할 채도, 밝기 배율] */
@@ -181,15 +426,16 @@
   };
   const lookKey = (lk) => (lk.pal ? `${lk.pal.h},${lk.pal.s || 1},${lk.pal.v || 1}` : "-") + "|" + (lk.skin || "-") + "|" + (lk.hair || "-");
   const baked = new Map();
-  function bake(id, lk) {
-    const key = id + "#" + lookKey(lk);
+  function bake(sk0, lk) {
+    const key = sk0 + "#" + lookKey(lk);
     const hit = baked.get(key);
     if (hit) return hit;
-    const img = image(id);
-    const inf = analyze(id);
-    if (inf === null) return null;
+    const img = source(sk0);
+    const inf = analyze(sk0);
+    if (!img || inf === null) return null;
     if (!inf || (!lk.pal && !lk.skin && !lk.hair)) { baked.set(key, img); return img; }
     const cv = canvas(inf.w, inf.h);
+    cv.anchorX = img.anchorX;
     const g = cv.getContext("2d");
     g.drawImage(img, 0, 0);
     const im = g.getImageData(0, 0, inf.w, inf.h);
@@ -236,17 +482,21 @@
   /* 원하는 키(px)로 부드럽게 줄인 그림. 줄이기는 한 번만 한다 */
   const scaled = new Map();
   function sprite(job, heightPx) {
-    const id = H.heroArtId(job);
     const lk = H.lookOf(job);
-    const base = bake(id, lk);
+    const sk0 = srcKey(job, lk);
+    const base = bake(sk0, lk);
     if (!base) return null;
-    const hpx = Math.max(8, Math.round(heightPx));
-    const key = `${id}#${lookKey(lk)}@${hpx}`;
+    const bw = base.naturalWidth || base.width;
+    const bh = base.naturalHeight || base.height;
+    /* 머리를 바꿔 달아 그림이 위로 커졌으면, 몸의 키가 같아지도록 전체 키를 늘린다 */
+    const body = image(H.heroArtId(job));
+    const grow = lk.head && body.naturalHeight ? bh / body.naturalHeight : 1;
+    const hpx = Math.max(8, Math.round(heightPx * grow));
+    const key = `${sk0}#${lookKey(lk)}@${hpx}`;
     let cv = scaled.get(key);
     if (!cv) {
-      const bw = base.naturalWidth || base.width;
-      const bh = base.naturalHeight || base.height;
       cv = canvas((bw * hpx) / bh, hpx);
+      cv.anchorX = ((base.anchorX === undefined ? bw * 0.46 : base.anchorX) * hpx) / bh;
       const g = cv.getContext("2d");
       g.imageSmoothingEnabled = true;
       g.imageSmoothingQuality = "high";
@@ -332,7 +582,7 @@
 
   /* ── 덧그림. 좌표는 그림의 발밑이 (0,0)인 로컬 좌표(오른쪽을 봄) ── */
   function anchors(inf, cv) {
-    const ax = Math.round(cv.width * 0.46);
+    const ax = Math.round(cv.anchorX === undefined ? cv.width * 0.46 : cv.anchorX);
     const ref = inf || { w: cv.width, h: cv.height, face: { x: cv.width * 0.5, y: cv.height * 0.28, w: cv.width * 0.3, top: cv.height * 0.16 }, top: cv.height * 0.03, body: cv.width * 0.46, hair: "#4a3428", skin: "#f4d0b8" };
     const k = cv.height / ref.h;
     const X = (x) => x * k - ax;
@@ -741,7 +991,7 @@
     const m = motion(o.anim, o.t || 0, o.f || 0);
     if (lk.float) m.dy -= 0.03 + Math.sin(T * 2.4) * 0.015;
     const dir = o.dir || 1;
-    const A = anchors(analyze(H.heroArtId(job)), cv);
+    const A = anchors(analyze(srcKey(job, lk)), cv);
     const alpha = (o.alpha === undefined ? 1 : o.alpha) * (lk.ghost ? 0.6 : 1);
     ctx.save();
     ctx.translate(Math.round(x + m.dx * hh * dir), Math.round(y + m.dy * hh));
@@ -798,7 +1048,7 @@
   function url(job) {
     const id = H.heroArtId(job);
     if (thumbs.has(job.id)) return thumbs.get(job.id);
-    if (!analyze(id) || !sprite(job, 10)) return src(id);
+    if (!analyze(srcKey(job, H.lookOf(job))) || !sprite(job, 10)) return src(id);
     const hh = 112;
     const cv = canvas(hh * 1.3, hh * 1.2);
     const lk = H.lookOf(job);
@@ -809,5 +1059,5 @@
     return out;
   }
 
-  F.heroArt = { preload, sprite, draw, url, image, motion, analyze };
+  F.heroArt = { preload, sprite, draw, url, image, motion, analyze, headOf, compose };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -244,6 +244,79 @@
   };
 
   const HAIR_LIST = [null, "black", "blonde", "white", "red", "blue", "pink", "silver", "green", "purple", "orange", "brown", "teal", null];
+  /* ── 머리 바꿔 달기 ──
+     그림마다 머리(얼굴·머리카락·모자)를 떼어 다른 그림의 몸에 붙여 새 인물을 만든다.
+     f 여성형, m 남성형, n 중성, x 복면·두건, h 투구, b 짐승 머리. 머리를 떼기 어려운 그림(날개·용·책이 머리에
+     붙어 있거나 얼굴이 가려진 그림)은 목록에 없다 */
+  /* 그림마다 직접 잰 얼굴 위치 [얼굴 가운데 x, 턱 y, 얼굴 폭] (원래 그림 픽셀). 머리를 떼고 붙이는 기준 */
+  const HEAD_AT = {
+    a_elf: [78, 59, 29], a_hunter: [84, 74, 30], al_alch: [87, 78, 30], al_mad: [96, 76, 40], ar_painter: [105, 82, 36],
+    b_bard: [73, 60, 30], b_dancer: [118, 64, 28], bl_dragon: [113, 58, 40], bl_fox: [98, 62, 26], bl_mermaid: [104, 49, 25],
+    bl_vamp: [99, 55, 24], bl_wolf: [92, 58, 40], bu_builder: [87, 68, 34], c_astro: [96, 76, 28], c_time: [95, 70, 30],
+    c_void: [103, 65, 32], ci_guard: [82, 71, 34], co_merchant: [77, 74, 30], cr_smith: [54, 61, 30], cu_chef: [97, 75, 34],
+    d_curse: [102, 64, 36], d_necro: [102, 60, 30], d_reaper: [104, 64, 30], e_earth: [77, 76, 28], e_fire: [107, 76, 30],
+    e_ice: [96, 72, 32], e_storm: [79, 80, 26], e_water: [102, 56, 30], fa_bee: [46, 58, 32], fa_farmer: [87, 62, 36],
+    fa_herder: [56, 62, 30], g_bomber: [52, 66, 30], g_slinger: [57, 62, 30], ga_fisher: [58, 62, 34], ga_miner: [50, 64, 32],
+    h_inquisitor: [102, 58, 26], h_nun: [85, 58, 26], h_priest: [97, 70, 30], hu_hunter: [90, 64, 30], hu_monster: [69, 66, 30],
+    hu_slayer: [86, 64, 30], k_dark: [99, 66, 30], k_lancer: [110, 72, 26], k_paladin: [81, 56, 26], k_rose: [85, 68, 28],
+    m_rune: [80, 68, 28], m_witch: [122, 72, 26], m_wizard: [65, 74, 26], ma_boxer: [65, 56, 26], ma_girl: [84, 56, 26],
+    ma_monk: [68, 52, 28], me_doctor: [85, 66, 30], mi_general: [93, 62, 28], mi_soldier: [90, 70, 32], my_fortune: [52, 76, 32],
+    n_beast: [85, 72, 28], n_flower: [98, 78, 28], o_miko: [96, 64, 30], o_samurai: [100, 64, 28], o_taoist: [68, 74, 28],
+    o_warrior: [106, 62, 26], r_thief: [94, 68, 32], r_trickster: [88, 68, 32], s_kunoichi: [109, 70, 26], s_ninja: [80, 62, 34],
+    s_shadow: [113, 64, 32], sc_scholar: [67, 74, 34], se_pirate: [60, 68, 34], se_sailor: [91, 60, 34], sp_medium: [98, 62, 28],
+    sp_shaman: [54, 78, 28], su_summoner: [100, 60, 28], sv_maid: [52, 68, 32], t_engineer: [87, 76, 26], tr_acrobat: [81, 57, 26],
+    tr_jester: [61, 70, 34], tr_magician: [110, 77, 30], w_berserker: [72, 61, 32], w_gladiator: [71, 80, 28], w_spear: [100, 76, 34],
+    w_sword: [110, 74, 34], w_twin: [100, 65, 30]
+  };
+  const HEAD_TAG = {
+    a_elf: "f", b_dancer: "f", bl_fox: "f", bl_mermaid: "f", c_void: "f", e_ice: "f", e_water: "f", k_rose: "f", m_witch: "f",
+    ma_girl: "f", my_fortune: "f", n_flower: "f", o_miko: "f", s_kunoichi: "f", sv_maid: "f", tr_acrobat: "f",
+    h_nun: "f", sp_medium: "f", w_twin: "f", o_warrior: "f", se_sailor: "m", su_summoner: "n",
+    b_bard: "m", bl_vamp: "m", bu_builder: "m", ci_guard: "m", co_merchant: "m", cr_smith: "m", cu_chef: "m",
+    fa_farmer: "m", fa_herder: "m", g_bomber: "m", g_slinger: "m", ga_fisher: "m", ga_miner: "m", h_priest: "m", hu_hunter: "m",
+    hu_monster: "m", k_paladin: "m", ma_boxer: "m", ma_monk: "m", mi_general: "m", o_samurai: "m", o_taoist: "m", r_trickster: "m",
+    sc_scholar: "m", se_pirate: "m", sp_shaman: "m", w_berserker: "m", w_spear: "m", w_sword: "m", fa_bee: "m",
+    al_alch: "n", ar_painter: "n", c_astro: "n", e_storm: "n", m_rune: "n", m_wizard: "n", t_engineer: "n", tr_jester: "n",
+    tr_magician: "n", e_earth: "n", me_doctor: "n",
+    a_hunter: "x", r_thief: "x", s_ninja: "x", d_curse: "x", al_mad: "x", s_shadow: "x", d_necro: "x", d_reaper: "x",
+    hu_slayer: "h", k_dark: "h", k_lancer: "h", mi_soldier: "h", w_gladiator: "h", h_inquisitor: "h",
+    bl_dragon: "b", bl_wolf: "b", n_beast: "b"
+  };
+  /* 머리를 받을 수 있는 몸: 받을 수 있는 머리 종류 */
+  const BODY_TAKES = {};
+  const takes = (ids, kinds) => ids.split(" ").forEach((id) => { BODY_TAKES[id] = kinds; });
+  takes("a_elf b_dancer bl_fox bl_mermaid c_void e_fire e_ice e_water k_rose m_witch ma_girl my_fortune n_flower o_miko sv_maid tr_acrobat h_nun sp_medium w_twin o_warrior", "fn");
+  takes("s_kunoichi", "fnx");
+  takes("b_bard bu_builder ci_guard co_merchant cr_smith cu_chef fa_farmer fa_herder g_bomber g_slinger ga_fisher ga_miner h_priest hu_hunter ma_boxer ma_monk mi_general o_samurai o_taoist sc_scholar se_pirate sp_shaman w_sword fa_bee se_sailor", "mn");
+  takes("bl_vamp hu_monster r_trickster", "mnx");
+  takes("k_paladin w_spear w_berserker", "mnh");
+  takes("al_alch ar_painter c_astro e_storm m_rune m_wizard t_engineer tr_jester tr_magician e_earth me_doctor su_summoner", "fmn");
+  takes("a_hunter r_thief s_ninja d_curse al_mad s_shadow d_necro d_reaper", "fmnx");
+  takes("hu_slayer k_dark k_lancer mi_soldier w_gladiator h_inquisitor", "mnh");
+  const HEADS_BY = {};
+  Object.entries(HEAD_TAG).forEach(([id, t]) => { (HEADS_BY[t] = HEADS_BY[t] || []).push(id); });
+  /* 이름에 성별이 드러나는 직업 */
+  const FEMALE = /(녀|희|어머니|아가씨)$/;
+  const MALE = /(사나이|신부|교황|승|왕|장군|영감)$/;
+
+  function pickHead(job, body, mod, combat) {
+    const beast = mod === "수인" ? (BODY_TAKES[body] === "fn" ? ["bl_fox"] : ["bl_wolf", "n_beast"]) : mod === "용인" || mod === "리자드맨" ? ["bl_dragon"] : null;
+    if (beast) return beast.includes(body) ? null : beast[fnv(job.name + "^") % beast.length];
+    const kinds = BODY_TAKES[body];
+    if (!kinds) return null;
+    let allow = kinds;
+    if (FEMALE.test(job.base)) allow = "f";
+    else if (MALE.test(job.base)) allow = "m";
+    if (!combat) allow = allow.replace(/[xh]/g, "");
+    const pool = [];
+    allow.split("").forEach((k) => (HEADS_BY[k] || []).forEach((id) => { if (id !== body) pool.push(id); }));
+    if (!pool.length) return null;
+    /* 열에 하나 남짓은 원래 머리 그대로 */
+    const r = fnv(job.name + "^");
+    if (r % 7 === 0) return null;
+    return pool[r % pool.length];
+  }
+
   function fnv(str) {
     let h = 2166136261;
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -276,6 +349,9 @@
     }
     if (!pal && (mod || i > 0)) pal = PALS[(mod ? fnv(mod.name) : i - 1) % PALS.length];
     const lk = Object.assign({ size: 1, wide: 1 }, ml, { pal });
+    /* 그림마다 첫 기본 직업은 원래 인물, 나머지는 다른 그림의 머리를 단다 */
+    if (mod || i > 0) lk.head = pickHead(job, heroArtId(job), mod ? mod.name : null, F.FAMILY_LIST[job.fam].combat);
+    if (lk.head && HEAD_TAG[lk.head] === "b") { delete lk.ears; delete lk.horns; delete lk.skin; }
     if (!lk.aura && mod && mod.el && mod.el !== "phys" && mod.tier >= 1) lk.aura = mod.el;
     /* 머리카락 색: 그림마다 첫 기본 직업은 원래 색, 나머지는 이름으로 고른다(원래 색도 섞인다) */
     if (!lk.hair && (mod || i > 0)) lk.hair = HAIR_LIST[fnv(job.name + "@") % HAIR_LIST.length];
@@ -285,5 +361,5 @@
     return lk;
   }
 
-  F.heroes = { ART, heroArtId, styleOf, lookOf };
+  F.heroes = { ART, heroArtId, styleOf, lookOf, HEAD_AT, HEAD_TAG, BODY_TAKES };
 })(typeof window !== "undefined" ? window : globalThis);
