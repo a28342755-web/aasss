@@ -647,7 +647,7 @@
         const hh = this.heroH();
         if (rolling || !this.demo) {
           shadow(VW / 2, gy + 2, hh * 0.22, hh * 0.05, 0.5);
-          HA.draw(ctx, this.shown, VW / 2, gy + 4, { dir: 1, anim: "idle", t: t / 1000, h: hh, alpha: rolling ? 0.8 : 1 });
+          HA.draw(ctx, this.shown, VW / 2, gy + 4, { dir: 1, anim: "idle", t: t / 1000, h: hh, alpha: rolling ? 0.8 : 1, still: rolling });
         } else {
           const sp = this.demoSpot();
           /* 허수아비 */
@@ -1121,6 +1121,8 @@
       this.ambient = [];
       this.npcs = [];
       if (this.map.kind === "town") for (let i = 0; i < 4; i++) this.npcs.push({ job: E.randomJob(), x: 120 + i * 200 + rnd(-40, 40), dir: Math.random() < 0.5 ? -1 : 1, walk: rnd(1, 3), t: 0 });
+      /* 주인공·주민 그림을 미리 부위로 나눠 둔다(처음 화면에 들 때 끊기지 않게) */
+      [p.job].concat(this.npcs.map((n) => n.job)).forEach((j) => HA.warm(j, HERO_PX()));
       this.dead = false;
       this.dim = 0;
       this.quake = 0;

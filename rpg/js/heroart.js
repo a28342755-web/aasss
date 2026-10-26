@@ -337,7 +337,7 @@
         }
       }
     }
-    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, w, h, face: f, long, hairHsv, side };
+    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, w, h, face: f, long, hairHsv, side, mask: D };
     return heads[id];
   }
   /* 몸 그림에 다른 그림의 머리를 단 새 그림. anchorX는 발밑 x(원래 그림의 0.46 지점) */
@@ -384,6 +384,7 @@
     g.drawImage(body, -L, -T);
     g.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
     cv.anchorX = bh.w * 0.46 - L;
+    cv.place = { bodyId, headId, L, T, dx, dy, s };
     /* 칠한 긴 머리카락 자리를 기억해 두면, 직업별 머리카락 색을 입힐 때 같이 칠해진다 */
     if (bh.long) {
       const hl = canvas(W, Hh);
@@ -547,219 +548,505 @@
     return out;
   }
 
-  /* ── 다리 움직임 ──
-     그림 한 장에서 두 다리를 찾아 엉덩이를 축으로 번갈아 흔든 프레임(걷기·달리기 8장, 점프·낙하·매달리기)을
-     만든다. 발목 높이에서 떨어진 두 덩어리(두 발)를 찾고, 그 사이 틈을 따라 올라가 다리가 갈라지는 곳(가랑이·옷단)을
-     찾는다. 긴 치마·로브처럼 다리가 안 보이는 그림은 옷단을 살짝 흔든다 */
-  const WALK_RATE = 9.5;
-  const RUN_RATE = 13.5;
-  const legCache = new WeakMap();
-  function legsOf(cv) {
-    if (legCache.has(cv)) return legCache.get(cv);
-    let res = null;
-    try {
-      const w = cv.width;
-      const h = cv.height;
-      const g0 = cv.getContext("2d");
-      const im = g0.getImageData(0, 0, w, h);
-      const d = im.data;
-      const op = (x, y) => x >= 0 && x < w && y >= 0 && y < h && d[(y * w + x) * 4 + 3] > 90;
-      const ax = cv.anchorX === undefined ? w * 0.46 : cv.anchorX;
-      const xa = Math.max(0, Math.round(ax - w * 0.32));
-      const xb = Math.min(w - 1, Math.round(ax + w * 0.32));
-      let bottom = -1;
-      for (let y = h - 1; y >= 0 && bottom < 0; y--) for (let x = xa; x <= xb; x++) if (op(x, y)) { bottom = y; break; }
-      if (bottom > h * 0.5) {
-        const band = Math.round(bottom - h * 0.05);
-        const runs = [];
-        let cur = null;
-        for (let x = xa; x <= xb; x++) {
-          let on = false;
-          for (let y = band; y <= bottom && !on; y++) on = op(x, y);
-          if (on) { if (cur && x - cur.x1 <= 2) cur.x1 = x; else runs.push((cur = { x0: x, x1: x })); }
+  /* ── 부위로 나눠 움직이기(컷아웃 리그) ──
+     그림 한 장을 머리·몸통·두 다리(허벅지와 정강이)·손에 든 물건으로 나눠, 프레임마다 부위를 따로 돌리고 옮겨
+     걷기·달리기·점프·착지·공격 자세를 만든다. 머리 위치는 heroes.HEAD_AT, 물건은 heroes.WEAPON_AT(직접 잰 값),
+     다리는 발밑의 두 발과 그 사이 틈으로 찾는다. 물건을 떼어 낸 자리가 몸 위였으면 둘레 색으로 메운다 */
+
+  /* 원래 크기에서 한 번: 부위별 마스크와 축 */
+  const rigMaskCache = {};
+  function capsuleHit(x, y, c) {
+    const [x1, y1, r1, x2, y2, r2] = c;
+    const vx = x2 - x1;
+    const vy = y2 - y1;
+    const L2 = vx * vx + vy * vy || 1;
+    const t = Math.max(0, Math.min(1, ((x - x1) * vx + (y - y1) * vy) / L2));
+    const dx = x - (x1 + vx * t);
+    const dy = y - (y1 + vy * t);
+    const r = r1 + (r2 - r1) * t + 2;
+    return dx * dx + dy * dy <= r * r;
+  }
+  function rigMasks(sk0) {
+    if (rigMaskCache[sk0] !== undefined) return rigMaskCache[sk0];
+    const src = source(sk0);
+    if (!src) return null;
+    const w = src.width || src.naturalWidth;
+    const h = src.height || src.naturalHeight;
+    const data = pixels(src, w, h);
+    if (!data) return (rigMaskCache[sk0] = false);
+    const plus = sk0.indexOf("+");
+    const bodyId = plus < 0 ? sk0 : sk0.slice(0, plus);
+    const pl = src.place || { L: 0, T: 0 };
+    const N = w * h;
+    const alpha = (i) => data[i * 4 + 3];
+    /* 머리 */
+    let head = null;
+    let neck = null;
+    if (plus < 0) {
+      const hd = headOf(sk0);
+      if (hd) { head = hd.mask; neck = [hd.cx, hd.chin]; }
+    } else if (src.place) {
+      const hh = headOf(pl.headId);
+      const t = canvas(w, h);
+      t.getContext("2d").drawImage(hh.cut, pl.dx - pl.L, pl.dy - pl.T, hh.w * pl.s, hh.h * pl.s);
+      const hd = t.getContext("2d").getImageData(0, 0, w, h).data;
+      head = new Uint8Array(N);
+      for (let i = 0; i < N; i++) head[i] = hd[i * 4 + 3] > 40 ? 1 : 0;
+      neck = [src.face.x, src.face.chin];
+    }
+    /* 손에 든 물건 */
+    const weapons = [];
+    const any = new Uint8Array(N);
+    let maxR = 0;
+    (H.WEAPON_AT[bodyId] || []).forEach((wp) => {
+      const caps = wp.slice(2).map((c) => [c[0] - pl.L, c[1] - pl.T, c[2], c[3] - pl.L, c[4] - pl.T, c[5]]);
+      const mask = new Uint8Array(N);
+      let n = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (alpha(i) < 20 || (head && head[i]) || any[i]) continue;
+          if (caps.some((c) => capsuleHit(x, y, c))) { mask[i] = 1; any[i] = 1; n++; }
         }
-        const feet = runs.filter((r) => r.x1 - r.x0 + 1 >= w * 0.035).sort((a, b) => Math.abs((a.x0 + a.x1) / 2 - ax) - Math.abs((b.x0 + b.x1) / 2 - ax)).slice(0, 2).sort((a, b) => a.x0 - b.x0);
-        let fork = -1;
-        const splitAt = new Int32Array(h).fill(-1);
-        if (feet.length === 2 && feet[1].x0 - feet[0].x1 >= 1) {
-          /* 두 발 사이 틈을 따라 위로: 틈이 막히는 곳이 다리가 갈라지는 곳 */
-          let sx = Math.round((feet[0].x1 + feet[1].x0) / 2);
-          for (let y = bottom; y > band; y--) splitAt[y] = sx;
-          for (let y = band; y >= Math.round(bottom - h * 0.32); y--) {
-            let best = -1;
-            for (let k = 0; k <= 2 && best < 0; k++) { if (!op(sx + k, y)) best = sx + k; else if (!op(sx - k, y)) best = sx - k; }
-            if (best < 0) { fork = y + 1; break; }
-            sx = best;
-            splitAt[y] = sx;
-          }
-        }
-        if (fork > 0 && bottom - fork >= h * 0.06) {
-          const pad = Math.round(w * 0.05);
-          const x0 = Math.max(0, feet[0].x0 - pad);
-          const x1 = Math.min(w - 1, feet[1].x1 + pad);
-          const body = canvas(w, h);
-          const legL = canvas(w, h);
-          const legR = canvas(w, h);
-          const ib = new ImageData(new Uint8ClampedArray(d), w, h);
-          const il = new ImageData(w, h);
-          const ir = new ImageData(w, h);
-          for (let y = fork; y <= bottom; y++) {
-            const sp = splitAt[y] < 0 ? Math.round((feet[0].x1 + feet[1].x0) / 2) : splitAt[y];
-            for (let x = x0; x <= x1; x++) {
-              const p = (y * w + x) * 4;
-              const dst = x < sp ? il : ir;
-              for (let c = 0; c < 4; c++) dst.data[p + c] = d[p + c];
-              ib.data[p + 3] = 0;
-            }
-          }
-          body.getContext("2d").putImageData(ib, 0, 0);
-          legL.getContext("2d").putImageData(il, 0, 0);
-          legR.getContext("2d").putImageData(ir, 0, 0);
-          res = { kind: "legs", fork, bottom, body, legL, legR };
-        } else res = { kind: "hem", top: Math.round(bottom - h * 0.2), bottom };
       }
-    } catch (e) { res = null; }
-    legCache.set(cv, res);
-    return res;
-  }
-  /* 다리 하나를 갈라지는 곳(fork)을 축으로 기울이고(k: 발이 옮겨 가는 비율) 들어 올린다(lift: 무릎을 굽혀 줄어드는 비율) */
-  function drawLeg(g, leg, fork, k, lift) {
-    const sy = 1 - lift;
-    g.setTransform(1, 0, k, sy, -k * fork, fork * (1 - sy));
-    g.drawImage(leg, 0, 0);
-    g.setTransform(1, 0, 0, 1, 0, 0);
-  }
-  const frameCache = new WeakMap();
-  function legFrame(cv, mode, i) {
-    const L = legsOf(cv);
-    if (!L) return cv;
-    let m = frameCache.get(cv);
-    if (!m) frameCache.set(cv, (m = new Map()));
-    const key = mode + i;
-    let out = m.get(key);
-    if (out) return out;
-    out = canvas(cv.width, cv.height);
-    out.anchorX = cv.anchorX;
-    const g = out.getContext("2d");
-    g.imageSmoothingEnabled = true;
-    const ph = (i / 8) * TAU;
-    if (L.kind === "legs") {
-      let kL = 0;
-      let kR = 0;
-      let lL = 0;
-      let lR = 0;
-      const swing = mode === "run" ? 0.75 : 0.5;
-      const up = mode === "run" ? 0.3 : 0.16;
-      if (mode === "walk" || mode === "run") {
-        kL = swing * Math.sin(ph);
-        kR = -kL;
-        lL = Math.max(0, Math.cos(ph)) * up;
-        lR = Math.max(0, -Math.cos(ph)) * up;
-      } else if (mode === "jump") { kL = 0.3; kR = -0.32; lL = 0.3; lR = 0.12; }
-      else if (mode === "fall") { kL = -0.14; kR = 0.22; lL = 0.06; }
-      else if (mode === "climb") { lL = i % 2 ? 0.32 : 0.04; lR = i % 2 ? 0.04 : 0.32; }
-      g.drawImage(L.body, 0, 0);
-      drawLeg(g, L.legL, L.fork, kL, lL);
-      drawLeg(g, L.legR, L.fork, kR, lR);
-    } else {
-      /* 옷단 흔들기 */
-      const k = (mode === "run" ? 0.14 : mode === "walk" ? 0.08 : mode === "jump" ? -0.1 : 0) * (mode === "jump" ? 1 : Math.sin(ph));
-      g.drawImage(cv, 0, 0, cv.width, L.top, 0, 0, cv.width, L.top);
-      g.setTransform(1, 0, k, 1, -k * L.top, 0);
-      g.drawImage(cv, 0, L.top, cv.width, cv.height - L.top, 0, L.top, cv.width, cv.height - L.top);
-      g.setTransform(1, 0, 0, 1, 0, 0);
+      caps.forEach((c) => { maxR = Math.max(maxR, c[2], c[5]); });
+      if (n > 12) weapons.push({ mask, grip: [wp[0] - pl.L, wp[1] - pl.T] });
+    });
+    /* 몸통(머리·물건을 뺀 나머지)과, 물건을 떼면 비는 몸 위 자리(fill) */
+    const body = new Uint8Array(N);
+    for (let i = 0; i < N; i++) body[i] = alpha(i) > 20 && !(head && head[i]) && !any[i] ? 1 : 0;
+    const reach = Math.min(14, maxR + 3);
+    const DIRS = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    /* 캡슐 밖으로 삐져나온 물건 가장자리(칼날 테두리·창끝)도 물건에 붙인다: 물건 가까이에 있으면서
+       몸 안쪽(양쪽에 몸이 있는 곳)이 아닌 픽셀 */
+    const between = (i, isBody) => {
+      const x = i % w;
+      const y = (i - x) / w;
+      const hit = (dx, dy) => {
+        for (let k = 1; k <= 6; k++) {
+          const xx = x + dx * k;
+          const yy = y + dy * k;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) return false;
+          const j = yy * w + xx;
+          if (isBody[j]) return true;
+          if (alpha(j) < 20) return false;
+        }
+        return false;
+      };
+      return DIRS.some(([dx, dy]) => hit(dx, dy) && hit(-dx, -dy));
+    };
+    for (let pass = 0; pass < 3; pass++) {
+      const add = [];
+      for (let i = 0; i < N; i++) {
+        if (!body[i]) continue;
+        const x = i % w;
+        let owner = -1;
+        for (let k = 0; k < weapons.length && owner < 0; k++) {
+          const m = weapons[k].mask;
+          if ((x > 0 && m[i - 1]) || (x < w - 1 && m[i + 1]) || m[i - w] || m[i + w]) owner = k;
+        }
+        if (owner >= 0 && !between(i, body)) add.push([i, owner]);
+      }
+      add.forEach(([i, k]) => { weapons[k].mask[i] = 1; any[i] = 1; body[i] = 0; });
     }
-    m.set(key, out);
-    return out;
-  }
-  /* ── 자세 프레임 ──
-     참고 시트처럼 동작마다 뚜렷하게 다른 자세를 몇 장씩 만들어 끊어서 번갈아 보여 준다. 자세 한 장은
-     다리 프레임(legFrame) 위에서 몸을 가로 띠로 나눠 띠마다 옮겨 그린 것이다:
-     lean 위로 갈수록 앞으로 기울기, sq 발밑을 축으로 늘이기·누르기, trail 머리카락·망토가 뒤로 날리기, wave 물결 */
-  const WALK_FPS = 10;
-  const RUN_FPS = 14;
-  function warp(src, p) {
-    const W = src.width;
-    const H = src.height;
-    const padX = Math.ceil(H * 0.32);
-    const padT = Math.ceil(H * 0.2);
-    const out = canvas(W + padX * 2, H + padT);
-    const g = out.getContext("2d");
-    g.imageSmoothingEnabled = true;
-    const N = 20;
-    const sq = p.sq || 1;
+    /* 물건 옆에 떨어져 남은 작은 몸 조각(자루 끝·칼날 부스러기)은 물건으로 */
+    if (weapons.length) {
+      const seen = new Uint8Array(N);
+      const small = Math.max(30, N * 0.004);
+      for (let i = 0; i < N; i++) {
+        if (!body[i] || seen[i]) continue;
+        const comp = [i];
+        seen[i] = 1;
+        let owner = -1;
+        for (let q = 0; q < comp.length; q++) {
+          const j = comp[q];
+          const x = j % w;
+          for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+            const n = j + oy * w + ox;
+            if (x + ox < 0 || x + ox >= w || n < 0 || n >= N) continue;
+            if (owner < 0) for (let k = 0; k < weapons.length; k++) if (weapons[k].mask[n]) owner = k;
+            if (!body[n] || seen[n]) continue;
+            seen[n] = 1;
+            comp.push(n);
+          }
+        }
+        if (owner >= 0 && comp.length <= small) comp.forEach((j) => { weapons[owner].mask[j] = 1; any[j] = 1; body[j] = 0; });
+      }
+    }
+    const fillSet = new Uint8Array(N);
+    const fillList = [];
     for (let i = 0; i < N; i++) {
-      const y0 = (i * H) / N;
-      const hs = H / N;
-      const u = 1 - (y0 + hs / 2) / H;
-      const dx = (p.lean || 0) * H * u
-        - (p.trail || 0) * H * Math.pow(Math.max(0, u - 0.35) / 0.65, 1.6)
-        + (p.wave || 0) * H * Math.sin((p.phase || 0) + u * 6) * u;
-      g.drawImage(src, 0, y0, W, hs + 0.6, padX + dx, padT + H - (H - y0) * sq, W, hs * sq + 0.8);
+      if (!any[i]) continue;
+      const x = i % w;
+      const y = (i - x) / w;
+      const hit = (dx, dy) => {
+        for (let k = 1; k <= reach; k++) {
+          const xx = x + dx * k;
+          const yy = y + dy * k;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) return false;
+          const j = yy * w + xx;
+          if (body[j]) return true;
+          if (!any[j] && alpha(j) < 20) return false;
+        }
+        return false;
+      };
+      if (DIRS.some(([dx, dy]) => hit(dx, dy) && hit(-dx, -dy))) { fillSet[i] = 1; fillList.push(i); }
     }
-    out.anchorX = (src.anchorX === undefined ? W * 0.46 : src.anchorX) + padX;
-    return out;
+    /* 메우는 순서: 몸에 가까운 칸부터, 이미 아는 이웃의 평균 */
+    const known = body.slice();
+    const order = [];
+    let frontier = fillList.filter((i) => { const x = i % w; return (x > 0 && known[i - 1]) || (x < w - 1 && known[i + 1]) || known[i - w] || known[i + w]; });
+    const queued = new Uint8Array(N);
+    frontier.forEach((i) => { queued[i] = 1; });
+    while (frontier.length) {
+      const next = [];
+      frontier.forEach((i) => {
+        const x = i % w;
+        const nb = [];
+        for (const j of [i - 1, i + 1, i - w, i + w, i - w - 1, i - w + 1, i + w - 1, i + w + 1]) {
+          if (j < 0 || j >= N || Math.abs((j % w) - x) > 1) continue;
+          if (known[j]) nb.push(j);
+        }
+        order.push([i, nb]);
+      });
+      frontier.forEach((i) => { known[i] = 1; });
+      frontier.forEach((i) => {
+        const x = i % w;
+        for (const j of [i - 1, i + 1, i - w, i + w]) {
+          if (j < 0 || j >= N || Math.abs((j % w) - x) > 1 || !fillSet[j] || queued[j]) continue;
+          queued[j] = 1;
+          next.push(j);
+        }
+      });
+      frontier = next;
+    }
+    /* 다리: 몸통(메운 뒤)의 발밑에서 두 발을 찾고, 틈을 따라 올라가 갈라지는 곳까지 */
+    const solid = known;
+    const ax = src.anchorX === undefined ? w * 0.46 : src.anchorX;
+    const legs = legGeom(solid, w, h, ax);
+    rigMaskCache[sk0] = { w, h, head, neck, weapons, order, legs, ax };
+    return rigMaskCache[sk0];
   }
-  /* 공격 자세 [준비, 내지르기, 마무리]. dx·dy는 키 비율, ghost는 잔상 */
-  const LUNGE = ["run", 2];
-  const ATTACK_POSE = {
-    slash: [{ lean: -0.14, sq: 0.95, dx: -0.05, trail: -0.02 }, { lean: 0.2, sq: 0.97, sx: 1.1, dx: 0.12, trail: 0.08, ghost: 1, legs: LUNGE }, { lean: 0.08, dx: 0.06, trail: 0.03, legs: LUNGE }],
-    thrust: [{ lean: -0.08, sx: 0.9, dx: -0.1 }, { lean: 0.12, sx: 1.16, dx: 0.22, trail: 0.1, ghost: 1, legs: LUNGE }, { lean: 0.05, dx: 0.1, legs: LUNGE }],
-    smash: [{ lean: -0.18, sq: 1.14, sx: 0.9, dy: -0.06 }, { lean: 0.24, sq: 0.8, sx: 1.2, dx: 0.08, trail: 0.06, ghost: 1, legs: LUNGE }, { lean: 0.1, sq: 0.92, dx: 0.04, legs: LUNGE }],
-    twin: [{ lean: -0.08, dx: -0.03 }, { lean: 0.18, sx: 1.08, dx: 0.1, trail: 0.06, ghost: 1, legs: LUNGE }, { lean: -0.06, sx: 1.06, dx: 0.08, ghost: 1, legs: LUNGE }],
-    jab: [{ lean: -0.05, dx: -0.04 }, { lean: 0.14, sx: 1.08, dx: 0.14, ghost: 1, legs: LUNGE }, { lean: 0.04, dx: 0.05 }],
-    lash: [{ lean: -0.16, dx: -0.06, dy: -0.02 }, { lean: 0.14, sx: 1.06, dx: 0.06, trail: 0.05, legs: LUNGE }, { lean: 0.04 }],
-    sweep: [{ lean: -0.15, sq: 0.94, dx: -0.07 }, { lean: 0.22, sq: 0.92, sx: 1.12, dx: 0.05, trail: 0.08, ghost: 1, legs: LUNGE }, { lean: 0.1, dx: 0.02, legs: LUNGE }],
-    stab: [{ lean: -0.08, sq: 0.95, dx: -0.06 }, { lean: 0.16, sx: 1.1, dx: 0.16, ghost: 1, legs: LUNGE }, { lean: 0.05, dx: 0.06 }],
-    shoot: [{ lean: -0.04, dx: -0.02 }, { lean: -0.1, dx: -0.08, sx: 1.03 }, { lean: -0.03, dx: -0.03 }],
-    cast: [{ lean: -0.1, sq: 1.05, dy: -0.03, trail: -0.03 }, { lean: 0.12, sx: 1.06, dx: 0.06, trail: 0.05 }],
-    read: [{ lean: 0.06, sq: 0.97 }, { lean: 0.12, dx: 0.05 }],
-    raise: [{ lean: -0.06, sq: 1.08, dy: -0.05, trail: -0.04 }, { lean: 0.02, sq: 1.05, dy: -0.03 }]
+  function legGeom(S, w, h, ax) {
+    const op = (x, y) => x >= 0 && x < w && y >= 0 && y < h && S[y * w + x];
+    const xa = Math.max(0, Math.round(ax - w * 0.32));
+    const xb = Math.min(w - 1, Math.round(ax + w * 0.32));
+    let bottom = -1;
+    for (let y = h - 1; y >= 0 && bottom < 0; y--) for (let x = xa; x <= xb; x++) if (op(x, y)) { bottom = y; break; }
+    if (bottom < h * 0.5) return null;
+    const band = Math.round(bottom - h * 0.05);
+    const runs = [];
+    let cur = null;
+    for (let x = xa; x <= xb; x++) {
+      let on = false;
+      for (let y = band; y <= bottom && !on; y++) on = op(x, y);
+      if (on) { if (cur && x - cur.x1 <= 2) cur.x1 = x; else runs.push((cur = { x0: x, x1: x })); }
+    }
+    const feet = runs.filter((r) => r.x1 - r.x0 + 1 >= w * 0.035).sort((a, b) => Math.abs((a.x0 + a.x1) / 2 - ax) - Math.abs((b.x0 + b.x1) / 2 - ax)).slice(0, 2).sort((a, b) => a.x0 - b.x0);
+    if (feet.length < 2 || feet[1].x0 - feet[0].x1 < 1) return { hem: Math.round(bottom - h * 0.2), bottom };
+    const split = new Int32Array(h).fill(-1);
+    let sx = Math.round((feet[0].x1 + feet[1].x0) / 2);
+    for (let y = bottom; y > band; y--) split[y] = sx;
+    let fork = -1;
+    for (let y = band; y >= Math.round(bottom - h * 0.34); y--) {
+      let best = -1;
+      for (let k = 0; k <= 2 && best < 0; k++) { if (!op(sx + k, y)) best = sx + k; else if (!op(sx - k, y)) best = sx - k; }
+      if (best < 0) { fork = y + 1; break; }
+      sx = best;
+      split[y] = sx;
+    }
+    if (fork < 0 || bottom - fork < h * 0.06) return { hem: Math.round(bottom - h * 0.2), bottom };
+    /* 가랑이 위 몇 줄도 다리에 붙여(몸통에도 남긴다) 돌렸을 때 틈이 안 보이게 */
+    const top = Math.max(0, fork - Math.round(h * 0.03));
+    for (let y = top; y < fork; y++) split[y] = split[fork];
+    const pad = Math.round(w * 0.05);
+    const x0 = Math.max(0, feet[0].x0 - pad);
+    const x1 = Math.min(w - 1, feet[1].x1 + pad);
+    const hipX = [0, 0];
+    const hipN = [0, 0];
+    for (let y = fork; y < Math.min(bottom, fork + 4); y++) {
+      for (let x = x0; x <= x1; x++) if (op(x, y)) { const k = x < split[y] ? 0 : 1; hipX[k] += x; hipN[k]++; }
+    }
+    return {
+      fork, top, bottom, x0, x1, split,
+      hips: [[hipN[0] ? hipX[0] / hipN[0] : feet[0].x1, fork], [hipN[1] ? hipX[1] / hipN[1] : feet[1].x0, fork]],
+      knee: Math.round(fork + (bottom - fork) * 0.5)
+    };
+  }
+
+  /* 색칠한 그림에서 부위 그림을 오려 화면 키로 줄인다 */
+  const rigCache = new Map();
+  function rigOf(job, heightPx) {
+    const lk = H.lookOf(job);
+    const sk0 = srcKey(job, lk);
+    const base = bake(sk0, lk);
+    const M = rigMasks(sk0);
+    if (!base || !M) return M === false ? false : null;
+    const body0 = image(H.heroArtId(job));
+    const grow = lk.head && body0.naturalHeight ? M.h / body0.naturalHeight : 1;
+    const hpx = Math.max(8, Math.round(heightPx * grow));
+    const key = `${sk0}#${lookKey(lk)}@${hpx}`;
+    let R = rigCache.get(key);
+    if (R) return R;
+    const { w, h } = M;
+    const N = w * h;
+    const src = pixels(base, w, h);
+    if (!src) return false;
+    const layer = () => new ImageData(w, h);
+    const bodyL = layer();
+    const headL = layer();
+    const wps = M.weapons.map(() => layer());
+    const legs = M.legs && M.legs.split ? [layer(), layer(), layer(), layer()] : null;
+    const G = M.legs;
+    for (let i = 0; i < N; i++) {
+      const p = i * 4;
+      if (src[p + 3] === 0) continue;
+      let dst = bodyL;
+      if (M.head && M.head[i]) dst = headL;
+      else {
+        for (let k = 0; k < M.weapons.length; k++) if (M.weapons[k].mask[i]) { dst = wps[k]; break; }
+      }
+      for (let c = 0; c < 4; c++) dst.data[p + c] = src[p + c];
+    }
+    /* 물건을 뗀 자리 메우기 */
+    const bd = bodyL.data;
+    M.order.forEach(([i, nb]) => {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let n = 0;
+      nb.forEach((j) => { const q = j * 4; if (bd[q + 3] > 0) { r += bd[q]; g += bd[q + 1]; b += bd[q + 2]; n++; } });
+      if (!n) return;
+      const p = i * 4;
+      bd[p] = r / n;
+      bd[p + 1] = g / n;
+      bd[p + 2] = b / n;
+      bd[p + 3] = 255;
+    });
+    /* 다리 오리기: [왼 허벅지, 왼 정강이, 오른 허벅지, 오른 정강이] */
+    if (legs) {
+      for (let y = G.top; y <= G.bottom; y++) {
+        for (let x = G.x0; x <= G.x1; x++) {
+          const p = (y * w + x) * 4;
+          if (bd[p + 3] === 0) continue;
+          const side = x < G.split[y] ? 0 : 1;
+          const part = legs[side * 2 + (y < G.knee ? 0 : 1)];
+          for (let c = 0; c < 4; c++) part.data[p + c] = bd[p + c];
+          /* 무릎 이음새는 두 조각에 다 둔다 */
+          if (Math.abs(y - G.knee) <= 1) { const o = legs[side * 2 + (y < G.knee ? 1 : 0)]; for (let c = 0; c < 4; c++) o.data[p + c] = bd[p + c]; }
+          if (y >= G.fork) bd[p + 3] = 0;
+        }
+      }
+    }
+    const k = hpx / h;
+    const W = Math.max(1, Math.round(w * k));
+    const scale = (im) => {
+      const t = canvas(w, h);
+      t.getContext("2d").putImageData(im, 0, 0);
+      const o = canvas(W, hpx);
+      const g = o.getContext("2d");
+      g.imageSmoothingEnabled = true;
+      g.imageSmoothingQuality = "high";
+      g.drawImage(t, 0, 0, W, hpx);
+      return o;
+    };
+    const P = (pt) => [pt[0] * k, pt[1] * k];
+    R = {
+      W, H: hpx, k, ax: M.ax * k,
+      body: scale(bodyL),
+      head: M.head ? scale(headL) : null,
+      neck: M.neck ? P(M.neck) : [M.ax * k, hpx * 0.4],
+      weapons: M.weapons.map((wp, i) => ({ img: scale(wps[i]), grip: P(wp.grip) })),
+      legs: legs ? { parts: legs.map(scale), hips: G.hips.map(P), knee: G.knee * k, bottom: G.bottom * k, fork: G.fork * k } : null,
+      hem: G && !G.split ? { top: G.hem * k } : null
+    };
+    if (rigCache.size > 120) rigCache.clear();
+    rigCache.set(key, R);
+    return R;
+  }
+
+  /* ── 자세 ──
+     각도는 라디안. 다리: 허벅지 a(+면 발이 앞으로), 무릎 b(+면 정강이가 뒤로 접힘). 몸통 lean(+면 앞으로 숙임).
+     물건: wr(쥔 곳을 축으로 돌림, +면 시계 방향), wx·wy(키 비율만큼 옮김). 머리: hr, hy. ghost: 잔상 */
+  const TAU2 = Math.PI * 2;
+  const WALK_FPS = 9;
+  const RUN_FPS = 13;
+  const STANCE = { a: [0.12, -0.12], b: [0.05, 0.05] };
+  function legPose(aL, bL, aR, bR) { return { a: [aL, aR], b: [bL, bR] }; }
+  function cycle(i, n, A, B) {
+    const ph = (i / n) * TAU2;
+    const s = Math.sin(ph);
+    const c = Math.cos(ph);
+    return { ph, legs: legPose(A * s, B * Math.max(0, c), -A * s, B * Math.max(0, -c)) };
+  }
+  /* 무기 동작별 [준비, 내지르기, 마무리] */
+  const SWING = {
+    slash: [{ wr: -0.95, lean: -0.08 }, { wr: 0.55, lean: 0.14, step: 1, ghost: 1 }, { wr: 0.3, lean: 0.06, step: 1 }],
+    smash: [{ wr: -1.35, lean: -0.14, wy: -0.04 }, { wr: 0.75, lean: 0.2, crouch: 1, step: 1, ghost: 1 }, { wr: 0.55, lean: 0.12, crouch: 1, step: 1 }],
+    twin: [{ wr: -0.8, lean: -0.06 }, { wr: 0.6, lean: 0.12, step: 1, ghost: 1 }, { wr: -0.3, lean: 0.08, step: 1, ghost: 1 }],
+    thrust: [{ wx: -0.1, lean: -0.08 }, { wx: 0.22, lean: 0.12, step: 1, ghost: 1 }, { wx: 0.1, lean: 0.05, step: 1 }],
+    stab: [{ wx: -0.07, wr: -0.2, lean: -0.06 }, { wx: 0.16, wr: 0.15, lean: 0.14, step: 1, ghost: 1 }, { wx: 0.06, lean: 0.05 }],
+    lash: [{ wr: -1.1, wy: -0.03, lean: -0.1 }, { wr: 0.7, lean: 0.12, step: 1, ghost: 1 }, { wr: 0.35, lean: 0.05 }],
+    sweep: [{ wr: -1.2, lean: -0.12 }, { wr: 0.9, lean: 0.16, step: 1, ghost: 1 }, { wr: 0.6, lean: 0.1, step: 1 }],
+    jab: [{ lean: -0.06, wx: -0.03 }, { lean: 0.2, wx: 0.08, step: 1, ghost: 1 }, { lean: 0.06 }],
+    shoot: [{ lean: -0.03, wr: -0.06 }, { lean: -0.1, wx: -0.05, wr: -0.12 }, { lean: -0.04, wx: -0.02 }],
+    cast: [{ wr: -0.4, wy: -0.06, lean: -0.08, hr: -0.06 }, { wr: 0.35, wx: 0.05, lean: 0.12, step: 1 }],
+    read: [{ wy: -0.03, lean: 0.06, hr: 0.08 }, { wx: 0.04, lean: 0.1, hr: 0.04 }],
+    raise: [{ wy: -0.1, wr: -0.15, lean: -0.1, hr: -0.08 }, { wy: -0.06, wx: 0.05, lean: 0.04 }],
+    play: [{ wr: 0.08, lean: 0.06 }, { wr: -0.08, lean: -0.04 }]
   };
-  const LEGACY = { windup: ["slash", 0], strike: ["slash", 1], follow: ["slash", 2] };
+  const LEGACY = { windup: ["slash", 0], strike: ["slash", 1], follow: ["slash", 2], melee: ["slash", 1] };
+  /* 자세는 (동작, 몇째 장)마다 한 번만 만든다 */
+  const poseMemo = new Map();
+  const POSE_STEP = { walk: [WALK_FPS, 6], run: [RUN_FPS, 6], idle: [3.2, 4], climb: [6, 2], victory: [6, 2], play: [8, 2] };
   function poseOf(anim, t, f) {
-    const P = { key: anim, legs: null, lean: 0, sq: 1, sx: 1, dx: 0, dy: 0, trail: 0, wave: 0, phase: 0, ghost: 0 };
+    const st = POSE_STEP[anim] || (SWING[anim] || LEGACY[anim] ? null : POSE_STEP.idle);
+    const key = anim + "|" + (st ? Math.floor(t * st[0]) % st[1] : f || 0);
+    let P = poseMemo.get(key);
+    if (!P) { P = makePose(anim, t, f); poseMemo.set(key, P); }
+    return P;
+  }
+  function makePose(anim, t, f) {
+    const P = { key: anim, legs: STANCE, lean: 0, dy: 0, sy: 1, hr: 0, hy: 0, wr: 0, wx: 0, wy: 0, ghost: 0, hem: 0 };
     if (LEGACY[anim]) { f = LEGACY[anim][1]; anim = LEGACY[anim][0]; }
-    if (ATTACK_POSE[anim]) {
-      const list = ATTACK_POSE[anim];
-      const k = Math.min(list.length - 1, f || 0);
-      return Object.assign(P, list[k], { key: anim + k });
+    if (SWING[anim]) {
+      const list = SWING[anim];
+      const i = anim === "play" ? Math.floor(t * 8) % 2 : Math.min(list.length - 1, f || 0);
+      const S = list[i];
+      Object.assign(P, S, { key: anim + i });
+      if (S.step) P.legs = S.crouch ? legPose(0.55, 0.75, -0.35, 0.3) : legPose(0.42, 0.18, -0.38, 0.22);
+      else P.legs = legPose(0.2, 0.1, -0.15, 0.08);
+      return P;
     }
     switch (anim) {
       case "walk": {
         const i = Math.floor(t * WALK_FPS) % 6;
-        const ph = (i / 6) * TAU;
-        return Object.assign(P, { key: "walk" + i, legs: ["walk", Math.round((i * 8) / 6) % 8], lean: 0.05, sq: 1 + 0.035 * Math.cos(2 * ph), dy: -0.045 * Math.abs(Math.cos(ph)), trail: 0.025 + 0.015 * Math.sin(ph), wave: 0.012, phase: ph });
+        const C = cycle(i, 6, 0.42, 0.75);
+        return Object.assign(P, { key: "walk" + i, legs: C.legs, lean: 0.05, wr: 0.07 * Math.sin(C.ph), hr: 0.025 * Math.sin(C.ph * 2), hy: 0.006 * Math.cos(C.ph * 2), hem: 0.1 * Math.sin(C.ph) });
       }
       case "run": {
         const i = Math.floor(t * RUN_FPS) % 6;
-        const ph = (i / 6) * TAU;
-        return Object.assign(P, { key: "run" + i, legs: ["run", Math.round((i * 8) / 6) % 8], lean: 0.17, sq: 1 + 0.05 * Math.cos(2 * ph), dy: -0.07 * Math.abs(Math.cos(ph)), trail: 0.08 + 0.025 * Math.sin(ph * 2), wave: 0.02, phase: ph });
+        const C = cycle(i, 6, 0.85, 1.45);
+        return Object.assign(P, { key: "run" + i, legs: C.legs, lean: 0.2, wr: -0.18 + 0.1 * Math.sin(C.ph), hr: 0.04, hy: 0.01 * Math.cos(C.ph * 2), hem: 0.16 * Math.sin(C.ph), dy: -0.025 * Math.abs(Math.sin(C.ph)) });
       }
-      case "jump": return Object.assign(P, { key: "jump", legs: ["jump", 0], sq: 1.1, sx: 0.92, lean: 0.06, trail: -0.03 });
-      case "fall": return Object.assign(P, { key: "fall", legs: ["fall", 0], sq: 1.04, lean: -0.03, trail: -0.07 });
-      case "land": return Object.assign(P, { key: "land", legs: ["jump", 0], sq: 0.8, sx: 1.16, lean: 0.04 });
-      case "climb": { const i = Math.floor(t * 6) % 2; return Object.assign(P, { key: "climb" + i, legs: ["climb", i], dy: -0.02 * i }); }
-      case "hurt": return Object.assign(P, { key: "hurt", lean: -0.16, dx: -0.06, sq: 0.95, trail: -0.04 });
-      case "play": { const i = Math.floor(t * 8) % 4; return Object.assign(P, { key: "play" + i, lean: [0.06, 0, -0.06, 0][i], sq: [1, 1.03, 1, 0.98][i], dy: -0.02 * (i % 2) }); }
-      case "victory": { const i = Math.floor(t * 6) % 2; return Object.assign(P, { key: "victory" + i, sq: i ? 1.06 : 0.96, dy: i ? -0.05 : 0 }); }
+      case "jump": return Object.assign(P, { key: "jump", legs: legPose(0.75, 1.3, -0.25, 0.75), lean: -0.04, wr: -0.3, wy: -0.03, hr: -0.05, hem: -0.12 });
+      case "fall": return Object.assign(P, { key: "fall", legs: legPose(0.3, 0.35, -0.4, 0.55), lean: 0.02, wr: -0.15, hy: 0.01, hem: 0.08 });
+      case "land": return Object.assign(P, { key: "land", legs: legPose(0.55, 1.1, -0.5, 1.0), lean: 0.14, wr: 0.2, hy: 0.02, hr: 0.06 });
+      case "climb": { const i = Math.floor(t * 6) % 2; return Object.assign(P, { key: "climb" + i, legs: i ? legPose(0.7, 1.3, -0.05, 0.1) : legPose(-0.05, 0.1, 0.7, 1.3) }); }
+      case "hurt": return Object.assign(P, { key: "hurt", legs: legPose(-0.2, 0.2, -0.35, 0.3), lean: -0.22, hr: -0.15, wr: 0.35 });
+      case "victory": { const i = Math.floor(t * 6) % 2; return Object.assign(P, { key: "victory" + i, wy: i ? -0.08 : -0.03, wr: -0.3, hr: -0.08, dy: i ? -0.04 : 0 }); }
       default: {
         /* 대기: 숨쉬기 네 장 */
-        const i = Math.floor(t * 3) % 4;
-        return Object.assign(P, { key: "idle" + i, sq: [1, 1.015, 1.028, 1.015][i], lean: [0, 0.005, 0.01, 0.005][i], wave: 0.006, phase: (i * Math.PI) / 2 });
+        const i = Math.floor(t * 3.2) % 4;
+        return Object.assign(P, { key: "idle" + i, sy: [1, 1.012, 1.022, 1.012][i], hy: [0, -0.004, -0.008, -0.004][i], wr: [0, 0.02, 0.035, 0.02][i] });
       }
     }
   }
-  const poseCache = new WeakMap();
-  function poseFrame(base, P) {
-    let m = poseCache.get(base);
-    if (!m) poseCache.set(base, (m = new Map()));
+
+  /* 2차원 변환 [a, b, c, d, e, f] */
+  const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+  const rotAt = (x, y, r) => { const c = Math.cos(r); const s = Math.sin(r); return [c, s, -s, c, x - c * x + s * y, y - s * x - c * y]; };
+  const move = (x, y) => [1, 0, 0, 1, x, y];
+  const scaleAt = (x, y, sx, sy) => [sx, 0, 0, sy, x - sx * x, y - sy * y];
+  const apply = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+
+  /* 자세 하나를 그린 프레임. 원점은 그림의 왼쪽 위(여백 포함), anchorX·발밑이 땅 */
+  const frameCache = new WeakMap();
+  /* 새 프레임은 화면 한 번 그릴 때 두 장까지만 만든다(여럿이 처음 나타날 때 끊기지 않게). 못 만들면 null */
+  let budgetAt = 0;
+  let budget = 0;
+  function frameOf(R, P, force) {
+    let m = frameCache.get(R);
+    if (!m) frameCache.set(R, (m = new Map()));
     let fr = m.get(P.key);
-    if (!fr) {
-      const src = P.legs ? legFrame(base, P.legs[0], P.legs[1]) : base;
-      fr = warp(src, P);
-      m.set(P.key, fr);
+    if (fr) return fr;
+    const now = clock();
+    if (now - budgetAt > 0.012) { budgetAt = now; budget = 2; }
+    if (!force && budget <= 0) return null;
+    budget--;
+    const padX = Math.ceil(R.H * 0.55);
+    const padT = Math.ceil(R.H * 0.45);
+    const out = canvas(R.W + padX * 2, R.H + padT);
+    const g = out.getContext("2d");
+    g.imageSmoothingEnabled = true;
+    const H0 = R.H;
+    /* 다리: 허벅지는 엉덩이, 정강이는 무릎을 축으로 */
+    const legM = [];
+    let footY = 0;
+    if (R.legs) {
+      const L = R.legs;
+      for (let s = 0; s < 2; s++) {
+        const hip = L.hips[s];
+        const th = rotAt(hip[0], hip[1], -P.legs.a[s]);
+        const kneePt = [hip[0], L.knee];
+        const kneeW = apply(th, kneePt[0], kneePt[1]);
+        const sh = mul(th, rotAt(kneePt[0], kneePt[1], P.legs.b[s]));
+        legM.push([th, sh]);
+        const foot = apply(sh, hip[0], L.bottom);
+        footY = Math.max(footY, foot[1], kneeW[1]);
+      }
     }
+    /* 발이 땅에 닿게 전체를 내린다(다리가 벌어지거나 굽으면 몸이 낮아진다) */
+    const drop = R.legs ? R.legs.bottom - footY : 0;
+    const base = move(padX, padT + drop + P.dy * H0);
+    const pelvis = R.legs ? [(R.legs.hips[0][0] + R.legs.hips[1][0]) / 2, R.legs.fork] : [R.ax, H0 * 0.78];
+    const bodyM = mul(base, mul(rotAt(pelvis[0], pelvis[1], P.lean), scaleAt(pelvis[0], pelvis[1], 1, P.sy)));
+    const put = (img, M) => { g.setTransform(M[0], M[1], M[2], M[3], M[4], M[5]); g.drawImage(img, 0, 0); };
+    if (R.legs) {
+      /* 뒤에 있는 다리(발이 뒤로 간 쪽)를 먼저 */
+      const order = P.legs.a[0] < P.legs.a[1] ? [0, 1] : [1, 0];
+      order.forEach((s) => {
+        put(R.legs.parts[s * 2 + 1], mul(base, legM[s][1]));
+        put(R.legs.parts[s * 2], mul(base, legM[s][0]));
+      });
+    }
+    if (R.hem && P.hem) {
+      /* 긴 옷: 옷단을 흔든다 */
+      const top = R.hem.top;
+      g.setTransform(bodyM[0], bodyM[1], bodyM[2], bodyM[3], bodyM[4], bodyM[5]);
+      g.drawImage(R.body, 0, 0, R.W, top, 0, 0, R.W, top);
+      const sk = mul(bodyM, [1, 0, P.hem, 1, -P.hem * top, 0]);
+      g.setTransform(sk[0], sk[1], sk[2], sk[3], sk[4], sk[5]);
+      g.drawImage(R.body, 0, top, R.W, R.H - top, 0, top, R.W, R.H - top);
+    } else put(R.body, bodyM);
+    const headM = mul(bodyM, mul(move(0, P.hy * H0), rotAt(R.neck[0], R.neck[1], P.hr)));
+    if (R.head) put(R.head, headM);
+    R.weapons.forEach((wp, i) => {
+      /* 둘째 물건(왼손)은 반대로 조금 덜 돈다 */
+      const k = i ? -0.6 : 1;
+      const M = mul(bodyM, mul(move(P.wx * H0 * (i ? 0.5 : 1), P.wy * H0), rotAt(wp.grip[0], wp.grip[1], P.wr * k)));
+      put(wp.img, M);
+    });
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    /* 덧그림용: 발밑 기준 좌표로 바꾼 몸통·머리 변환 */
+    const ax = R.ax + padX;
+    const toLocal = move(-ax, -out.height);
+    const bodyL = mul(toLocal, mul(bodyM, move(R.ax, R.H)));
+    const headL = mul(toLocal, mul(headM, move(R.ax, R.H)));
+    /* 빈 여백을 잘라 그리는 양을 줄인다(발밑은 그대로 아래 끝) */
+    fr = out;
+    try {
+      const d = g.getImageData(0, 0, out.width, out.height).data;
+      let x0 = out.width;
+      let x1 = -1;
+      let y0 = out.height;
+      for (let y = 0; y < out.height; y++) {
+        for (let x = 0; x < out.width; x++) {
+          if (d[(y * out.width + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; }
+        }
+      }
+      if (x1 >= x0) {
+        x0 = Math.max(0, x0 - 1);
+        y0 = Math.max(0, y0 - 1);
+        fr = canvas(x1 - x0 + 2, out.height - y0);
+        fr.getContext("2d").drawImage(out, -x0, -y0);
+        fr.anchorX = ax - x0;
+      }
+    } catch (e) { /* 그대로 둔다 */ }
+    if (fr === out) fr.anchorX = ax;
+    fr.bodyM = bodyL;
+    fr.headM = headL;
+    m.set(P.key, fr);
     return fr;
   }
 
@@ -1165,39 +1452,70 @@
   }
 
   /* 발밑(x, y)에 그린다. o: dir(1 오른쪽, -1 왼쪽), anim, t, f, h(키 px), alpha, tint, time(멈춘 시각) */
+  /* 직업·키마다 준비한 것(그림, 부위, 덧그림 기준점)을 한 번만 찾는다 */
+  const ready2 = new Map();
+  function prep(job, hh) {
+    const key = job.id + "@" + Math.round(hh);
+    let r = ready2.get(key);
+    if (r) return r;
+    const base = sprite(job, hh);
+    if (!base) return null;
+    const R = rigOf(job, hh);
+    if (R === null) return { base, R: null, pending: true };
+    const lk = H.lookOf(job);
+    r = { base, R, A: anchors(analyze(srcKey(job, lk)), base), headDeco: !!(lk.horns || lk.ears || lk.crown || lk.halo), backDeco: !!(lk.aura || lk.wings) };
+    if (ready2.size > 400) ready2.clear();
+    ready2.set(key, r);
+    return r;
+  }
   function draw(ctx, job, x, y, o) {
     const lk = H.lookOf(job);
     const hh = o.h * lk.size;
-    const base = sprite(job, hh);
-    if (!base) return drawDoll(ctx, job, x, y, o);
+    const pr = o.still ? null : prep(job, hh);
+    const base = o.still ? sprite(job, hh) : pr && pr.base;
+    if (base && o.still) {
+      /* 운명 뽑기의 빠른 깜빡임처럼 잠깐만 보이는 그림은 부위로 나누지 않고 그대로 */
+      ctx.save();
+      ctx.translate(Math.round(x), Math.round(y));
+      ctx.scale((o.dir || 1) * lk.wide, 1);
+      if (o.alpha !== undefined) ctx.globalAlpha = o.alpha;
+      ctx.drawImage(base, -base.anchorX, -base.height);
+      ctx.restore();
+      return { w: base.width, h: base.height, hand: [x, y - base.height * 0.45] };
+    }
+    const R = pr && pr.R;
+    if (!base || !R) return drawDoll(ctx, job, x, y, o);
     const P = poseOf(o.anim, o.t || 0, o.f || 0);
-    const fr = poseFrame(base, P);
+    /* 이번에 못 만든 프레임은 이미 있는 대기 프레임으로 대신한다 */
+    const fr = frameOf(R, P, o.time !== undefined) || frameOf(R, poseOf("idle", 0, 0), true);
     const T = o.time !== undefined ? o.time : clock();
-    let dy = P.dy;
-    if (lk.float) dy -= 0.03 + Math.sin(T * 2.4) * 0.015;
+    let dy = 0;
+    if (lk.float) dy -= (0.03 + Math.sin(T * 2.4) * 0.015) * hh;
     const dir = o.dir || 1;
-    const A = anchors(analyze(srcKey(job, lk)), base);
+    const A = pr.A;
     const alpha = (o.alpha === undefined ? 1 : o.alpha) * (lk.ghost ? 0.6 : 1);
     const fx = -fr.anchorX;
     const fy = -fr.height;
-    /* 덧그림(날개·기운·뿔…)도 몸과 같이 기울고 눌리게 */
-    const bend = () => ctx.transform(1, 0, -P.lean, P.sq, 0, 0);
+    const at = (M) => ctx.transform(M[0], M[1], M[2], M[3], M[4], M[5]);
     ctx.save();
-    ctx.translate(Math.round(x + P.dx * hh * dir), Math.round(y + dy * hh));
-    ctx.scale(dir * P.sx * lk.wide, 1);
+    ctx.translate(Math.round(x), Math.round(y + dy));
+    ctx.scale(dir * lk.wide, 1);
     ctx.imageSmoothingEnabled = true;
     ctx.globalAlpha = alpha;
-    ctx.save();
-    bend();
-    if (lk.aura) aura(ctx, lk.aura, A, T, false);
-    if (lk.wings) wings(ctx, lk.wings, A, T);
+    /* 몸 뒤: 기운·날개(몸통을 따라 기운다) */
+    if (pr.backDeco) {
+      ctx.save();
+      at(fr.bodyM);
+      if (lk.aura) aura(ctx, lk.aura, A, T, false);
+      if (lk.wings) wings(ctx, lk.wings, A, T);
+      ctx.restore();
+    }
     if (lk.rarity >= 3) {
-      const gl = glow(base, F.sprites.RARITY_COLOR[lk.rarity]);
+      const gl = glow(fr, F.sprites.RARITY_COLOR[lk.rarity]);
       ctx.globalAlpha = alpha * (0.45 + 0.12 * (lk.rarity - 3) + Math.sin(T * 3) * 0.2);
-      ctx.drawImage(gl, -A.ax - gl.pad, -A.H - gl.pad);
+      ctx.drawImage(gl, fx - gl.pad, fy - gl.pad);
       ctx.globalAlpha = alpha;
     }
-    ctx.restore();
     if (lk.clone === "twin") {
       const b = Math.sin(T * 2.6 + 1.5) * A.H * 0.012;
       ctx.drawImage(tinted(fr, "#1a1430", 0.3), fx - A.W * 0.3, fy * 0.94 + b, fr.width * 0.94, fr.height * 0.94);
@@ -1206,10 +1524,10 @@
       ctx.drawImage(tinted(fr, "#140a24", 0.88), fx - A.W * (0.22 + Math.sin(T * 1.6) * 0.05), fy);
       ctx.globalAlpha = alpha;
     }
-    /* 잔상: 달리기와 공격이 맞는 순간 */
+    /* 잔상: 공격이 맞는 순간 */
     if (P.ghost) {
       const gh = tinted(fr, "#c8d4ff", 0.55);
-      [[0.3, 0.14], [0.15, 0.28]].forEach(([a, off]) => {
+      [[0.32, 0.1], [0.16, 0.2]].forEach(([a, off]) => {
         ctx.globalAlpha = alpha * a;
         ctx.drawImage(gh, fx - off * hh, fy);
       });
@@ -1221,12 +1539,22 @@
       ctx.drawImage(tinted(fr, o.tint, 1), fx, fy);
       ctx.globalAlpha = alpha;
     }
-    bend();
-    if (lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
-    if (lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
-    if (lk.crown) crown(ctx, A);
-    if (lk.halo) halo(ctx, A, T);
-    if (lk.aura) aura(ctx, lk.aura, A, T, true);
+    /* 머리 덧그림(뿔·귀·왕관·고리)은 머리를 따라 */
+    if (pr.headDeco) {
+      ctx.save();
+      at(fr.headM);
+      if (lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
+      if (lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
+      if (lk.crown) crown(ctx, A);
+      if (lk.halo) halo(ctx, A, T);
+      ctx.restore();
+    }
+    if (lk.aura) {
+      ctx.save();
+      at(fr.bodyM);
+      aura(ctx, lk.aura, A, T, true);
+      ctx.restore();
+    }
     ctx.restore();
     return { w: base.width, h: base.height, hand: [x + dir * base.width * 0.36, y - base.height * 0.45] };
   }
@@ -1253,12 +1581,21 @@
     const hh = 112;
     const cv = canvas(hh * 1.3, hh * 1.2);
     const lk = H.lookOf(job);
-    draw(cv.getContext("2d"), job, cv.width * 0.56, cv.height - 2, { dir: 1, anim: "idle", t: 0, time: 0.6, h: hh / lk.size });
+    draw(cv.getContext("2d"), job, cv.width * 0.56, cv.height - 2, { dir: 1, anim: "idle", t: 0, time: 0.6, h: hh / lk.size, still: true });
     const out = cv.toDataURL("image/png");
     if (thumbs.size > 600) thumbs.clear();
     thumbs.set(job.id, out);
     return out;
   }
 
-  F.heroArt = { preload, sprite, draw, url, image, analyze, headOf, compose };
+  /* 장면에 들어설 때 미리: 부위 나누기와 대기·걷기 프레임 */
+  function warm(job, h) {
+    const lk = H.lookOf(job);
+    const pr = prep(job, h * lk.size);
+    if (!pr || !pr.R) return;
+    frameOf(pr.R, poseOf("idle", 0, 0), true);
+    for (let i = 0; i < 6; i++) frameOf(pr.R, poseOf("walk", (i + 0.5) / WALK_FPS, 0), true);
+  }
+
+  F.heroArt = { warm, preload, sprite, draw, url, image, analyze, headOf, compose, rigOf, frameOf };
 })(typeof window !== "undefined" ? window : globalThis);
