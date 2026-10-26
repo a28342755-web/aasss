@@ -1706,6 +1706,55 @@
     return { w: base.width, h: base.height, hand: [x + dir * base.width * 0.36, y - base.height * 0.45] };
   }
 
+  /* 움직이지 않는 그림: 직업 그림(색·머리) 그대로에 날개·기운·뿔·귀·왕관·고리와 등급 빛을 얹는다.
+     도감·운명 뽑기의 프로필 그림과 게임 화면이 같은 모습이다. o: dir, h, alpha, tint, tintA */
+  const STILL_T = 0.6;
+  const stillA = new WeakMap();
+  function drawStill(ctx, job, x, y, o) {
+    const lk = H.lookOf(job);
+    const hh = o.h * lk.size;
+    const base = sprite(job, hh);
+    if (!base) return drawDoll(ctx, job, x, y, o);
+    let A = stillA.get(base);
+    if (!A) { A = anchors(analyze(srcKey(job, lk)), base); stillA.set(base, A); }
+    const T = STILL_T;
+    const alpha = (o.alpha === undefined ? 1 : o.alpha) * (lk.ghost ? 0.6 : 1);
+    const fx = -base.anchorX;
+    const fy = -base.height;
+    ctx.save();
+    ctx.translate(Math.round(x), Math.round(y - (lk.float ? 0.03 * hh : 0)));
+    ctx.scale((o.dir || 1) * lk.wide, 1);
+    ctx.imageSmoothingEnabled = true;
+    ctx.globalAlpha = alpha;
+    if (lk.aura) aura(ctx, lk.aura, A, T, false);
+    if (lk.wings) wings(ctx, lk.wings, A, T);
+    if (lk.rarity >= 3) {
+      const gl = glow(base, F.sprites.RARITY_COLOR[lk.rarity]);
+      ctx.globalAlpha = alpha * (0.5 + 0.12 * (lk.rarity - 3));
+      ctx.drawImage(gl, fx - gl.pad, fy - gl.pad);
+      ctx.globalAlpha = alpha;
+    }
+    if (lk.clone === "twin") ctx.drawImage(tinted(base, "#1a1430", 0.3), fx - A.W * 0.3, fy * 0.94, base.width * 0.94, base.height * 0.94);
+    else if (lk.clone === "shadow") {
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.drawImage(tinted(base, "#140a24", 0.88), fx - A.W * 0.22, fy);
+      ctx.globalAlpha = alpha;
+    }
+    ctx.drawImage(lk.ghost ? tinted(base, "#a8dcff", 0.3) : base, fx, fy);
+    if (o.tint) {
+      ctx.globalAlpha = alpha * (o.tintA || 0.5);
+      ctx.drawImage(tinted(base, o.tint, 1), fx, fy);
+      ctx.globalAlpha = alpha;
+    }
+    if (lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
+    if (lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
+    if (lk.crown) crown(ctx, A);
+    if (lk.halo) halo(ctx, A, T);
+    if (lk.aura) aura(ctx, lk.aura, A, T, true);
+    ctx.restore();
+    return { w: base.width, h: base.height, hand: [x + (o.dir || 1) * base.width * 0.36, y - base.height * 0.45] };
+  }
+
   /* 그림을 아직 못 읽었거나 없으면 예전 도트 인형으로 대신한다 */
   function drawDoll(ctx, job, x, y, o) {
     const k = Math.max(1, Math.round((o.h / 46) * 2) / 2);
@@ -1728,7 +1777,7 @@
     const hh = 112;
     const cv = canvas(hh * 1.3, hh * 1.2);
     const lk = H.lookOf(job);
-    draw(cv.getContext("2d"), job, cv.width * 0.56, cv.height - 2, { dir: 1, anim: "idle", t: 0, time: 0.6, h: hh / lk.size, still: true });
+    drawStill(cv.getContext("2d"), job, cv.width * 0.56, cv.height - 2, { dir: 1, h: hh / lk.size });
     const out = cv.toDataURL("image/png");
     if (thumbs.size > 600) thumbs.clear();
     thumbs.set(job.id, out);
@@ -1744,5 +1793,5 @@
     for (let i = 0; i < 6; i++) frameOf(pr.R, poseOf("walk", (i + 0.5) / WALK_FPS, 0), true);
   }
 
-  F.heroArt = { warm, preload, sprite, draw, url, image, analyze, headOf, compose, rigOf, frameOf };
+  F.heroArt = { warm, preload, sprite, draw, drawStill, url, image, analyze, headOf, compose, rigOf, frameOf };
 })(typeof window !== "undefined" ? window : globalThis);

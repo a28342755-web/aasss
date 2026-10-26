@@ -332,7 +332,7 @@
     /* 타이틀: 무작위 직업 일곱이 한 줄로 서 있고, 가끔 한 명씩 다른 운명으로 바뀐다 */
     enter() {
       this.parade = [];
-      for (let i = 0; i < 7; i++) this.parade.push({ job: E.randomJob(), t: Math.random() * 3, flash: 0 });
+      for (let i = 0; i < 7; i++) this.parade.push({ job: E.randomJob(), flash: 0 });
       this.swapT = 2400;
       this.menu();
     },
@@ -361,7 +361,7 @@
     },
     update(dt) {
       this.swapT -= dt;
-      this.parade.forEach((w) => { w.t += dt / 1000; w.flash = Math.max(0, w.flash - dt / 1000); });
+      this.parade.forEach((w) => { w.flash = Math.max(0, w.flash - dt / 1000); });
       if (this.swapT <= 0) {
         this.swapT = 2200 + Math.random() * 1200;
         const w = this.parade[Math.floor(Math.random() * this.parade.length)];
@@ -378,7 +378,7 @@
       this.parade.forEach((w, i) => {
         const x = Math.round(gap * (i + 0.5));
         shadow(x, ground + 3, hh * 0.2, hh * 0.05);
-        HA.draw(ctx, w.job, x, ground + 4, { dir: i < this.parade.length / 2 ? 1 : -1, anim: "idle", t: w.t, h: hh, still: w.flash > 0 });
+        HA.drawStill(ctx, w.job, x, ground + 4, { dir: i < this.parade.length / 2 ? 1 : -1, h: hh });
         if (w.flash > 0) {
           ctx.save();
           ctx.globalCompositeOperation = "lighter";
@@ -505,7 +505,7 @@
           `마을 메뉴에서 던전으로 내려가거나 상점·여관·길드를 고를 수 있다. 쓰러지면 이 운명은 끝난다.`]);
       });
     },
-    /* ── 캐릭터 시트: 뽑힌 직업이 기본 공격·기술·궁극기를 차례로 보여 준다 ── */
+    /* ── 캐릭터 시트: 뽑힌 직업의 기본 공격·기술·궁극기 효과를 차례로 보여 준다(캐릭터는 움직이지 않는다) ── */
     DEMO: [["idle", "대기", 1.2], ["attack", "기본 공격", 1.3], ["skill", "기술", 1.8], ["ult", "궁극기", 3.4]],
     heroH() {
       return Math.round(Math.min(VH * 0.27, 180, VW * 0.4));
@@ -571,23 +571,6 @@
       this.hitT = Math.max(0, (this.hitT || 0) - dt / 1000);
       if (this.demoFake && this.demoFake.flash) this.demoFake.flash.t -= dt / 1000;
     },
-    demoPose() {
-      const d = this.demo;
-      const sp = this.demoSpot();
-      if (!d || d.t < 0) return { x: sp.hx, y: sp.gy, anim: "idle", t: 0, f: 0 };
-      const caster = sp.reach.caster;
-      switch (this.DEMO[d.step][0]) {
-        case "idle": return { x: sp.hx, y: sp.gy, anim: "idle", t: d.t, f: 0 };
-        case "attack": case "skill": {
-          const s = d.t;
-          const mo = sp.reach.motion === "melee" ? "slash" : sp.reach.motion;
-          if (s > 0.6) return { x: sp.hx, y: sp.gy, anim: "idle", t: s, f: 0 };
-          if (caster) return { x: sp.hx, y: sp.gy, anim: mo, t: s, f: s < 0.16 ? 0 : 1 };
-          return { x: sp.hx, y: sp.gy, anim: mo, t: s, f: s < 0.13 ? 0 : s < 0.28 ? 1 : 2 };
-        }
-        default: return { x: sp.hx, y: sp.gy, anim: d.t < 2.2 ? "cast" : "idle", t: d.t, f: d.t < 0.6 ? 0 : 1 };
-      }
-    },
     update(dt) {
       const r = G.roll || {};
       this.demoUpdate(dt);
@@ -628,7 +611,9 @@
         const hh = this.heroH();
         if (rolling || !this.demo) {
           shadow(VW / 2, gy + 2, hh * 0.22, hh * 0.05, 0.5);
-          HA.draw(ctx, this.shown, VW / 2, gy + 4, { dir: 1, anim: "idle", t: t / 1000, h: hh, alpha: rolling ? 0.8 : 1, still: rolling });
+          /* 빠르게 바뀌는 동안은 덧그림 없이 가볍게 */
+          if (rolling) HA.draw(ctx, this.shown, VW / 2, gy + 4, { dir: 1, h: hh, alpha: 0.8, still: true });
+          else HA.drawStill(ctx, this.shown, VW / 2, gy + 4, { dir: 1, h: hh });
         } else {
           const sp = this.demoSpot();
           /* 허수아비 */
@@ -636,9 +621,8 @@
           shadow(sp.dx, gy + 2, dum.width * 0.3, 4 * Z, 0.4);
           drawSprite(dum, sp.dx - dum.width / 2, gy + 4 - dum.height, 1);
           if (this.hitT > 0) drawSprite(S.silhouette(dum, "#ffffff"), sp.dx - dum.width / 2, gy + 4 - dum.height, Math.min(1, this.hitT * 6));
-          const pose = this.demoPose();
-          shadow(pose.x, gy + 2, hh * 0.2, hh * 0.05, 0.5);
-          HA.draw(ctx, this.shown, pose.x, pose.y + 4, { dir: 1, anim: pose.anim, t: pose.t, f: pose.f, h: hh });
+          shadow(sp.hx, gy + 2, hh * 0.2, hh * 0.05, 0.5);
+          HA.drawStill(ctx, this.shown, sp.hx, gy + 4, { dir: 1, h: hh });
           Sp.draw(ctx);
           Sp.drawNumbers(ctx);
           const fk = this.demoFake;
@@ -1255,25 +1239,22 @@
     }
   };
 
-  /* 주인공 한 명 그리기: 발밑 그림자, 그림, 보호막 테두리, 등급 반짝이 */
-  function drawHeroAt(job, x, y, pose, o) {
-    const hh = HERO_PX();
-    shadow(x, y + Z, hh * 0.2, hh * 0.05, 0.32);
-    HA.draw(ctx, job, x, y + Z, {
-      dir: 1, anim: pose.anim, f: pose.f, t: pose.t, alt: pose.alt, h: hh, alpha: o && o.alpha !== undefined ? o.alpha : 1,
-      tint: o && o.hurt ? "#ff4050" : null, tintA: 0.35
-    });
-    if (o && o.barrier) {
+  /* 직업 한 명 그리기: 발밑 그림자와 프로필 그림 그대로(움직이지 않는다), 보호막 테두리, 등급 반짝이 */
+  function drawHeroAt(job, x, y, h, o) {
+    const opt = o || {};
+    shadow(x, y + Z, h * 0.2, h * 0.05, 0.32 * (opt.alpha === undefined ? 1 : opt.alpha));
+    HA.drawStill(ctx, job, x, y + Z, { dir: opt.dir || 1, h, alpha: opt.alpha, tint: opt.hurt ? "#ff4050" : null, tintA: 0.4 });
+    if (opt.barrier) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.strokeStyle = `rgba(150,220,255,${0.25 + 0.1 * Math.sin(G.t / 150)})`;
+      ctx.strokeStyle = "rgba(150,220,255,0.3)";
       ctx.lineWidth = Math.max(1, Z);
       ctx.beginPath();
-      ctx.ellipse(x, y - 21 * Z, 15 * Z, 24 * Z, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y - h * 0.46, h * 0.3, h * 0.5, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
-    if (job.rarity >= 3 && Math.random() < 0.12) Sp.spark(x + rnd(-10, 10) * Z, y - rnd(0, 6) * Z, { vy: -rnd(20, 50) * Z, life: 700, col: S.RARITY_COLOR[job.rarity], glow: 0.7, size: 1 });
+    if (job.rarity >= 3 && opt.alpha !== 0 && Math.random() < 0.12) Sp.spark(x + rnd(-0.14, 0.14) * h, y - rnd(0.1, 0.6) * h, { vy: -rnd(20, 50) * Z, life: 700, col: S.RARITY_COLOR[job.rarity], glow: 0.7, size: 1 });
   }
 
   /* ─────────────────────── 마을 ─────────────────────── */
@@ -1289,8 +1270,7 @@
       this.pick = "dungeon";
       this.camX = null;
       this.hx = TOWN_SPOTS.dungeon - 40;
-      this.npcs = [255, 640, 738].map((x) => ({ job: E.randomJob(), x: x + rnd(-20, 20), dir: Math.random() < 0.5 ? -1 : 1, t: Math.random() * 3 }));
-      [p.job].concat(this.npcs.map((n) => n.job)).forEach((j) => HA.warm(j, HERO_PX()));
+      this.npcs = [255, 640, 738].map((x) => ({ job: E.randomJob(), x: x + rnd(-20, 20), dir: Math.random() < 0.5 ? -1 : 1 }));
       Ambient.list = [];
       this.hud();
       save();
@@ -1335,9 +1315,8 @@
         }
       });
     },
-    /* 전직의 두루마리로 직업이 바뀌면 새 그림을 미리 준비한다 */
+    /* 전직의 두루마리로 직업이 바뀌면 빛기둥 속에서 새 모습으로 */
     jobChanged() {
-      HA.warm(G.player.job, HERO_PX());
       Sp.pillar(px(this.hx) - this.camX, this.groundScreenY(), "light", true);
     },
     groundScreenY() {
@@ -1357,7 +1336,6 @@
       if (this.camX === null) this.camX = tx;
       this.camX += (tx - this.camX) * Math.min(1, s * 6);
       this.camY = px(this.map.groundY) - this.groundScreenY();
-      this.npcs.forEach((n) => { n.t += s; });
       Ambient.update(s, this.map.theme.ambient);
       const key = `${p.hp}|${p.mp}|${p.gold}|${p.level}|${p.exp}|${p.job.id}|${p.potions.hp}|${p.potions.mp}`;
       if (key !== this.hudKey) this.hud();
@@ -1385,13 +1363,8 @@
       ctx.restore();
       (m.lights || []).forEach((L) => { if (L.flame && L.r > 40) Wd.drawFlame(ctx, px(L.x), px(L.y) + 4 * Z, Z, t, L.seed); });
       const gy = px(m.groundY);
-      this.npcs.forEach((n) => {
-        shadow(px(n.x), gy + Z, HERO_PX() * 0.2, HERO_PX() * 0.05, 0.25);
-        HA.draw(ctx, n.job, px(n.x), gy + Z, { dir: n.dir, anim: "idle", t: n.t, h: HERO_PX() });
-      });
-      const p = G.player;
-      const d = E.derive(p);
-      drawHeroAt(p.job, px(this.hx), gy, { anim: "idle", t: t / 1000 }, { barrier: false, alpha: p.hp < d.maxHp * 0.25 ? 0.85 : 1 });
+      this.npcs.forEach((n) => drawHeroAt(n.job, px(n.x), gy, HERO_PX(), { dir: n.dir }));
+      drawHeroAt(G.player.job, px(this.hx), gy, HERO_PX());
       Sp.draw(ctx);
       X.draw(ctx);
       Sp.drawNumbers(ctx);
@@ -1466,7 +1439,6 @@
       this.vw = 0;
       Ambient.list = [];
       this.layout();
-      HA.warm(p.job, this.heroH);
       this.ui();
       if (this.idx === 0) banner(Wd.floorName(this.floor));
       this.encounter(arg.mon ? E.monsterByName(arg.mon) : null);
@@ -1534,6 +1506,7 @@
           <div class="pkb-st" id="bf-st"></div>
           <div class="pkb-bar hp"><span>HP</span><i><b id="bf-hp"></b></i></div></div>
         <div class="pkb me" id="bx-me"><div class="pkb-top"><b id="bm-name"></b><span class="pkb-lv" id="bm-lv"></span></div>
+          <div class="pkb-job" id="bm-job"></div>
           <div class="pkb-st" id="bm-st"></div>
           <div class="pkb-bar hp"><span>HP</span><i><b id="bm-hp"></b></i></div>
           <div class="pkb-num" id="bm-hpt"></div>
@@ -1572,11 +1545,8 @@
       /* 포켓몬처럼 몬스터도 주인공만큼 크게(보스는 더 크게) */
       const img = S.monsterBig(e.name, e.boss ? (Z >= 2 ? 8 : 6) : (Z >= 2 ? 6 : 4));
       const bd = bounds(img);
-      this.foe = { img, bd, tpl, fly: FLYERS.has(tpl) && !e.boss, shooter: SHOOTERS.has(tpl), mon: e, t: Math.random() * 3, wind: 0, blink: 0, dark: 1, faint: 0, dead: false };
-      this.hero = { blink: 0, faint: 0, alpha: 1 };
-      this.off = { foe: -VW * 0.85, hero: VW * 0.85 };
-      this.lunge = { hero: 0, foe: 0 };
-      this.pose = { anim: "idle", t0: G.t };
+      this.foe = { img, bd, tpl, fly: FLYERS.has(tpl) && !e.boss, shooter: SHOOTERS.has(tpl), mon: e, blink: 0, dark: 1, alpha: 0, dead: false };
+      this.hero = { blink: 0, hurt: 0, alpha: 0, down: false };
       this.disp = { fhp: e.hp, php: p.hp, pmp: p.mp, xp: p.exp / E.expNeed(p.level), lv: p.level };
       this.goal = { fhp: e.hp, php: p.hp, pmp: p.mp };
       this.mode = "intro";
@@ -1586,9 +1556,9 @@
       this.plates();
       this.say("");
       save({ fight: this.idx, mon: e.base });
-      /* 두 받침이 양쪽에서 미끄러져 들어오고, 그림자 같던 몬스터가 제 색을 찾는다 */
-      await tween(this.off, { foe: 0, hero: 0 }, 780);
-      await tween(this.foe, { dark: 0 }, 280);
+      /* 둘이 제자리에 나타나고, 그림자 같던 몬스터가 제 색을 찾는다(움직이지 않는다) */
+      await Promise.all([tween(this.foe, { alpha: 1 }, 360), tween(this.hero, { alpha: 1 }, 360)]);
+      await tween(this.foe, { dark: 0 }, 300);
       $("bx-foe").classList.add("in");
       if (e.boss) { this.quake = 0.45; Sp.ring(this.fbx, this.fby, e.el === "phys" ? "dark" : e.el, 130 * Z); }
       for (const l of this.b.log) await this.say(l.text);
@@ -1618,6 +1588,7 @@
       if (e.enraged) est.push(ST_BADGE.enrage);
       $("bf-st").innerHTML = est.map(([t, c]) => `<i style="background:${c}">${t}</i>`).join("");
       $("bm-name").textContent = p.name;
+      $("bm-job").innerHTML = `<span class="r${p.job.rarity}">${rarName(p.job.rarity)}</span> ${esc(p.job.name)}`;
       const ps = this.b.ps;
       const pst = [];
       ["burn", "poison", "weaken", "atkUp", "rage", "counter", "evade", "regen", "summon"].forEach((k) => {
@@ -1919,38 +1890,16 @@
         i++;
       }
     },
-    setPose(anim, alt) { this.pose = { anim, t0: G.t, alt: !!alt }; },
-    heroPose(t) {
-      const P = this.pose;
-      const s = (t - P.t0) / 1000;
-      const idle = { anim: "idle", f: 0, t: t / 1000 };
-      const mo = this.reach.motion === "melee" ? "slash" : this.reach.motion;
-      switch (P.anim) {
-        case "act":
-          if (s > 0.62) return idle;
-          if (this.reach.caster) return { anim: mo, f: s < 0.16 ? 0 : 1, t: s, alt: P.alt };
-          return { anim: mo, f: s < 0.13 ? 0 : s < 0.28 ? 1 : 2, t: s, alt: P.alt };
-        case "wind": return { anim: mo, f: 0, t: s, alt: P.alt };
-        case "cast": return { anim: "cast", f: s < 0.35 ? 0 : 1, t: s };
-        case "hurt": return s < 0.4 ? { anim: "hurt", f: 0, t: s } : idle;
-        case "ko": return { anim: "hurt", f: 0, t: s };
-        case "victory": return { anim: "victory", f: 0, t: s };
-        default: return idle;
-      }
-    },
-    /* 화면 위치(픽셀): 받침이 미끄러져 들어오는 동안과 앞으로 나서는 동안을 더한다 */
+    /* 화면 위치(픽셀): 둘 다 제자리에 서 있다 */
     heroFeet() {
-      return { x: this.hbx + this.off.hero + this.lunge.hero * 26 * (Z / 2), y: this.hby - this.lunge.hero * 9 * (Z / 2) };
+      return { x: this.hbx, y: this.hby };
     },
     heroCenter() {
       const f = this.heroFeet();
       return [f.x + this.heroH * 0.06, f.y - this.heroH * 0.55];
     },
     foeFeet() {
-      return {
-        x: this.fbx + this.off.foe - this.lunge.foe * 30 * (Z / 2),
-        y: this.fby + this.lunge.foe * 12 * (Z / 2) - (this.foe.fly ? 30 * Z : 0)
-      };
+      return { x: this.fbx, y: this.fby - (this.foe.fly ? 30 * Z : 0) };
     },
     foeCenter() {
       const f = this.foeFeet();
@@ -1982,57 +1931,48 @@
         applySkill() {}
       };
     },
+    /* 주인공 차례: 캐릭터는 그대로 서 있고, 무기·기술 효과만 몬스터 쪽으로 터지거나 날아간다 */
     async heroAct(ev, hits) {
       const p = G.player;
       if (ev.mp) this.goal.pmp = Math.max(0, this.goal.pmp - ev.mp);
       if (ev.hp) this.goal.php = Math.max(1, this.goal.php - ev.hp);
       if (ev.action === "item" || ev.action === "guard") {
-        this.setPose("cast");
-        await X.sleep(200);
+        await X.sleep(160);
         for (const h of hits) await this.applyFx(h);
-        await X.sleep(120);
-        this.setPose("idle");
+        await X.sleep(100);
         return;
       }
       const sk = ev.action === "skill" ? p.job.skills[ev.idx] : null;
       if (sk && sk.tag === "ult") {
-        this.setPose("cast");
         const st = this.stage("near");
         st.casterAt = [this.heroFeet().x, this.msgTop - 2];
         let landed = null;
         st.applySkill = () => { landed = this.hitFx(hits); };
         await Moves.castUlt.call(st, sk, visPlan(sk, this.reach.far));
         await (landed || this.hitFx(hits));
-        this.setPose("idle");
         return;
       }
       if (sk && SELF_TYPES.has(sk.type)) {
-        this.setPose("cast");
-        await X.sleep(240);
+        await X.sleep(160);
         for (const h of hits) await this.applyFx(h);
-        await X.sleep(140);
-        this.setPose("idle");
+        await X.sleep(120);
         return;
       }
-      /* 공격: 한 걸음 나서며 휘두르고, 맞는 자리(몬스터)에서 무기·기술 효과가 터진다 */
+      /* 근접 무기·범위 기술은 몬스터 자리에서 터지고, 활·총·마법은 주인공 손에서 날아간다 */
       const plan = sk ? visPlan(sk, this.reach.far) : null;
       const where = plan && plan.area === "around" ? "on" : this.reach.far ? "hand" : "near";
-      this.setPose("wind", !!sk);
-      await tween(this.lunge, { hero: 1 }, 120);
-      this.setPose("act", !!sk);
-      await X.sleep(this.reach.caster ? 130 : 80);
+      await X.sleep(100);
       const st = this.stage(where);
       const W = this.reach.weapon;
       const el = ev.el || "phys";
       await (sk ? Moves.skillVisual.call(st, sk, plan, [this.foeT()]) : weaponFx(st, el, [this.foeT()], W.far ? W.range : W.reach));
       await this.hitFx(hits);
-      await tween(this.lunge, { hero: 0 }, 180);
-      this.setPose("idle");
+      await X.sleep(120);
     },
     async hitFx(hits) {
       for (const h of hits) await this.applyFx(h);
     },
-    /* 몬스터 차례: 웅크렸다가 달려들거나(근접) 마력탄을 쏜다(마법형) */
+    /* 몬스터 차례: 몬스터도 제자리에서, 마법형은 마력탄을 쏘고 나머지는 주인공 자리에 할퀴기·내려찍기가 터진다 */
     async foeAct(ev, hits) {
       const Fo = this.foe;
       const trait = ev.trait || "attack";
@@ -2040,22 +1980,22 @@
       const [hx, hy] = this.heroCenter();
       const ground = this.msgTop - 2 * Z;
       const ranged = Fo.shooter || trait === "drain" || (el && Math.random() < 0.35);
-      Fo.wind = 1;
-      await X.sleep(trait === "heavy" ? 380 : 170);
-      Fo.wind = 0;
+      await X.sleep(trait === "heavy" ? 260 : 120);
       if (ranged) {
         const [fx, fy] = this.foeCenter();
         await Sp.shot([fx - Fo.bd.w * 0.3, fy], [hx, hy], el || "dark", "orb");
+      } else if (trait === "heavy") {
+        Sp.smash(hx, ground, -1, el || "phys", true);
+        this.quake = 0.3;
+        await X.sleep(90);
       } else {
-        await tween(this.lunge, { foe: 1 }, 140);
-        if (trait === "heavy") { Sp.smash(hx, ground, -1, el || "phys", true); this.quake = 0.3; }
-        else Sp.slash(hx, hy, -1, el || "phys", false, Math.random() < 0.5);
+        Sp.slash(hx, hy, -1, el || "phys", false, Math.random() < 0.5);
+        await X.sleep(60);
       }
       if (trait === "drain") Sp.stream([hx, hy], this.foeCenter(), "#ff5a7a");
       if (trait === "steal") Sp.coins([hx, hy], this.foeCenter());
       await X.sleep(70);
       for (const h of hits) await this.applyFx(h);
-      if (!ranged) await tween(this.lunge, { foe: 0 }, 190);
     },
     async applyFx(f) {
       const H = this.hero;
@@ -2079,7 +2019,7 @@
             this.goal.fhp = Math.max(0, this.goal.fhp - f.amount);
           } else {
             H.blink = 0.5;
-            this.setPose("hurt");
+            H.hurt = 0.35;
             Sp.number(hx, htop, f.amount, "taken", 0);
             if (f.absorbed) Sp.shieldBubble(hx, hy, 30 * Z);
             this.quake = Math.max(this.quake, f.amount > E.derive(G.player).maxHp * 0.25 ? 0.22 : 0.1);
@@ -2090,8 +2030,7 @@
           break;
         case "miss":
           Sp.number(hx, htop, "MISS", "miss", 0);
-          await tween(this.off, { hero: this.off.hero - 18 * (Z / 2) }, 90);
-          await tween(this.off, { hero: 0 }, 140);
+          await X.sleep(260);
           break;
         case "dot": {
           const enemy = f.target === "enemy";
@@ -2169,15 +2108,15 @@
           await X.sleep(220);
           break;
         case "faint":
-          /* 쓰러지면 받침 아래로 가라앉는다 */
+          /* 쓰러지면 그 자리에서 흐려져 사라진다 */
           if (f.target === "enemy") {
             Sp.impact(fx, fy, Fo.mon.el === "phys" ? "light" : Fo.mon.el, false);
             if (Fo.mon.boss) { Sp.pillar(fx, fgy, "light", true); this.quake = 0.4; }
-            await tween(Fo, { faint: 1 }, 520);
+            await tween(Fo, { alpha: 0 }, 520);
             Fo.dead = true;
           } else {
-            this.setPose("ko");
-            await tween(H, { faint: 1 }, 620);
+            H.down = true;
+            await tween(H, { alpha: 0.35 }, 620);
           }
           break;
         default:
@@ -2187,11 +2126,9 @@
 
     /* ── 끝맺음 ── */
     async victoryEnd() {
-      this.setPose("victory");
       save({ fight: this.idx + 1, mon: null });
       G.fast = false;
       await this.pause();
-      this.setPose("idle");
       this.next();
     },
     async defeatEnd() {
@@ -2201,7 +2138,7 @@
       gameOver(this.b.enemy.name);
     },
     async fledEnd() {
-      await tween(this.off, { hero: -VW * 0.7 }, 420);
+      await tween(this.hero, { alpha: 0 }, 380);
       G.fast = false;
       this.next();
     },
@@ -2243,8 +2180,8 @@
       const s = dt / 1000;
       this.quake = Math.max(0, this.quake - s);
       if (this.flash) this.flash.t -= s;
-      if (this.foe) { this.foe.t += s; this.foe.blink = Math.max(0, this.foe.blink - s); }
-      if (this.hero) this.hero.blink = Math.max(0, this.hero.blink - s);
+      if (this.foe) this.foe.blink = Math.max(0, this.foe.blink - s);
+      if (this.hero) { this.hero.blink = Math.max(0, this.hero.blink - s); this.hero.hurt = Math.max(0, this.hero.hurt - s); }
       this.updateMsg(s);
       if (this.b) this.updateBars(s);
       Ambient.update(s, this.theme.ambient);
@@ -2258,10 +2195,10 @@
       ctx.translate(qx, qy);
       this.drawField(t);
       if (this.foe) {
-        this.drawBase(this.fbx + this.off.foe, this.fby, Math.max(this.foe.bd.w / Z * 0.62, this.foe.mon.boss ? 70 : 48), "foe");
+        this.drawBase(this.fbx, this.fby, Math.max(this.foe.bd.w / Z * 0.62, this.foe.mon.boss ? 70 : 48), "foe");
         this.drawFoe(t);
       }
-      if (this.off) this.drawBase(this.hbx + this.off.hero, this.hby - 6 * Z, 84, "hero");
+      this.drawBase(this.hbx, this.hby - 6 * Z, 84, "hero");
       if (this.foe) this.drawHero(t);
       Sp.draw(ctx);
       X.draw(ctx);
@@ -2365,70 +2302,35 @@
       const H = this.hero;
       if (H.blink > 0 && Math.floor(t / 70) % 2) return;
       const f = this.heroFeet();
-      const pose = this.heroPose(t);
-      ctx.save();
-      if (H.faint) {
-        ctx.beginPath();
-        ctx.rect(0, 0, VW, this.msgTop + 2);
-        ctx.clip();
-      }
-      const y = f.y + H.faint * this.heroH;
-      shadow(f.x, y + Z, this.heroH * 0.2, this.heroH * 0.05, 0.32);
-      HA.draw(ctx, p.job, f.x, y + Z, {
-        dir: 1, anim: pose.anim, f: pose.f, t: pose.t, alt: pose.alt, h: this.heroH,
-        alpha: H.alpha * (1 - H.faint * 0.4), tint: pose.anim === "hurt" && !H.faint ? "#ff4050" : null, tintA: 0.35
-      });
-      ctx.restore();
-      if (this.b && this.b.ps.barrier > 0 && !H.faint) {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        ctx.strokeStyle = `rgba(150,220,255,${0.25 + 0.1 * Math.sin(t / 150)})`;
-        ctx.lineWidth = Math.max(1, Z);
-        ctx.beginPath();
-        ctx.ellipse(f.x, f.y - this.heroH * 0.46, this.heroH * 0.3, this.heroH * 0.5, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      if (this.b && this.b.ps.summon && !H.faint) {
+      drawHeroAt(p.job, f.x, f.y, this.heroH, { alpha: H.alpha, hurt: H.hurt > 0, barrier: this.b && this.b.ps.barrier > 0 && !H.down });
+      if (this.b && this.b.ps.summon && !H.down) {
         const x = f.x - this.heroH * 0.3;
-        const yy = f.y - this.heroH * 0.95 + Math.sin(t / 300) * 3 * Z;
-        Sp.orbAt(ctx, x, yy, 6 * Z, "arcane");
-        if (Math.random() < 0.2) Sp.spark(x + rnd(-6, 6) * Z, yy + rnd(-6, 6) * Z, { vy: -20 * Z, life: 500, col: Sp.PAL.arcane[1], glow: 0.7, size: 1 });
+        const y = f.y - this.heroH * 0.95;
+        Sp.orbAt(ctx, x, y, 6 * Z, "arcane");
+        if (Math.random() < 0.2) Sp.spark(x + rnd(-6, 6) * Z, y + rnd(-6, 6) * Z, { vy: -20 * Z, life: 500, col: Sp.PAL.arcane[1], glow: 0.7, size: 1 });
       }
-      if (p.job.rarity >= 3 && !H.faint && Math.random() < 0.12) Sp.spark(f.x + rnd(-14, 14) * Z, f.y - rnd(10, 60) * Z, { vy: -rnd(20, 50) * Z, life: 700, col: S.RARITY_COLOR[p.job.rarity], glow: 0.7, size: 1 });
     },
     drawFoe(t) {
       const Fo = this.foe;
       const { img, bd, mon } = Fo;
       const f = this.foeFeet();
-      shadow(f.x, this.fby + Z, bd.w * 0.32, 3.4 * Z, Fo.fly ? 0.16 : 0.3);
-      if (Fo.dead || (Fo.blink > 0 && Math.floor(t / 70) % 2)) return;
-      let bob = 0;
-      let sx = 1;
-      let sy = 1;
-      if (Fo.tpl === "slime") { const k = Math.sin(Fo.t * 4); sx = 1 + k * 0.05; sy = 1 - k * 0.05; }
-      else if (Fo.fly) bob = Math.sin(Fo.t * 5) * 3 * Z;
-      else sy = 1 + Math.sin(Fo.t * 2.4) * 0.018;
-      if (Fo.wind) { sy = 0.9; sx = 1.07; }
+      shadow(f.x, this.fby + Z, bd.w * 0.32, 3.4 * Z, (Fo.fly ? 0.16 : 0.3) * Fo.alpha);
+      if (Fo.dead || Fo.alpha <= 0 || (Fo.blink > 0 && Math.floor(t / 70) % 2)) return;
       ctx.save();
-      if (Fo.faint) {
-        ctx.beginPath();
-        ctx.rect(0, 0, VW, this.fby + 2 * Z);
-        ctx.clip();
-      }
-      ctx.globalAlpha = 1 - Fo.faint * 0.3;
-      ctx.translate(f.x, f.y + bob + Fo.faint * bd.h);
-      ctx.scale(-sx, sy);
+      ctx.globalAlpha = Fo.alpha;
+      ctx.translate(f.x, f.y);
+      ctx.scale(-1, 1);
       const ox = Math.round(-(bd.x0 + bd.w / 2));
       const oy = Math.round(-(bd.y1 + 1));
       ctx.drawImage(img, ox, oy);
-      if (Fo.dark > 0) { ctx.globalAlpha = Fo.dark; ctx.drawImage(S.silhouette(img, "#120e22"), ox, oy); }
-      else if (mon.enraged) { ctx.globalAlpha = 0.25 + 0.1 * Math.sin(t / 120); ctx.drawImage(S.silhouette(img, "#ff3030"), ox, oy); }
-      else if (mon.st.charm) { ctx.globalAlpha = 0.25; ctx.drawImage(S.silhouette(img, "#ff8ad8"), ox, oy); }
-      else if (mon.st.stun && mon.st.stunLabel === "얼어붙어") { ctx.globalAlpha = 0.35; ctx.drawImage(S.silhouette(img, "#9ae6ff"), ox, oy); }
+      const over = (col, a) => { ctx.globalAlpha = Fo.alpha * a; ctx.drawImage(S.silhouette(img, col), ox, oy); };
+      if (Fo.dark > 0) over("#120e22", Fo.dark);
+      else if (mon.enraged) over("#ff3030", 0.3);
+      else if (mon.st.charm) over("#ff8ad8", 0.25);
+      else if (mon.st.stun && mon.st.stunLabel === "얼어붙어") over("#9ae6ff", 0.35);
       ctx.restore();
-      if (Fo.faint || !mon.st.stun) return;
-      const top = f.y + bob - bd.h - 4 * Z;
+      if (!mon.st.stun) return;
+      const top = f.y - bd.h - 4 * Z;
       for (let k = 0; k < 3; k++) {
         const a = t / 200 + (k * Math.PI * 2) / 3;
         ctx.fillStyle = mon.st.stunLabel === "얼어붙어" ? "#bff0ff" : "#ffe066";
