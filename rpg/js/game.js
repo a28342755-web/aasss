@@ -23,6 +23,8 @@
   const rarName = (r) => D.RARITIES[r].name;
   const famOf = (job) => F.FAMILY_LIST[job.fam];
   const jobNo = (id) => "No." + String(id).padStart(4, "0");
+  const diffName = (k) => E.diffOf(k).name;
+  const diffTag = (k) => `<span class="diff-tag d-${E.DIFFS[k] ? k : "normal"}">${diffName(k)}</span>`;
   const reduceMotion = !!(root.matchMedia && root.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
   /* ── 저장 ── */
@@ -344,7 +346,7 @@
         <div class="title-logo"><span class="logo-sub">직업 3,000종 · 무작위 운명 RPG</span><h1>삼천의 운명</h1></div>
         <div class="opts title-opts">
           <button class="opt" type="button" data-opt="new">새로운 운명${store.get("roll", null) ? ' <small>뽑던 운명 이어서</small>' : G.tokens ? ` <small>재굴림 +${G.tokens}</small>` : ""}</button>
-          ${saved ? `<button class="opt" type="button" data-opt="cont">이어하기 <small>${esc(saved.player.name)} · Lv.${saved.player.level}</small></button>` : ""}
+          ${saved ? `<button class="opt" type="button" data-opt="cont">이어하기 <small>${esc(saved.player.name)} · Lv.${saved.player.level} · ${diffName(saved.player.diff)}</small></button>` : ""}
           <button class="opt" type="button" data-opt="codex">직업 도감 <small>${fmt(G.codex.size)}/${fmt(F.JOBS.length)}</small></button>
           <button class="opt" type="button" data-opt="hall">명예의 전당 <small>${G.hall.length}명</small></button>
         </div>
@@ -410,9 +412,10 @@
 
   function startRoll(pending) {
     closeAll();
-    if (pending) G.roll = { job: F.jobById(pending.jobId) || E.randomJob(), left: pending.left, name: pending.name || randomName(), rolling: false, t: 0 };
+    const diff = store.get("diff", "normal");
+    if (pending) G.roll = { job: F.jobById(pending.jobId) || E.randomJob(), left: pending.left, name: pending.name || randomName(), diff: pending.diff || diff, rolling: false, t: 0 };
     else {
-      G.roll = { job: null, left: 3 + G.tokens, name: randomName(), rolling: false, t: 0 };
+      G.roll = { job: null, left: 3 + G.tokens, name: randomName(), diff, rolling: false, t: 0 };
       G.tokens = 0;
       store.set("tokens", 0);
     }
@@ -435,7 +438,7 @@
       r.job = E.randomJob();
       r.rolling = true;
       discover(r.job);
-      store.set("roll", { jobId: r.job.id, left: r.left, name: r.name });
+      store.set("roll", { jobId: r.job.id, left: r.left, name: r.name, diff: r.diff });
       closeAll();
       $("hud").innerHTML = `<div class="roll-head"><span class="roll-rar">?</span><h2 class="roll-name">운명을 읽는 중…</h2><span class="roll-fam"></span></div>`;
       this.flick = 0;
@@ -474,6 +477,8 @@
         <div class="roll-panel">
           ${jobCard(j, 1, null)}
           <label class="name-row" for="hero-name"><span>이름</span><input id="hero-name" maxlength="10" value="${esc(r.name)}"><button type="button" class="opt mini" data-opt="dice">무작위</button></label>
+          <div class="diff-row"><span>난이도</span>${E.DIFF_KEYS.map((k) => `<button type="button" class="opt mini diff d-${k}${r.diff === k ? " on" : ""}" data-opt="d-${k}" aria-pressed="${r.diff === k}">${diffName(k)}</button>`).join("")}</div>
+          <p class="diff-desc" id="diff-desc">${esc(E.diffOf(r.diff).desc)}</p>
           <div class="opts row2">
             <button class="opt primary" type="button" data-opt="ok">이 운명으로 시작</button>
             <button class="opt" type="button" data-opt="re"${r.left <= 0 ? " disabled" : ""}>다시 굴리기 <small>${r.left}회</small></button>
@@ -481,9 +486,16 @@
         </div>`;
       openWin(html, {
         cls: "win-roll", noBack: false, focus: "ok",
-        onBack: () => { store.set("roll", { jobId: r.job.id, left: r.left, name: $("hero-name").value }); closeAll(); setScene(Title); },
-        onPick: (v) => {
+        onBack: () => { store.set("roll", { jobId: r.job.id, left: r.left, name: $("hero-name").value, diff: r.diff }); closeAll(); setScene(Title); },
+        onPick: (v, btn, w) => {
           if (v === "dice") { $("hero-name").value = randomName(); return; }
+          if (v.startsWith("d-")) {
+            r.diff = v.slice(2);
+            store.set("diff", r.diff);
+            w.el.querySelectorAll(".diff").forEach((b) => { const on = b.dataset.opt === v; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+            $("diff-desc").textContent = E.diffOf(r.diff).desc;
+            return;
+          }
           if (v === "re" && r.left > 0) { r.left--; r.name = $("hero-name").value; this.spin(); return; }
           if (v === "ok") this.accept();
         }
@@ -493,6 +505,8 @@
       const r = G.roll;
       const name = ($("hero-name").value || "").trim().slice(0, 10) || randomName();
       G.player = E.newPlayer(r.job, name);
+      G.player.diff = r.diff || "normal";
+      const dv = E.diffOf(G.player.diff);
       G.roll = null;
       store.del("roll");
       G.place = "town";
@@ -500,8 +514,8 @@
       closeAll();
       fade(() => {
         setScene(Town);
-        say([`<b>${esc(name)}</b>의 운명은 <b class="rar-t-${G.player.job.rarity}">${esc(G.player.job.name)}</b>.`,
-          `전투는 차례대로 명령을 고르는 턴제다. 던전 한 층마다 몬스터 셋이 기다리고, 10층마다 마지막에 보스가 길을 막는다.`,
+        say([`<b>${esc(name)}</b>의 운명은 <b class="rar-t-${G.player.job.rarity}">${esc(G.player.job.name)}</b>. 난이도는 <b>${dv.name}</b>.`,
+          `전투는 차례대로 명령을 고르는 턴제다. 던전 한 층마다 몬스터 셋이 기다리고, 10층마다 마지막에 보스가 길을 막는다.${dv.mid ? " 어려움에서는 5층마다 중간 보스도 나온다." : ""}`,
           `마을 메뉴에서 던전으로 내려가거나 상점·여관·길드를 고를 수 있다. 쓰러지면 이 운명은 끝난다.`]);
       });
     },
@@ -728,7 +742,7 @@
       : [["방향키", "명령 고르기"], ["Z · Enter · Space", "결정 · 전투 연출 빨리 넘기기"], ["X · Esc", "취소 · 명령으로 돌아가기"]])
       .concat([["싸운다", "기본 공격(MP 조금 회복)과 기술 카드 (기술은 Lv.1·1·4·7·10에 배움)"], ["가방", "물약 (한 차례를 쓴다)"], ["방어", "받는 피해 절반, MP 회복"], ["도망", "보상 없이 다음 싸움으로 (보스전 불가)"], ["상태", "능력치와 기술 설명"]]);
     openWin(`<h2 class="win-h">조작 안내</h2><dl class="sheet help">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
-      <p class="win-msg">전투는 주인공과 몬스터가 한 번씩 번갈아 움직이는 턴제다. 한 층에 몬스터 셋, 10층마다 마지막에 보스. 쓰러지면 그 운명은 끝난다.</p>
+      <p class="win-msg">전투는 주인공과 몬스터가 한 번씩 번갈아 움직이는 턴제다. 한 층에 몬스터 셋, 10층마다 마지막에 보스. 난이도는 운명을 뽑을 때 고른다: 쉬움은 몬스터가 약하고 순한 몬스터가 섞이며, 어려움은 몬스터가 세고 정예가 섞이며 5층마다 중간 보스가 나온다. 쓰러지면 그 운명은 끝난다.</p>
       <div class="opts"><button class="opt" type="button" data-opt="close">닫기</button></div>`, { onPick: (v, b, w) => { if (v === "close") closeWin(w); } });
   }
 
@@ -767,7 +781,7 @@
     const d = E.derive(p);
     const cells = [["HP", `${fmt(p.hp)}/${fmt(d.maxHp)}`], ["MP", `${fmt(p.mp)}/${fmt(d.maxMp)}`], ["공격력", fmt(E.power(p, d, p.job.atkStat))], ["방어력", fmt(d.def)],
       ["치명타", `${Math.round(d.crit * 100)}%`], ["회피", `${Math.round(d.eva * 100)}%`], ["무기", `+${p.weaponLv}`], ["방어구", `+${p.armorLv}`],
-      ["경험치", `${fmt(p.exp)}/${fmt(E.expNeed(p.level))}`], ["골드", fmt(p.gold)], ["최고 층", p.best], ["처치", fmt(p.kills)]];
+      ["경험치", `${fmt(p.exp)}/${fmt(E.expNeed(p.level))}`], ["골드", fmt(p.gold)], ["최고 층", p.best], ["처치", fmt(p.kills)], ["난이도", diffName(p.diff)]];
     openWin(`<h2 class="win-h">${esc(p.name)} <small>Lv.${p.level} · <span class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</span></small></h2>
       <div class="scroll"><dl class="sheet">${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>${jobCard(p.job, p.level, p)}</div>
       <div class="opts"><button class="opt" type="button" data-opt="close">닫기</button></div>`, {
@@ -898,7 +912,7 @@
   }
 
   function addHall(p, cause) {
-    G.hall.push({ name: p.name, job: p.job.name, jobId: p.job.id, rarity: p.job.rarity, fam: p.job.fam, level: p.level, best: p.best, kills: p.kills, cause, date: Date.now() });
+    G.hall.push({ name: p.name, job: p.job.name, jobId: p.job.id, rarity: p.job.rarity, fam: p.job.fam, level: p.level, best: p.best, kills: p.kills, diff: p.diff || "normal", cause, date: Date.now() });
     G.hall.sort((a, b) => b.best - a.best || b.level - a.level || a.date - b.date);
     G.hall = G.hall.slice(0, 50);
     store.set("hall", G.hall);
@@ -907,7 +921,7 @@
   function openHall() {
     const rows = G.hall.length ? G.hall.map((h, i) => {
       const job = F.jobById(h.jobId);
-      return `<div class="hall-row"><span class="hall-rank">${i + 1}</span>${job ? `<img src="${thumb(job)}" alt="">` : ""}<span><b>${esc(h.name)}</b><small><span class="rar-t-${h.rarity}">${rarName(h.rarity)} ${esc(h.job)}</span> · Lv.${h.level} · ${h.cause ? esc(J(h.cause, "에게")) + " 쓰러짐" : "은퇴"}</small></span><em>${h.best}층</em></div>`;
+      return `<div class="hall-row"><span class="hall-rank">${i + 1}</span>${job ? `<img src="${thumb(job)}" alt="">` : ""}<span><b>${esc(h.name)}</b> ${diffTag(h.diff)}<small><span class="rar-t-${h.rarity}">${rarName(h.rarity)} ${esc(h.job)}</span> · Lv.${h.level} · ${h.cause ? esc(J(h.cause, "에게")) + " 쓰러짐" : "은퇴"}</small></span><em>${h.best}층</em></div>`;
     }).join("") : `<p class="empty">아직 기록이 없습니다. 첫 운명을 뽑아 던전에 들어가 보세요.</p>`;
     openWin(`<h2 class="win-h">명예의 전당</h2><div class="scroll hall">${rows}</div><div class="opts"><button class="opt" type="button" data-opt="close">닫기</button></div>`, {
       cls: "win-full", onPick: (v, b, w) => { if (v === "close") closeWin(w); }
@@ -916,7 +930,7 @@
 
   /* ─────────────────────── 마을·전투 장면 ─────────────────────── */
   /* 거리는 기본 단위(주인공 키 ≈ 44)로 적고, 화면에는 Z배로 그린다 */
-  const FLYERS = new Set(["bat", "harpy", "dragon", "ghost", "wisp", "bird", "eye"]);
+  const FLYERS = new Set(["bat", "harpy", "dragon", "ghost", "wisp", "bird", "eye", "fairy", "imp"]);
   const SHOOTERS = new Set(["witch", "wisp", "eye", "caped"]);
   const SELF_TYPES = new Set(["heal", "regen", "buff", "rage", "shield", "counter", "summon"]);
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -1284,7 +1298,7 @@
         <div class="hud-plate stage-plate">
           <div class="hud-l"><b>${esc(p.name)}</b><span class="rar-t-${p.job.rarity}">${esc(p.job.name)}</span><span>Lv.${p.level}</span></div>
           <div class="hud-bars"><i class="hp"><b style="width:${r(p.hp, d.maxHp)}"></b><em>${fmt(p.hp)}/${fmt(d.maxHp)}</em></i><i class="mp"><b style="width:${r(p.mp, d.maxMp)}"></b><em>${fmt(p.mp)}/${fmt(d.maxMp)}</em></i><i class="xp"><b style="width:${r(p.exp, E.expNeed(p.level))}"></b></i></div>
-          <div class="hud-r"><span class="where">마을</span><span class="gold">${fmt(p.gold)} G</span><span class="pots">물약 ${p.potions.hp} · ${p.potions.mp}</span></div>
+          <div class="hud-r"><span class="where">마을 ${diffTag(p.diff)}</span><span class="gold">${fmt(p.gold)} G</span><span class="pots">물약 ${p.potions.hp} · ${p.potions.mp}</span></div>
         </div>`;
       this.hudKey = `${p.hp}|${p.mp}|${p.gold}|${p.level}|${p.exp}|${p.job.id}|${p.potions.hp}|${p.potions.mp}`;
     },
@@ -1419,7 +1433,7 @@
       this.floor = arg.floor;
       this.idx = arg.idx || 0;
       /* 층의 마지막 전투를 이긴 직후에 저장됐다면 다음 층에서 시작 */
-      if (this.idx >= E.floorFights(this.floor)) { this.floor++; this.idx = 0; arg = { floor: this.floor }; }
+      if (this.idx >= E.floorFights(this.floor, p.diff)) { this.floor++; this.idx = 0; arg = { floor: this.floor }; }
       G.place = "dungeon";
       const prevBest = p.best;
       E.enterFloor(p, this.floor);
@@ -1538,8 +1552,8 @@
     /* ── 몬스터 만나기 ── */
     async encounter(mon) {
       const p = G.player;
-      const boss = E.isBossFight(this.floor, this.idx);
-      this.b = E.startBattle(p, { floor: this.floor, monster: mon || E.pickMonster(this.floor, boss) });
+      const kind = E.fightKind(this.floor, this.idx, p.diff);
+      this.b = E.startBattle(p, { floor: this.floor, monster: mon || E.pickMonster(this.floor, kind, p.diff) });
       const e = this.b.enemy;
       const tpl = (S.MON_LOOK[e.base] || ["slime"])[0];
       /* 포켓몬처럼 몬스터도 주인공만큼 크게(보스는 더 크게) */
@@ -1581,7 +1595,7 @@
       $("bf-name").textContent = e.name;
       $("bf-lv").textContent = `Lv.${e.lv}`;
       const est = [];
-      if (e.boss) est.push(["보스", "#3c4448"]);
+      if (e.boss) est.push([e.mid ? "강적" : "보스", e.mid ? "#a0482a" : "#3c4448"]);
       if (this.b.weakKnown && e.weak) est.push([`약점 ${D.ELEMENTS[e.weak]}`, (EL_CARD[e.weak] || EL_CARD.phys)[1]]);
       ["burn", "poison", "bleed", "curse", "charm", "debuff"].forEach((k) => { if (e.st[k]) est.push(ST_BADGE[k]); });
       if (e.st.stun) est.push(ST_BADGE[e.st.stunLabel === "얼어붙어" ? "freeze" : "stun"]);
@@ -1598,8 +1612,8 @@
       });
       if (ps.barrier > 0) pst.push([`보호막 ${fmt(ps.barrier)}`, ST_BADGE.barrier[1]]);
       $("bm-st").innerHTML = pst.map(([t, c]) => `<i style="background:${c}">${t}</i>`).join("");
-      const n = E.floorFights(this.floor);
-      $("bf-where").innerHTML = `<b>${this.floor}층</b> ${esc(this.theme.name)}<span class="dots">${Array.from({ length: n }, (_, i) => `<i class="${i < this.idx ? "done" : i === this.idx ? "now" : ""}${E.isBossFight(this.floor, i) ? " boss" : ""}"></i>`).join("")}</span>`;
+      const n = E.floorFights(this.floor, p.diff);
+      $("bf-where").innerHTML = `<b>${this.floor}층</b> ${esc(this.theme.name)} ${diffTag(p.diff)}<span class="dots">${Array.from({ length: n }, (_, i) => { const k = E.fightKind(this.floor, i, p.diff); return `<i class="${i < this.idx ? "done" : i === this.idx ? "now" : ""}${k === "mob" ? "" : " " + k}"></i>`; }).join("")}</span>`;
     },
     /* HP·MP 바는 정해진 빠르기로 따라가고, 다 따라가면 기다리던 연출이 이어진다 */
     updateBars(s) {
@@ -2147,7 +2161,7 @@
       const p = G.player;
       this.mode = "done";
       this.idx++;
-      if (this.idx < E.floorFights(this.floor)) {
+      if (this.idx < E.floorFights(this.floor, p.diff)) {
         battleFlash(() => { this.dim = 0; this.ui(); this.encounter(null); });
         return;
       }
@@ -2162,7 +2176,7 @@
       closeAll();
       openWin(`<h2 class="win-h">${n}층 돌파! <small>HP ${fmt(p.hp)}/${fmt(d.maxHp)} · MP ${fmt(p.mp)}/${fmt(d.maxMp)} · 물약 ${p.potions.hp}·${p.potions.mp}</small></h2>
         <div class="opts">
-          <button class="opt primary" type="button" data-opt="down">${n + 1}층으로 내려간다 <small>${esc(Wd.floorName(n + 1))}</small></button>
+          <button class="opt primary" type="button" data-opt="down">${n + 1}층으로 내려간다 <small>${esc(Wd.floorName(n + 1))}${E.floorBoss(n + 1, p.diff) === "boss" ? " · 보스" : E.floorBoss(n + 1, p.diff) === "mid" ? " · 중간 보스" : ""}</small></button>
           <button class="opt" type="button" data-opt="items">도구 쓰기</button>
           <button class="opt" type="button" data-opt="town">마을로 돌아간다 <small>다음엔 ${n + 1}층부터</small></button>
         </div>`, {
@@ -2358,7 +2372,7 @@
     closeAll();
     openWin(`<h2 class="win-h over">쓰러졌다…</h2>
       <div class="over-body"><img src="${thumb(p.job)}" alt="">
-      <p><b>${esc(p.name)}</b><br><span class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</span> · Lv.${p.level}<br>최고 기록 ${p.best}층 · 처치 ${fmt(p.kills)}<br>${esc(J(cause, "에게"))} 쓰러짐</p></div>
+      <p><b>${esc(p.name)}</b> ${diffTag(p.diff)}<br><span class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</span> · Lv.${p.level}<br>최고 기록 ${p.best}층 · 처치 ${fmt(p.kills)}<br>${esc(J(cause, "에게"))} 쓰러짐</p></div>
       <p class="win-msg">${bonus ? `깊이 내려간 보답으로 다음 운명의 재굴림 기회 +${bonus}` : "10층을 넘길 때마다 다음 운명의 재굴림 기회가 늘어납니다."}</p>
       <div class="opts"><button class="opt primary" type="button" data-opt="new">새로운 운명</button><button class="opt" type="button" data-opt="hall">명예의 전당</button><button class="opt" type="button" data-opt="title">타이틀로</button></div>`, {
       cls: "win-center", noBack: true,

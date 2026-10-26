@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * 밸런스 시뮬레이션: node rpg/tools/simulate.js [표본 수]
+ * 밸런스 시뮬레이션: node rpg/tools/simulate.js [표본 수] [easy|normal|hard|all] [--families]
  * 단순한 AI가 무작위 직업으로 여관·상점·던전을 오가며 쓰러질 때까지 진행한다.
  * 계열·등급별로 도달 층수를 비교해 특정 직업군이 지나치게 강하거나 약한지 본다.
  */
@@ -26,6 +26,8 @@ function seeded(seed) {
 F.rng = seeded(20261025);
 
 const SAMPLES = Number(process.argv[2]) || 600;
+const DIFF_ARG = process.argv[3] && !process.argv[3].startsWith("--") ? process.argv[3] : "all";
+const DIFFS = DIFF_ARG === "all" ? E.DIFF_KEYS : [DIFF_ARG];
 const FLOOR_CAP = 120;
 const BATTLE_CAP = 4000;
 
@@ -76,20 +78,21 @@ function fight(p, opts) {
   return b.result === "win";
 }
 
-function runLife(job) {
+function runLife(job, diff) {
   const p = E.newPlayer(job, "시뮬");
+  p.diff = diff;
   let battles = 0;
   E.enterFloor(p, 1);
   while (battles < BATTLE_CAP && p.floor <= FLOOR_CAP) {
     visitTown(p);
     let cleared = 0;
     for (;;) {
-      /* 한 층에 일반 몬스터 셋, 10층마다 그 뒤에 보스(게임과 같은 순서) */
-      const opts = { floor: p.floor, monster: E.pickMonster(p.floor, E.isBossFight(p.floor, cleared)) };
+      /* 한 층에 일반 몬스터 셋, 10층마다 그 뒤에 보스, 어려움은 5층마다 중간 보스(게임과 같은 순서) */
+      const opts = { floor: p.floor, monster: E.pickMonster(p.floor, E.fightKind(p.floor, cleared, diff), diff) };
       battles++;
       if (!fight(p, opts)) return { p, battles, dead: true };
       cleared++;
-      if (cleared >= E.floorFights(p.floor)) {
+      if (cleared >= E.floorFights(p.floor, diff)) {
         E.enterFloor(p, p.floor + 1);
         cleared = 0;
       }
@@ -105,13 +108,6 @@ function quantile(list, q) {
   return s[Math.min(s.length - 1, Math.floor(q * s.length))];
 }
 
-const results = [];
-for (let i = 0; i < SAMPLES; i++) {
-  const job = F.JOBS[Math.floor(F.rng() * F.JOBS.length)];
-  const r = runLife(job);
-  results.push({ job, best: r.p.best, level: r.p.level, battles: r.battles, dead: r.dead });
-}
-
 function summary(label, rows) {
   if (!rows.length) return;
   const floors = rows.map((r) => r.best);
@@ -121,13 +117,23 @@ function summary(label, rows) {
   );
 }
 
-console.log(`표본 ${SAMPLES}명 (층 상한 ${FLOOR_CAP}, 전투 상한 ${BATTLE_CAP})\n`);
-summary("전체", results);
-summary("전투 계열", results.filter((r) => F.FAMILY_LIST[r.job.fam].combat));
-summary("생활 계열", results.filter((r) => !F.FAMILY_LIST[r.job.fam].combat));
-console.log("");
-D.RARITIES.forEach((rar, i) => summary(rar.name, results.filter((r) => r.job.rarity === i)));
-if (process.argv.includes("--families")) {
+console.log(`표본 ${SAMPLES}명씩 (층 상한 ${FLOOR_CAP}, 전투 상한 ${BATTLE_CAP})`);
+DIFFS.forEach((diff) => {
+  F.rng = seeded(20261025);
+  const results = [];
+  for (let i = 0; i < SAMPLES; i++) {
+    const job = F.JOBS[Math.floor(F.rng() * F.JOBS.length)];
+    const r = runLife(job, diff);
+    results.push({ job, best: r.p.best, level: r.p.level, battles: r.battles, dead: r.dead });
+  }
+  console.log(`\n── 난이도 ${E.diffOf(diff).name} ──`);
+  summary("전체", results);
+  summary("전투 계열", results.filter((r) => F.FAMILY_LIST[r.job.fam].combat));
+  summary("생활 계열", results.filter((r) => !F.FAMILY_LIST[r.job.fam].combat));
   console.log("");
-  F.FAMILY_LIST.forEach((f) => summary(f.name, results.filter((r) => r.job.fam === f.idx)));
-}
+  D.RARITIES.forEach((rar, i) => summary(rar.name, results.filter((r) => r.job.rarity === i)));
+  if (process.argv.includes("--families")) {
+    console.log("");
+    F.FAMILY_LIST.forEach((f) => summary(f.name, results.filter((r) => r.job.fam === f.idx)));
+  }
+});

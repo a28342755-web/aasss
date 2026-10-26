@@ -24,13 +24,29 @@
 
   /* ── 몬스터 표 ── */
   const MONSTERS = D.MONSTERS.trim().split("\n").map((line) => {
-    const [name, tier, el, weak, resist, traits, hp, atk, def, boss] = line.trim().split("|");
+    const [name, tier, el, weak, resist, traits, hp, atk, def, boss, only] = line.trim().split("|");
     return {
       name, tier: Number(tier), el, weak: weak || null, resist: resist || null,
       traits: traits === "none" ? [] : traits.split(","),
-      hp: Number(hp), atk: Number(atk), def: Number(def), boss: boss === "B"
+      hp: Number(hp), atk: Number(atk), def: Number(def), boss: boss === "B", mid: boss === "M", only: only || ""
     };
   });
+
+  /* ── 난이도 ──
+     몬스터 세기와 보상을 곱하고, 어려움에서는 5층마다 중간 보스가 더 나온다.
+     key는 몬스터 표의 '나오는 난이도' 글자(E 쉬움 · N 보통 · H 어려움)와 맞춘다 */
+  const DIFFS = {
+    easy: { name: "쉬움", key: "E", hp: 0.85, atk: 0.8, def: 0.95, exp: 1, gold: 1, mid: false, desc: "몬스터가 약하고(HP·공격↓) 순한 몬스터가 섞인다" },
+    normal: { name: "보통", key: "N", hp: 1, atk: 1, def: 1, exp: 1, gold: 1, mid: false, desc: "기본 세기의 몬스터와 10층마다 보스" },
+    hard: { name: "어려움", key: "H", hp: 1.45, atk: 1.5, def: 1.2, exp: 1.25, gold: 1.3, mid: true, desc: "몬스터가 훨씬 세고(HP·공격↑) 정예가 섞이며 5층마다 중간 보스. 경험치·골드↑" }
+  };
+  const DIFF_KEYS = ["easy", "normal", "hard"];
+  function diffOf(k) {
+    return DIFFS[k] || DIFFS.normal;
+  }
+  function allowedIn(m, diff) {
+    return !m.only || m.only.includes(diffOf(diff).key);
+  }
 
   /* ── 능력치 ── */
   function statsAt(job, level) {
@@ -135,18 +151,29 @@
     return Math.min(4, Math.floor((floor - 1) / 10));
   }
 
-  /* 한 층에서 치르는 전투: 일반 몬스터 셋, 10층마다 그 뒤에 보스 */
+  /* 한 층에서 치르는 전투: 일반 몬스터 셋, 10층마다 그 뒤에 보스(어려움은 5층마다 중간 보스도) */
   const FIGHTS_PER_FLOOR = 3;
-  function floorFights(floor) {
-    return FIGHTS_PER_FLOOR + (floor % 10 === 0 ? 1 : 0);
+  function floorBoss(floor, diff) {
+    if (floor % 10 === 0) return "boss";
+    if (diffOf(diff).mid && floor % 5 === 0) return "mid";
+    return null;
   }
-  function isBossFight(floor, idx) {
-    return floor % 10 === 0 && idx >= FIGHTS_PER_FLOOR;
+  function floorFights(floor, diff) {
+    return FIGHTS_PER_FLOOR + (floorBoss(floor, diff) ? 1 : 0);
+  }
+  /* 그 층 idx번째 싸움의 상대: mob(일반) · mid(중간 보스) · boss(보스) */
+  function fightKind(floor, idx, diff) {
+    return (idx >= FIGHTS_PER_FLOOR && floorBoss(floor, diff)) || "mob";
+  }
+  function isBossFight(floor, idx, diff) {
+    return fightKind(floor, idx, diff) !== "mob";
   }
 
-  function pickMonster(floor, boss) {
+  /* kind: mob · mid · boss (예전처럼 true면 보스) */
+  function pickMonster(floor, kind, diff) {
     const tier = floorTier(floor);
-    const pool = MONSTERS.filter((m) => m.tier === tier && m.boss === !!boss);
+    const want = kind === true ? "boss" : kind || "mob";
+    const pool = MONSTERS.filter((m) => m.tier === tier && allowedIn(m, diff) && (want === "boss" ? m.boss : want === "mid" ? m.mid : !m.boss && !m.mid));
     return pool[Math.floor(R() * pool.length)];
   }
 
@@ -154,20 +181,22 @@
     return MONSTERS.find((m) => m.name === name) || null;
   }
 
-  /* 일반 몬스터는 한 층에 여럿이라 보상을 줄이고, 보스는 크게 준다 */
-  function makeEnemy(floor, mon) {
-    const m = mon || pickMonster(floor, floor % 10 === 0);
-    const boss = m.boss;
+  /* 일반 몬스터는 한 층에 여럿이라 보상을 줄이고, 보스는 크게 준다. 중간 보스는 그 사이.
+     boss는 보스·중간 보스 모두 참(도망 불가·물약 보상), mid는 중간 보스만 참 */
+  function makeEnemy(floor, mon, diff) {
+    const dv = diffOf(diff);
+    const m = mon || pickMonster(floor, floor % 10 === 0 ? "boss" : "mob", diff);
+    const k = m.boss ? { hp: 3.1, atk: 1.32, exp: 4, gold: 3 } : m.mid ? { hp: 2, atk: 1.18, exp: 1.6, gold: 1.2 } : { hp: 1, atk: 1, exp: 0.3, gold: 0.22 };
     const lv = floor;
     const prefix = floor > 100 ? "심연의 " : floor > 50 ? "광폭한 " : "";
-    const maxHp = Math.round((40 + lv * 16 + lv * lv * 0.35) * m.hp * (boss ? 3.1 : 1));
+    const maxHp = Math.round((40 + lv * 16 + lv * lv * 0.35) * m.hp * k.hp * dv.hp);
     return {
-      name: prefix + m.name, lv, boss, maxHp, hp: maxHp,
-      atk: Math.round((7 + lv * 2.6 + lv * lv * 0.03) * m.atk * (boss ? 1.32 : 1)),
-      def: Math.round((2 + lv * 1.4) * m.def),
+      name: prefix + m.name, lv, boss: m.boss || m.mid, mid: m.mid, maxHp, hp: maxHp,
+      atk: Math.round((7 + lv * 2.6 + lv * lv * 0.03) * m.atk * k.atk * dv.atk),
+      def: Math.round((2 + lv * 1.4) * m.def * dv.def),
       el: m.el, weak: m.weak, resist: m.resist, traits: m.traits.slice(),
-      exp: Math.round((10 + lv * 5) * (boss ? 4 : 0.3)),
-      gold: Math.round((6 + lv * 3.5) * (boss ? 3 : 0.22)),
+      exp: Math.round((10 + lv * 5) * k.exp * dv.exp),
+      gold: Math.round((6 + lv * 3.5) * k.gold * dv.gold),
       base: m.name, st: {}, enraged: false
     };
   }
@@ -199,7 +228,7 @@
     const o = opts || {};
     const floor = o.floor || p.floor;
     const d = derive(p);
-    const e = makeEnemy(floor, o.monster);
+    const e = makeEnemy(floor, o.monster, p.diff);
     const b = {
       floor, enemy: e, turn: 1, log: [], logCount: 0, fx: [], seq: 0, phase: 0, result: null, reward: null,
       cds: p.job.skills.map(() => 0),
@@ -207,7 +236,7 @@
       weakKnown: !!p.job.passive.weak
     };
     if (p.job.passive.barrier) b.ps.barrier = Math.round(d.maxHp * p.job.passive.barrier);
-    log(b, "sys", e.boss ? `${J(e.name, "이/가")} 앞을 가로막았다!` : `앗! 야생의 ${J(e.name, "이/가")} 튀어나왔다!`);
+    log(b, "sys", e.mid ? `강적 ${J(e.name, "이/가")} 앞을 가로막았다!` : e.boss ? `보스 ${J(e.name, "이/가")} 앞을 가로막았다!` : `앗! 야생의 ${J(e.name, "이/가")} 튀어나왔다!`);
     if (b.ps.barrier) log(b, "buff", `${J(p.name, "은/는")} 보호막에 둘러싸였다!`);
     return b;
   }
@@ -903,6 +932,6 @@
 
   F.engine = {
     josa, J, statsAt, derive, power, expNeed, newPlayer, skillSpec, describeSkill, passiveLines,
-    floorTier, floorFights, isBossFight, makeEnemy, pickMonster, monsterByName, enterFloor, startBattle, act, skillAvailable, prices, buy, rest, drink, fleeChance, changeJob, randomJob, MONSTERS
+    DIFFS, DIFF_KEYS, diffOf, floorTier, floorBoss, floorFights, fightKind, isBossFight, makeEnemy, pickMonster, monsterByName, enterFloor, startBattle, act, skillAvailable, prices, buy, rest, drink, fleeChance, changeJob, randomJob, MONSTERS
   };
 })(typeof window !== "undefined" ? window : globalThis);

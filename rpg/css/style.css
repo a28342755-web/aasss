@@ -170,6 +170,21 @@ button { cursor: pointer; }
 .roll-head.spinning .roll-name { opacity: 0.85; }
 .roll-panel { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
 .name-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.diff-row { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.diff-row > span { margin-right: 2px; }
+.diff-row .opt.mini { flex: 1; justify-content: center; padding: 4px 8px; border: 2px solid #3a3470; }
+.diff-row .opt.mini.cur::before { display: none; }
+.diff-row .diff.on { color: #0b0918; font-weight: 700; }
+.diff-row .diff.d-easy.on { background: var(--ok); border-color: var(--ok); }
+.diff-row .diff.d-normal.on { background: var(--accent); border-color: var(--accent); }
+.diff-row .diff.d-hard.on { background: var(--bad); border-color: var(--bad); }
+.diff-row .diff.cur { outline: 2px solid var(--cursor); outline-offset: 1px; }
+.diff-desc { margin: -2px 0 0; font-size: 12px; color: var(--muted); }
+/* 난이도 꼬리표(마을 HUD·전투·전당·결과) */
+.diff-tag { display: inline-block; padding: 0 5px; font-size: 10.5px; line-height: 15px; font-weight: 700; color: #0b0918; border-radius: 3px; vertical-align: 1px; }
+.diff-tag.d-easy { background: var(--ok); }
+.diff-tag.d-normal { background: var(--accent); }
+.diff-tag.d-hard { background: var(--bad); }
 .name-row input { min-width: 0; height: 34px; padding: 4px 8px; border: 2px solid #4a4380; background: #0c0a1c; color: var(--ink); user-select: text; -webkit-user-select: text; }
 
 /* 직업 카드 */
@@ -325,6 +340,8 @@ button { cursor: pointer; }
 .pk-where .dots i.now { background: var(--cursor); border-color: var(--cursor); }
 .pk-where .dots i.boss { border-color: var(--bad); }
 .pk-where .dots i.boss.now { background: var(--bad); }
+.pk-where .dots i.mid { border-color: #ff9a4a; }
+.pk-where .dots i.mid.now { background: #ff9a4a; }
 /* 흰 대화창 */
 .pk-msg {
   position: absolute; left: 4px; right: 4px; padding: 8px 16px; overflow: hidden; color: #3a3a44; background: #fbfbf8;

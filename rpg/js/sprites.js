@@ -1076,7 +1076,40 @@
       ".......aaaaa", "....bbbaaaaa", "...bbbaaaaaa", "..bbbaaaaaaa", "..bbaaAaacca", "..bbaaAaaaaa", "..bbaaAaaaaa",
       "..bb.aaaaaaa", "..bb.aaacccc", "..bb..aaaaaa", "..bb..aaaaaa", "..b...aaa.aa", "......aaa.aa", ".....AAAA.AA",
       "............", "............", "............"],
-      patch: [[21, 1, "m"], [21, 2, "m"], [21, 3, "m"], [21, 4, "m"], [21, 5, "m"], [21, 6, "m"], [21, 7, "m"], [21, 8, "m"], [21, 9, "m"], [21, 10, "m"], [20, 11, "ggg"], [21, 12, "c"]] }
+      patch: [[21, 1, "m"], [21, 2, "m"], [21, 3, "m"], [21, 4, "m"], [21, 5, "m"], [21, 6, "m"], [21, 7, "m"], [21, 8, "m"], [21, 9, "m"], [21, 10, "m"], [20, 11, "ggg"], [21, 12, "c"]] },
+    /* 난이도별로 더한 몬스터의 모양: 토끼·임프·집게·식인 꽃·나무 정령·미믹·요정·대지렁이 */
+    rabbit: { half: 1, rows: [
+      "............", ".......aa...", "......abba..", "......abba..", "......abba..", "......abba..", "......abba..", ".......aa...",
+      ".....aaaaaaa", "....aaaaaaaa", "....aaaaaaaa", "....aawkaaaa", "....aakkaaaa", "....aaaaaaab", "....bbaaaaaa", ".....aaaaaaa",
+      "......aaaaaa", ".....aaaawww", "....aaaawwww", "....aaaawwww", "....aaaaawww", ".....aaaaaaa", ".....AAA....", "............"] },
+    imp: { half: 1, rows: [
+      "............", "............", ".....c......", ".....cc.....", "......cc....", "......caaaaa", ".....aaaaaaa", ".....aaaaaaa",
+      ".....awwaaaa", ".....aweaaaa", ".....aaaaaaa", "......akkkkk", "q.....atkkkt", "qq.....aaaaa", "qqq...bbbbbb", ".qqqq.bbbbbb",
+      "..qqqqbbbbbb", "...qq.bbbbbb", "......abbbbb", ".......aa...", ".......aa...", "......AAA...", "............", "............"] },
+    crab: { half: 1, rows: [
+      "............", "............", "............", ".bb.........", "bbbb........", "bb.bb.......", "bb..b.......", "bbbbb.......",
+      ".bbb....k...", "..bb....k...", "...b...wkk..", "...bbaaaaaaa", "....baaaaaaa", "...aaaaaaaaa", "..aaaaaaaaaa", "..aaaaaaaakk",
+      "..AaaaaaaaAA", "...AAAAAAAAA", "..b.b.b.....", ".b.b.b......", "b.b.b.......", "............", "............", "............"] },
+    plant: { half: 1, rows: [
+      "............", ".......bb...", ".....bbbb...", "...bbbbbbbbb", "..bbbaaaaaaa", ".bbbaaaaaaaa", ".bbaaawkaaaa", "bbbaaakkaaaa",
+      "bbaaaaaaaaaa", "bbaarrrrrrrr", "bbaawrwrwrwr", ".bbarrrrrrrr", ".bbbaaaaaaaa", "..bbbbaaaaaa", "....bbbb..cc", "..........cc",
+      "..cc......cc", ".cccc.....cc", "cccccc...ccc", ".ccccccccccc", "..........cc", "......MMMMMM", ".....MMMMMMM", "......MMMMMM"] },
+    treant: { half: 1, rows: [
+      "......bbbbbb", "....bbbbbbbb", "...bbbbbbbbb", "..bbbbbbbbbb", ".bbbbbbbbbbb", ".bbbbbbbbbbb", "..bbbbbbbbbb", "...bbbaaaaaa",
+      "a....aaaaaaa", "aa...aaaaaaa", ".aa..aakkaaa", "..aaaaakeaaa", "...aaaaaaaaa", ".....aaAkkkk", ".....aaaAkka", ".....aaaaaaa",
+      ".....aaAaaaa", ".....aaaaAaa", "....aaaaaaaa", "...aa.aaaaaa", "..aa..aa.aaa", ".aa..aa..aa.", "AA..AA...AA.", "............"] },
+    mimic: { half: 1, rows: [
+      "............", "............", "............", "....gggggggg", "...gaaaaaaaa", "...gaaaaaaaa", "...gaaaaaaaa", "...ggggggggg",
+      "....wkwkwkwk", "....kkkkkkkk", "....kkeekkkk", "....kkeekkkk", "....kkkkkkrr", "....wkwkwkrr", "...gggggggrg", "...gaaaaaaaa",
+      "...gaaaaaaaa", "...gaaaaaggg", "...gaaaaagkk", "...gaaaaaggg", "...gaaaaaaaa", "...ggggggggg", "....AAAAAAAA", "............"] },
+    fairy: { half: 1, rows: [
+      "............", "............", "............", "............", "q.......hhhh", "qq.....hhhhh", "qqq...hhssss", "qqqq..hsskss",
+      "qqqqq.hsssss", ".qqqq..sssss", "..qqqq..bbbb", "...qqqqbbbbb", "....qqbbbbbb", ".....bbbbbbb", ".....bbbbbbb", "......bbbbbb",
+      ".......BBBBB", ".........s..", ".........s..", "............", "............", "............", "............", "............"] },
+    worm: { rows: [
+      "........................", "........................", "..............aaaaa.....", ".............aaaaaaa....", "............aaaaaaaaa...", "...........aakkkkkkaaa..", "...........akwkwkwkkaa..", "...........akkkkkkkkaaa.",
+      "...........akwkwkwkkaa..", "............aaaaaaaaaa..", "............AaaaaaaaaA..", "...........aaaaaaaaaa...", "...........AaaaaaaaaA...", "..........aaaaaaaaaa....", "..........AaaaaaaaaA....", ".........aaaaaaaaaa.....",
+      ".........AaaaaaaaaA.....", "........aaaaaaaaaa......", "...aaa..AaaaaaaaaA......", "..aaaaa.aaaaaaaaaa......", ".bbbbbbbbbbbbbbbbbbbbb..", "bbbbbbbbbbbbbbbbbbbbbbbb", "........................", "........................"] }
   };
 
   /* 몬스터 이름 → 템플릿과 색 */
@@ -1141,7 +1174,43 @@
     "그림자 용": ["dragon", { a: C.navy, b: C.purple }],
     "고룡": ["dragon", { a: C.red, b: C.gold }],
     "마왕의 그림자": ["caped", { h: C.black, s: C.slate, a: C.black, b: C.purple, c: C.red }],
-    "공허의 군주": ["eye", { a: C.black, c: C.magenta }]
+    "공허의 군주": ["eye", { a: C.black, c: C.magenta }],
+    /* 쉬움에만 나오는 순한 몬스터, 어려움의 정예, 새 보스와 어려움의 중간 보스 */
+    "아기 슬라임": ["slime", { a: "#9be37f" }],
+    "솜털 토끼": ["rabbit", { a: C.white, b: C.pink }],
+    "독침 임프": ["imp", { a: C.purple, b: C.magenta, c: C.lgrey, e: C.yellow, q: C.dbrown }],
+    "그림자 늑대": ["beast", { a: C.navy, b: C.purple }],
+    "칼날 고블린": ["goblin", { a: C.dred, b: C.black, c: C.lgrey }],
+    "숲의 고목왕": ["treant", { a: C.brown, b: C.dgreen, e: C.yellow }],
+    "늑대 우두머리": ["beast", { a: C.lgrey, b: C.white }, [[17, 4, "g.g.g"], [17, 5, "ggggg"]]],
+    "꼬마 요정": ["fairy", { h: C.yellow, s: C.skin1, b: C.green, q: C.cyan }],
+    "졸린 버섯돌이": ["mushroom", { a: C.lblue, c: C.white, b: C.sand }],
+    "철갑 집게": ["crab", { a: C.rust, b: C.tan }],
+    "피의 박쥐": ["bat", { a: C.dred }],
+    "광기의 하피": ["harpy", { h: C.red, s: C.skin1, q: C.dred, b: C.black, t: C.gold }],
+    "달빛 늑대왕": ["beast", { a: "#9fb4e6", b: C.white }, [[17, 4, "g.g.g"], [17, 5, "ggggg"]]],
+    "식인 꽃의 여왕": ["plant", { a: C.yellow, b: C.magenta, c: C.dgreen }],
+    "수줍은 미믹": ["mimic", { a: C.leather, e: C.yellow }],
+    "촛불 도깨비": ["wisp", { a: C.gold, b: C.yellow }],
+    "해골 마법사": ["witch", { a: C.navy, h: C.black, s: C.sand, c: C.cyan }],
+    "저주받은 갑옷": ["knight", { a: C.dgreen, b: C.ddgreen, c: C.green }],
+    "흡혈 귀족": ["caped", { h: C.lgrey, s: C.lgrey, a: C.dred, b: C.black, c: C.red }],
+    "보물고의 미믹왕": ["mimic", { a: C.dred, e: C.cyan }],
+    "망령 기사단장": ["knight", { a: C.lgrey, b: C.navy, c: C.cyan }],
+    "눈덩이 슬라임": ["slime", { a: C.white }],
+    "눈꽃 새": ["bird", { a: C.white, b: C.lblue, c: C.cyan, y: C.gold }],
+    "얼음 집게": ["crab", { a: C.lblue, b: C.cyan }],
+    "서리 늑대": ["beast", { a: C.white, b: C.cyan }],
+    "눈보라 정령": ["wisp", { a: C.white, b: C.lgrey }],
+    "빙하 대지렁이": ["worm", { a: C.lgrey, b: C.white }],
+    "눈보라 마녀": ["witch", { a: C.blue, h: C.lblue, s: C.white, c: C.white }],
+    "떠도는 별똥 정령": ["fairy", { h: C.gold, s: C.yellow, b: C.white, q: C.yellow }],
+    "아기 촉수": ["eye", { a: C.pink, c: C.purple }],
+    "공허 집게": ["crab", { a: C.purple, b: C.magenta }],
+    "나락의 임프": ["imp", { a: C.black, b: C.dred, c: C.gold, e: C.red, q: C.dred }],
+    "종말의 기사": ["knight", { a: C.gold, b: C.black, c: C.red }],
+    "세계 포식자 웜": ["worm", { a: C.purple, b: C.navy }],
+    "임프 대공": ["imp", { a: C.red, b: C.black, c: C.gold, e: C.yellow, q: C.black }]
   };
 
   function monsterPal(colors) {
