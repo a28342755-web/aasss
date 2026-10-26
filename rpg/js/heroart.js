@@ -1506,17 +1506,54 @@
   const SHEET_ART = "m_wizard";
   const SHEET = ["idle", "walk1", "walk2", "walk3", "run1", "run2", "run3", "air", "land", "atk1", "atk2", "atk3", "atk4"];
   const sheets = new Map();
+  /* 시트 프레임마다 직접 잰 자리: [턱 x, 턱 y, 얼굴 폭, 앞손 x, 앞손 y, 무기 돌림, 머리 기울임] (프레임 픽셀) */
+  const FRAME_AT = {
+    idle: [34, 38, 14, 45, 59, 0, 0], walk1: [36, 35, 14, 45, 53, 0.12, 0.03], walk2: [37, 36, 14, 44, 56, 0, 0], walk3: [39, 36, 14, 45, 57, -0.12, -0.03],
+    run1: [37, 34, 14, 42, 43, -0.35, -0.06], run2: [39, 36, 14, 46, 45, -0.25, -0.06], run3: [42, 34, 14, 46, 31, -0.45, -0.06],
+    air: [34, 32, 14, 50, 26, -0.6, -0.08], land: [50, 35, 14, 52, 45, 0.25, 0.06],
+    atk1: [32, 33, 14, 48, 37, 0.55, 0.04], atk2: [33, 33, 14, 44, 33, -0.9, -0.04], atk3: [33, 34, 14, 42, 36, -0.5, 0], atk4: [33, 34, 14, 49, 42, 0.4, 0.03]
+  };
+  /* 직업마다: 시트의 몸 프레임(옷을 그 직업 색으로) + 그 직업 그림의 머리와 손에 든 물건 */
   function sheetSet(job, hh) {
     const key = job.id + "@" + Math.round(hh);
     let set = sheets.get(key);
     if (set) return set;
     const lk = H.lookOf(job);
+    const id = H.heroArtId(job);
     const idle = fxImage("wiz_idle");
     if (!ready(idle)) return null;
+    const own = id === SHEET_ART;
+    let parts = null;
+    let bodyLook = lk;
+    if (!own) {
+      /* 직업 그림에서 머리와 물건을 오린다(색을 입힌 그림에서) */
+      const sk0 = srcKey(job, lk);
+      const M = rigMasks(sk0);
+      const art = bake(sk0, lk);
+      if (M === null || !art) return null;
+      if (!M || !M.head) return (sheets.set(key, false), false);
+      const src = source(sk0);
+      const fw = src && src.face ? src.face.w : H.HEAD_AT[id] ? H.HEAD_AT[id][2] : null;
+      const d = fw && pixels(art, M.w, M.h);
+      if (!d) return (sheets.set(key, false), false);
+      const cut = (mask) => {
+        const im = new ImageData(M.w, M.h);
+        for (let i = 0; i < M.w * M.h; i++) if (mask[i]) for (let c = 0; c < 4; c++) im.data[i * 4 + c] = d[i * 4 + c];
+        const cv = canvas(M.w, M.h);
+        cv.getContext("2d").putImageData(im, 0, 0);
+        return cv;
+      };
+      parts = { head: cut(M.head), neck: M.neck, fw, weapons: M.weapons.slice(0, 2).map((wp) => ({ img: cut(wp.mask), grip: wp.grip })) };
+      /* 몸(시트 옷)은 직업 그림의 주된 옷 색으로 */
+      if (!lk.pal) {
+        const inf = analyze(id);
+        if (inf) bodyLook = Object.assign({}, lk, { pal: { h: Math.round(inf.dom * 360), s: 1, v: 1 }, skin: null, hair: null });
+      } else bodyLook = Object.assign({}, lk, { skin: null, hair: null });
+    }
     const k = (hh * 1.0) / idle.naturalHeight;
     const frames = {};
     for (const name of SHEET) {
-      const b = bake("fx:wiz_" + name, lk);
+      const b = bake("fx:wiz_" + name, bodyLook);
       if (!b) return null;
       const bw = b.naturalWidth || b.width;
       const bh = b.naturalHeight || b.height;
@@ -1525,20 +1562,88 @@
       g.imageSmoothingEnabled = true;
       g.imageSmoothingQuality = "high";
       g.drawImage(b, 0, 0, cv.width, cv.height);
+      const at = FRAME_AT[name];
+      if (parts) {
+        /* 시트 마법사의 머리(모자)를 지운다 */
+        const fw = at[2] * k;
+        g.clearRect(at[0] * k - fw * 2.8, 0, fw * 4.3, at[1] * k + 1);
+      }
       /* 발밑 기준점: 몸통(위에서 45~75%) 가운데 */
       let sx = 0;
       let n = 0;
       try {
-        const d = g.getImageData(0, 0, cv.width, cv.height).data;
-        for (let y = Math.round(cv.height * 0.45); y < cv.height * 0.75; y++) for (let x = 0; x < cv.width; x++) if (d[(y * cv.width + x) * 4 + 3] > 100) { sx += x; n++; }
+        const dd = g.getImageData(0, 0, cv.width, cv.height).data;
+        for (let y = Math.round(cv.height * 0.45); y < cv.height * 0.75; y++) for (let x = 0; x < cv.width; x++) if (dd[(y * cv.width + x) * 4 + 3] > 100) { sx += x; n++; }
       } catch (e) { /* 그대로 */ }
       cv.anchorX = n ? sx / n : cv.width * 0.5;
+      cv.at = at.map((v, i) => (i < 5 ? v * k : v));
       frames[name] = cv;
     }
-    set = { frames, A: anchors(analyze("fx:wiz_idle"), frames.idle) };
+    set = { frames, parts, A: anchors(analyze("fx:wiz_idle"), frames.idle) };
     if (sheets.size > 60) sheets.clear();
     sheets.set(key, set);
     return set;
+  }
+  /* 시트 프레임 위에 직업의 머리와 물건을 얹는다(프레임 왼쪽 위가 원점) */
+  function drawParts(ctx, fr, parts) {
+    const at = fr.at;
+    const s = (at[2] * 1.0) / parts.fw;
+    parts.weapons.forEach((wp, i) => {
+      if (i) return;
+      ctx.save();
+      ctx.translate(at[3], at[4]);
+      ctx.rotate(at[5]);
+      ctx.scale(s, s);
+      ctx.drawImage(wp.img, -wp.grip[0], -wp.grip[1]);
+      ctx.restore();
+    });
+    ctx.save();
+    ctx.translate(at[0], at[1]);
+    ctx.rotate(at[6]);
+    ctx.scale(s, s);
+    ctx.drawImage(parts.head, -parts.neck[0], -parts.neck[1]);
+    ctx.restore();
+    if (parts.weapons[1]) {
+      const wp = parts.weapons[1];
+      ctx.save();
+      ctx.translate(at[0] - at[2] * 0.9, at[4] + at[2] * 0.3);
+      ctx.rotate(-at[5] * 0.5);
+      ctx.scale(s, s);
+      ctx.globalAlpha *= 0.95;
+      ctx.drawImage(wp.img, -wp.grip[0], -wp.grip[1]);
+      ctx.restore();
+    }
+  }
+  /* 머리·물건까지 얹은 프레임 한 장(직업·프레임마다 한 번) */
+  function sheetComposite(set, name) {
+    const fr = set.frames[name];
+    if (!set.parts) return fr;
+    if (fr.full) return fr.full;
+    const pad = Math.ceil(fr.height * 0.9);
+    const cv = canvas(fr.width + pad * 2, fr.height + pad);
+    const g = cv.getContext("2d");
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = "high";
+    g.translate(pad, pad);
+    g.drawImage(fr, 0, 0);
+    drawParts(g, fr, set.parts);
+    /* 빈 여백 자르기 */
+    let out = cv;
+    try {
+      const d = g.getImageData(0, 0, cv.width, cv.height).data;
+      let x0 = cv.width;
+      let x1 = -1;
+      let y0 = cv.height;
+      for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++) if (d[(y * cv.width + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; }
+      if (x1 >= x0) {
+        out = canvas(x1 - x0 + 1, cv.height - y0);
+        out.getContext("2d").drawImage(cv, -x0, -y0);
+        out.anchorX = fr.anchorX + pad - x0;
+      }
+    } catch (e) { /* 그대로 */ }
+    if (out === cv) out.anchorX = fr.anchorX + pad;
+    fr.full = out;
+    return out;
   }
   function sheetFrame(anim, t, f, alt) {
     if (LEGACY[anim]) { f = LEGACY[anim][1]; anim = "slash"; }
@@ -1555,7 +1660,7 @@
   }
   function drawSheet(ctx, job, x, y, o, set, lk, hh) {
     const name = sheetFrame(o.anim, o.t || 0, o.f || 0, o.alt);
-    const fr = set.frames[name];
+    const fr = sheetComposite(set, name);
     const T = o.time !== undefined ? o.time : clock();
     const dir = o.dir || 1;
     const A = set.A;
@@ -1614,7 +1719,8 @@
   function draw(ctx, job, x, y, o) {
     const lk = H.lookOf(job);
     const hh = o.h * lk.size;
-    if (!o.still && H.heroArtId(job) === SHEET_ART) {
+    /* 모든 직업이 참고 시트의 프레임으로 움직인다(머리·물건·옷 색은 그 직업 것) */
+    if (!o.still) {
       const set = sheetSet(job, hh);
       if (set) return drawSheet(ctx, job, x, y, o, set, lk, hh);
     }
