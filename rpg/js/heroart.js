@@ -577,6 +577,45 @@
         if (f) { m.rot = -0.07; m.dx = 0.04; m.sx = 1.03; }
         else { m.rot = 0.06; m.dy = -0.02; m.sy = 1.02; }
         break;
+      /* 무기별 공격 동작. f: 0 준비, 1 내지르기, 2 마무리 */
+      case "slash":
+        if (f === 0) { m.rot = 0.13; m.dx = -0.05; m.sy = 0.98; } else if (f === 1) { m.rot = -0.17; m.dx = 0.09; m.sx = 1.05; } else { m.rot = -0.07; m.dx = 0.05; }
+        break;
+      case "thrust":
+        if (f === 0) { m.rot = 0.05; m.dx = -0.09; m.sx = 0.95; } else if (f === 1) { m.rot = -0.04; m.dx = 0.17; m.sx = 1.1; m.sy = 0.97; } else { m.dx = 0.08; m.sx = 1.03; }
+        break;
+      case "smash":
+        if (f === 0) { m.rot = 0.24; m.dx = -0.05; m.dy = -0.05; m.sy = 1.07; m.sx = 0.95; } else if (f === 1) { m.rot = -0.27; m.dx = 0.06; m.sy = 0.86; m.sx = 1.1; } else { m.rot = -0.12; m.sy = 0.95; m.dx = 0.04; }
+        break;
+      case "twin":
+        if (f === 0) { m.rot = 0.08; m.dx = -0.03; } else if (f === 1) { m.rot = -0.15; m.dx = 0.07; m.sx = 1.04; } else { m.rot = 0.1; m.dx = 0.05; m.sx = 1.03; }
+        break;
+      case "jab":
+        if (f === 0) { m.dx = -0.03; m.rot = 0.03; } else if (f === 1) { m.dx = 0.11; m.rot = -0.07; m.sx = 1.05; } else { m.dx = 0.04; }
+        break;
+      case "lash":
+        if (f === 0) { m.rot = 0.18; m.dx = -0.06; m.dy = -0.02; } else if (f === 1) { m.rot = -0.11; m.dx = 0.05; m.sx = 1.04; } else { m.rot = -0.05; m.dx = 0.02; }
+        break;
+      case "sweep":
+        if (f === 0) { m.rot = 0.2; m.dx = -0.07; m.sy = 0.97; } else if (f === 1) { m.rot = -0.24; m.dx = 0.04; m.sx = 1.08; m.sy = 0.95; } else { m.rot = -0.15; m.dx = 0.02; }
+        break;
+      case "stab":
+        if (f === 0) { m.dx = -0.05; m.rot = 0.06; m.sy = 0.97; } else if (f === 1) { m.dx = 0.13; m.rot = -0.09; m.sx = 1.06; } else { m.dx = 0.05; }
+        break;
+      case "shoot":
+        if (f === 0) { m.dx = -0.02; m.rot = 0.04; m.sy = 0.99; } else if (f === 1) { m.dx = -0.06; m.rot = -0.05; m.sx = 1.02; } else { m.dx = -0.02; }
+        break;
+      /* 시전 동작: 마도서는 몸을 숙여 읽고, 수정구·소환은 두 팔을 들어 올리고, 악기는 박자를 탄다 */
+      case "read":
+        if (f) { m.rot = -0.06; m.dx = 0.04; m.sx = 1.02; } else { m.rot = 0.04; m.sy = 0.98; }
+        break;
+      case "raise":
+        if (f) { m.rot = -0.04; m.sy = 1.04; m.dy = -0.03; } else { m.sy = 1.06; m.sx = 0.96; m.dy = -0.04; }
+        break;
+      case "play":
+        m.rot = Math.sin(t * 14) * 0.07;
+        m.dy = -Math.abs(Math.sin(t * 14)) * 0.025;
+        break;
       case "hurt": m.rot = 0.2; m.dx = -0.06; m.sy = 0.96; break;
       case "climb": m.dx = Math.sin(t * 9) * 0.02; m.rot = Math.sin(t * 9) * 0.035; m.dy = -Math.abs(Math.cos(t * 9)) * 0.015; break;
       case "victory": m.dy = -Math.abs(Math.sin(t * 6)) * 0.05; m.sy = 1.03; break;

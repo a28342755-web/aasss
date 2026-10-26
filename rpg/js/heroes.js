@@ -122,6 +122,76 @@
     tr_acrobat: { reach: "melee", ult: "blade" }, b_dancer: { reach: "melee", ult: "notes" }, fa_bee: { reach: "throw", shot: "flask", ult: "element" },
     ga_fisher: { reach: "melee", ult: "blade" }, g_bomber: { reach: "gun", shot: "bomb", ult: "bombard" }, se_pirate: { reach: "melee", ult: "bombard" }
   };
+  /* ── 무기: 기본 공격의 동작·사거리·속도·피해 ──
+     motion: 주인공 동작(slash 베기, thrust 찌르기, smash 내려찍기, twin 쌍검, jab 주먹, lash 채찍, sweep 휩쓸기, stab 단검)
+     reach: 근접 사거리, time: 공격 시간 배율, mult: 피해 배율, hits: 타수, pierce: 꿰뚫는 수, splash: 함께 맞는 수,
+     back: 뒤까지 휩쓺, crit: 치명타 추가. 원거리는 shot(날아가는 것)·range */
+  const WEAPONS = {
+    sword: { name: "검", motion: "slash", reach: 64, time: 1, mult: 1 },
+    spear: { name: "창", motion: "thrust", reach: 96, time: 1.1, mult: 1, pierce: 2 },
+    heavy: { name: "둔기", motion: "smash", reach: 72, time: 1.4, mult: 1.5, splash: 3 },
+    twin: { name: "쌍검", motion: "twin", reach: 58, time: 0.9, mult: 0.55, hits: 2 },
+    fist: { name: "주먹", motion: "jab", reach: 46, time: 0.72, mult: 0.8 },
+    whip: { name: "채찍", motion: "lash", reach: 104, time: 1.1, mult: 0.9, pierce: 2 },
+    scythe: { name: "낫", motion: "sweep", reach: 76, time: 1.2, mult: 1.1, splash: 3, back: true },
+    dagger: { name: "단검", motion: "stab", reach: 52, time: 0.75, mult: 0.85, crit: 0.12 },
+    bow: { name: "활", far: true, shot: "arrow", range: 250, time: 1, mult: 1 },
+    crossbow: { name: "석궁", far: true, shot: "bolt", range: 270, time: 1.15, mult: 1.2 },
+    gun: { name: "총", far: true, shot: "bullet", range: 260, time: 0.95, mult: 1 },
+    cannon: { name: "포", far: true, shot: "bomb", range: 220, time: 1.35, mult: 1.25, splash: 3 },
+    staff: { name: "지팡이", far: true, caster: true, shot: "orb", range: 210, time: 1, mult: 1 },
+    book: { name: "마도서", far: true, caster: true, shot: "rune", range: 200, time: 1.15, mult: 1.15 },
+    orb: { name: "수정구", far: true, caster: true, shot: "beam", range: 220, time: 1.05, mult: 1, pierce: 2 },
+    talisman: { name: "부적", far: true, caster: true, shot: "talisman", range: 220, time: 1, mult: 1 },
+    music: { name: "악기", far: true, caster: true, shot: "note", range: 200, time: 0.9, mult: 0.85, pierce: 2 },
+    summon: { name: "소환수", far: true, caster: true, shot: "wisp", range: 210, time: 1.05, mult: 1 },
+    throw: { name: "던지기", far: true, range: 230, time: 1, mult: 1 }
+  };
+  const WEAPON_BY_ART = {
+    w_berserker: "heavy", w_gladiator: "heavy", w_spear: "spear", w_twin: "twin", w_sword: "sword", k_dark: "heavy", k_lancer: "spear",
+    k_rose: "sword", k_paladin: "sword", a_hunter: "crossbow", a_elf: "bow", g_bomber: "cannon", g_slinger: "gun", r_trickster: "dagger",
+    r_thief: "dagger", s_kunoichi: "dagger", s_shadow: "dagger", s_ninja: "sword", e_fire: "staff", e_ice: "staff", e_water: "orb",
+    e_storm: "staff", e_earth: "staff", m_witch: "staff", m_rune: "book", m_sage: "book", m_wizard: "staff", d_blood: "spear",
+    d_curse: "talisman", d_reaper: "scythe", d_necro: "summon", h_angel: "staff", h_inquisitor: "heavy", h_nun: "book", h_priest: "staff",
+    n_beast: "heavy", n_flower: "whip", n_druid: "staff", sp_medium: "talisman", sp_shaman: "staff", ma_girl: "fist", ma_boxer: "fist",
+    ma_monk: "fist", su_dragon: "summon", su_summoner: "book", su_tamer: "summon", b_bard: "music", b_dancer: "twin", t_engineer: "heavy",
+    t_mech: "heavy", al_alch: "throw", al_mad: "throw", o_miko: "talisman", o_taoist: "talisman", o_warrior: "spear", o_samurai: "sword",
+    hu_slayer: "heavy", hu_hunter: "spear", hu_monster: "crossbow", se_sailor: "spear", se_pirate: "sword", mi_soldier: "spear",
+    mi_general: "sword", c_astro: "orb", c_time: "orb", c_void: "orb", tr_acrobat: "fist", tr_puppet: "summon", tr_magician: "throw",
+    tr_jester: "throw", bl_mermaid: "spear", bl_fox: "talisman", bl_vamp: "dagger", bl_dragon: "heavy", bl_wolf: "fist", fa_bee: "throw",
+    fa_herder: "whip", fa_farmer: "scythe", ga_fisher: "whip", ga_miner: "heavy", cr_smith: "heavy", cu_chef: "heavy", co_merchant: "throw",
+    sc_scholar: "book", ar_painter: "throw", me_doctor: "throw", ci_guard: "sword", sv_maid: "whip", bu_builder: "heavy", my_fortune: "orb"
+  };
+  /* 직업 이름 낱말이 무기를 바꾼다(그림의 공격 거리와 같은 쪽 무기로만) */
+  const WEAPON_WORDS = [
+    [/쌍검|쌍절곤|이도류|검무/, "twin"], [/창술|장창|창병|창기병|투창|작살|삼지창|봉술|언월도|랜스|용기사|마상/, "spear"],
+    [/도끼|망치|해머|철퇴|곡괭이|대검|거인|파괴|철갑|몽둥이|대장장|석공|철거|벌목|나무꾼|광부|채석|정육|굴착|벽돌/, "heavy"],
+    [/권|주먹|복서|레슬러|무투|격투|씨름|장사|유술|점혈|태극|취권|기공|안마/, "fist"],
+    [/채찍|사슬|낚시|어부|조련|마부|목동/, "whip"], [/낫|사신|수확|추수|사형집행|농부/, "scythe"],
+    [/단검|비수|암살|자객|소매치기|칼잡이|살수|첩자|교살|독침|소매/, "dagger"],
+    [/석궁/, "crossbow"], [/궁|활|사수/, "bow"], [/총|저격|마탄/, "gun"], [/포병|대포|박격|포수|폭탄|화약|지뢰|수류탄|공성/, "cannon"],
+    [/학자|서기|사서|마도서|필사|문장|주문|교수|현자|룬|신학|역사가|편찬/, "book"],
+    [/수정|구슬|점성|별|성운|월광|태양술|오로라|예언|공허|일식|혜성|운석|특이점|점쟁이|타로/, "orb"],
+    [/부적|도사|음양|무녀|무당|퇴마|영매|강시|풍수/, "talisman"],
+    [/음유|가수|가희|악사|피리|나팔|북잡이|장구|하프|연주|작곡|성악|자장가|마에스트로|진혼|세이렌|판소리/, "music"],
+    [/소환|조련사|인형술|복화술|그림자극|네크로|시체|뼈술|골렘|강령/, "summon"]
+  ];
+  function weaponOf(job) {
+    if (job._weapon) return job._weapon;
+    const style = styleOf(job);
+    const far = style.reach !== "melee";
+    let key = WEAPON_BY_ART[heroArtId(job)] || (far ? "staff" : "sword");
+    if (!!WEAPONS[key].far !== far) key = far ? (style.reach === "magic" ? "staff" : "throw") : "sword";
+    for (const [re, k] of WEAPON_WORDS) {
+      if (!!WEAPONS[k].far !== far) continue;
+      if (style.reach !== "magic" && WEAPONS[k].caster) continue;
+      if (style.reach === "magic" && WEAPONS[k].far && !WEAPONS[k].caster) continue;
+      if (re.test(job.base)) { key = k; break; }
+    }
+    job._weapon = Object.assign({ key, hits: 1 }, WEAPONS[key]);
+    return job._weapon;
+  }
+
   function styleOf(job) {
     const id = heroArtId(job);
     return STYLE_BY_ID[id] || STYLE_BY_PREFIX[id.split("_")[0]] || { reach: "melee", ult: "blade" };
@@ -361,5 +431,5 @@
     return lk;
   }
 
-  F.heroes = { ART, heroArtId, styleOf, lookOf, HEAD_AT, HEAD_TAG, BODY_TAKES };
+  F.heroes = { ART, heroArtId, styleOf, weaponOf, WEAPONS, lookOf, HEAD_AT, HEAD_TAG, BODY_TAKES };
 })(typeof window !== "undefined" ? window : globalThis);

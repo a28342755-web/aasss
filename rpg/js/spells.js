@@ -148,7 +148,7 @@
   function shot(from, to, el, kind) {
     const c = pal(el);
     const big = kind === "fireball";
-    const speed = (kind === "arrow" || kind === "bullet" ? 900 : big ? 420 : 520) * (Z / 2);
+    const speed = (kind === "bolt" ? 1150 : kind === "arrow" || kind === "bullet" ? 900 : big ? 420 : kind === "wisp" ? 360 : 520) * (Z / 2);
     const dur = travel(from, to, speed);
     const trail = [];
     if (kind === "bullet") add({ life: 90, draw(ctx, t) { glow(ctx, from[0], from[1], 12 * Z, c[1], 0.9 * (1 - t)); } });
@@ -157,7 +157,7 @@
       update(dt, e) {
         const k = Math.min(1, e.age / dur);
         e.x = from[0] + (to[0] - from[0]) * k;
-        e.y = from[1] + (to[1] - from[1]) * k + (kind === "star" ? Math.sin(k * Math.PI) * -10 * Z : 0);
+        e.y = from[1] + (to[1] - from[1]) * k + (kind === "star" ? Math.sin(k * Math.PI) * -10 * Z : kind === "wisp" ? Math.sin(k * Math.PI * 3) * 10 * Z : 0);
         trail.unshift([e.x, e.y]);
         if (trail.length > (big ? 16 : 9)) trail.pop();
         if (kind === "orb" || big) {
@@ -168,9 +168,9 @@
         if (e.x === undefined) return;
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
-        if (kind === "arrow" || kind === "bullet") {
+        if (kind === "arrow" || kind === "bullet" || kind === "bolt") {
           const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
-          const len = (kind === "arrow" ? 22 : 30) * Z;
+          const len = (kind === "arrow" ? 22 : kind === "bolt" ? 16 : 30) * Z;
           ctx.strokeStyle = hexA(c[1], 0.5);
           ctx.lineWidth = 3 * Z;
           ctx.beginPath();
@@ -178,13 +178,13 @@
           ctx.lineTo(e.x, e.y);
           ctx.stroke();
           ctx.globalCompositeOperation = "source-over";
-          ctx.strokeStyle = kind === "arrow" ? "#f4ead0" : c[0];
+          ctx.strokeStyle = kind === "bullet" ? c[0] : "#f4ead0";
           ctx.lineWidth = Math.max(1, Z);
           ctx.beginPath();
           ctx.moveTo(e.x - Math.cos(ang) * len * 0.7, e.y - Math.sin(ang) * len * 0.7);
           ctx.lineTo(e.x, e.y);
           ctx.stroke();
-          if (kind === "arrow") {
+          if (kind !== "bullet") {
             ctx.fillStyle = "#d0d8e8";
             ctx.beginPath();
             ctx.moveTo(e.x + Math.cos(ang) * 4 * Z, e.y + Math.sin(ang) * 4 * Z);
@@ -208,13 +208,20 @@
           ctx.restore();
           return;
         }
-        const spr = (kind === "orb" || big) && fxSprite(big ? "fireball" : "orb", el);
+        const spr = (kind === "orb" || kind === "wisp" || big) && fxSprite(big ? "fireball" : "orb", el);
         if (spr) {
           /* 그린 구체: 꼬리가 날아온 쪽을 향하게 돌린다 */
           const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
           const flip = Math.abs(ang) > Math.PI / 2;
           glow(ctx, e.x, e.y, (big ? 30 : 16) * Z, c[2], 0.45);
-          fxPut(ctx, spr, e.x, e.y, { w: (big ? 62 : 36) * Z, ax: big ? 0.86 : 0.84, ay: big ? 0.6 : 0.5, rot: flip ? ang - Math.PI : ang, sx: flip ? -1 : 1 });
+          fxPut(ctx, spr, e.x, e.y, { w: (big ? 62 : kind === "wisp" ? 28 : 36) * Z, ax: big ? 0.86 : 0.84, ay: big ? 0.6 : 0.5, rot: flip ? ang - Math.PI : ang, sx: flip ? -1 : 1 });
+          if (kind === "wisp") {
+            /* 소환수 혼령: 구체에 두 눈 */
+            ctx.globalCompositeOperation = "source-over";
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(e.x - 3 * Z, e.y - 2 * Z, 1.6 * Z, 2.4 * Z);
+            ctx.fillRect(e.x + 1.4 * Z, e.y - 2 * Z, 1.6 * Z, 2.4 * Z);
+          }
           ctx.restore();
           return;
         }
@@ -418,6 +425,349 @@
       }
     });
     for (let i = 0; i < (big ? 10 : 5); i++) spark(x + dir * rand(10, 30) * Z, y + rand(-20, 20) * Z, { vx: dir * rand(40, 140) * Z / 2, vy: rand(-60, 60) * Z / 2, life: rand(200, 400), col: pick(c.slice(0, 2)), glow: 0.7, size: rand(0.8, 1.4), drag: 0.9 });
+  }
+
+  /* ── 무기별 근접 궤적 ── */
+  /* 찌르기: 앞으로 길게 뻗는 창끝 섬광(단검은 짧게) */
+  function thrust(x, y, dir, el, len, big) {
+    const c = pal(el === "phys" ? "phys" : el);
+    add({
+      life: 220,
+      draw(ctx, t) {
+        const k = 1 - Math.pow(1 - Math.min(1, t * 2.4), 2);
+        const fade = 1 - Math.max(0, (t - 0.4) / 0.6);
+        const L = len * k;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < 3; i++) {
+          const w = (big ? 7 : 5) * Z * (1 - i * 0.3);
+          ctx.fillStyle = hexA(c[2 - i], (0.35 + i * 0.25) * fade);
+          ctx.beginPath();
+          ctx.moveTo(x - dir * 6 * Z, y - w);
+          ctx.lineTo(x + dir * L, y);
+          ctx.lineTo(x - dir * 6 * Z, y + w);
+          ctx.closePath();
+          ctx.fill();
+        }
+        glow(ctx, x + dir * L, y, 14 * Z, c[1], 0.8 * fade);
+        ctx.restore();
+      }
+    });
+    X.sleep(70).then(() => { for (let i = 0; i < 6; i++) spark(x + dir * len, y, { vx: dir * rand(60, 160) * Z / 2, vy: rand(-50, 50) * Z / 2, life: rand(200, 380), col: pick(c.slice(0, 2)), glow: 0.8, size: rand(0.8, 1.4), drag: 0.88 }); });
+  }
+  /* 땅에 퍼지는 충격파 고리 */
+  function ring(x, gy, el, R) {
+    const c = pal(el === "phys" ? "phys" : el);
+    add({
+      life: 420,
+      draw(ctx, t) {
+        const r = R * (0.2 + t * 0.9);
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = hexA(c[1], 0.9 * (1 - t));
+        ctx.lineWidth = Math.max(1, 3 * Z * (1 - t));
+        ctx.beginPath();
+        ctx.ellipse(x, gy, r, r * 0.24, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        glow(ctx, x, gy, r * 0.7, c[2], 0.3 * (1 - t));
+        ctx.restore();
+      }
+    });
+  }
+  /* 내려찍기: 위에서 땅까지 내리긋는 호, 땅이 갈라지며 충격파와 흙먼지 */
+  function smash(x, gy, dir, el, big) {
+    const c = pal(el === "phys" ? "phys" : el);
+    const R = (big ? 46 : 36) * Z;
+    add({
+      life: 240,
+      draw(ctx, t) {
+        const k = Math.min(1, t * 2.2);
+        const fade = 1 - Math.max(0, (t - 0.45) / 0.55);
+        ctx.save();
+        ctx.translate(x, gy - R * 0.9);
+        ctx.scale(dir, 1);
+        ctx.globalCompositeOperation = "lighter";
+        const a0 = -2.2;
+        const a1 = a0 + 2.3 * k;
+        for (let i = 0; i < 4; i++) {
+          ctx.strokeStyle = hexA(i === 3 ? c[0] : i === 2 ? c[1] : c[2], (0.25 + i * 0.22) * fade);
+          ctx.lineWidth = (10 - i * 2.4) * Z;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.arc(0, 0, R - i * 1.5 * Z, a0, a1);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    });
+    X.sleep(90).then(() => {
+      ring(x + dir * R * 0.6, gy, el, (big ? 90 : 64) * Z);
+      const crack = [];
+      for (let i = 0; i < 5; i++) crack.push([rand(-1, 1), rand(0.3, 1)]);
+      add({
+        life: 600,
+        draw(ctx, t) {
+          ctx.save();
+          ctx.strokeStyle = hexA("#1a1020", 0.8 * (1 - t));
+          ctx.lineWidth = Math.max(1, Z);
+          crack.forEach(([dx, l]) => { ctx.beginPath(); ctx.moveTo(x + dir * R * 0.6, gy); ctx.lineTo(x + dir * R * 0.6 + dx * 26 * Z * l, gy + 3 * Z * l); ctx.stroke(); });
+          ctx.restore();
+        }
+      });
+      for (let i = 0; i < (big ? 18 : 10); i++) spark(x + dir * R * 0.6 + rand(-20, 20) * Z, gy - rand(0, 4) * Z, { vx: rand(-120, 120) * Z / 2, vy: rand(-180, -60) * Z / 2, grav: 420 * Z / 2, life: rand(350, 650), col: pick(["#c8b090", "#8a7058", "#e8dcc0"]), size: rand(1, 2) });
+      sparkBurst(x + dir * R * 0.6, gy - 6 * Z, el === "phys" ? "phys" : el, 8, 140 * Z / 2);
+    });
+  }
+  /* 주먹: 짧은 충격 별과 속도선 */
+  function punch(x, y, dir, el) {
+    const c = pal(el === "phys" ? "phys" : el);
+    add({
+      life: 200,
+      draw(ctx, t) {
+        const r = (8 + t * 16) * Z;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        glow(ctx, x, y, r * 1.4, c[1], 0.8 * (1 - t));
+        ctx.strokeStyle = hexA(c[0], 1 - t);
+        ctx.lineWidth = Math.max(1, 1.6 * Z);
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(x + Math.cos(a) * r * 0.4, y + Math.sin(a) * r * 0.4);
+          ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+          ctx.stroke();
+        }
+        for (let k = 0; k < 3; k++) {
+          ctx.beginPath();
+          ctx.moveTo(x - dir * (14 + k * 4) * Z, y - (6 - k * 6) * Z);
+          ctx.lineTo(x - dir * (30 + k * 6) * Z * (1 - t * 0.5), y - (6 - k * 6) * Z);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    });
+  }
+  /* 채찍: 손에서 끝까지 물결치며 뻗는 줄, 끝에서 탁 터진다 */
+  function lash(x, y, dir, el, len) {
+    const c = pal(el === "phys" ? "phys" : el);
+    add({
+      life: 260,
+      draw(ctx, t) {
+        const k = Math.min(1, t * 2.6);
+        const fade = 1 - Math.max(0, (t - 0.5) / 0.5);
+        const L = len * k;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        [[5, c[2], 0.5], [2.4, c[1], 0.9], [1, c[0], 1]].forEach(([w, col, a]) => {
+          ctx.strokeStyle = hexA(col, a * fade);
+          ctx.lineWidth = Math.max(1, w * Z);
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.bezierCurveTo(x + dir * L * 0.3, y - 26 * Z * (1 - k), x + dir * L * 0.65, y + 18 * Z * (1 - k), x + dir * L, y + 4 * Z);
+          ctx.stroke();
+        });
+        glow(ctx, x + dir * L, y + 4 * Z, 12 * Z, c[1], 0.9 * fade * k);
+        ctx.restore();
+      }
+    });
+  }
+  /* 휩쓸기: 앞뒤를 크게 도는 초승달(낫) */
+  function sweep(x, y, dir, el) {
+    const c = pal(el === "phys" ? "phys" : el);
+    const R = 48 * Z;
+    add({
+      life: 280,
+      draw(ctx, t) {
+        const k = Math.min(1, t * 1.8);
+        const fade = 1 - Math.max(0, (t - 0.5) / 0.5);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(dir, 0.55);
+        ctx.globalCompositeOperation = "lighter";
+        const a0 = Math.PI * 1.15;
+        const a1 = a0 - Math.PI * 1.5 * k;
+        for (let i = 0; i < 4; i++) {
+          ctx.strokeStyle = hexA(i === 3 ? c[0] : i === 2 ? c[1] : c[2], (0.25 + i * 0.22) * fade);
+          ctx.lineWidth = (12 - i * 2.8) * Z;
+          ctx.beginPath();
+          ctx.arc(0, 0, R - i * 2 * Z, a1, a0);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    });
+  }
+  /* 광선: 손에서 곧게 뻗는 굵은 빛줄기 */
+  function beam(from, to, el) {
+    const c = pal(el);
+    add({
+      life: 260,
+      draw(ctx, t) {
+        const a = 1 - t;
+        const w = (8 - t * 6) * Z;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        [[w * 2.2, c[2], 0.35], [w, c[1], 0.8], [w * 0.4, c[0], 1]].forEach(([lw, col, al]) => {
+          ctx.strokeStyle = hexA(col, al * a);
+          ctx.lineWidth = Math.max(1, lw);
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(from[0], from[1]);
+          ctx.lineTo(to[0], to[1]);
+          ctx.stroke();
+        });
+        glow(ctx, from[0], from[1], 16 * Z, c[1], 0.8 * a);
+        glow(ctx, to[0], to[1], 22 * Z, c[1], 0.8 * a);
+        ctx.restore();
+      }
+    });
+    sparkBurst(to[0], to[1], el, 10, 160 * Z / 2);
+    return X.sleep(60);
+  }
+  /* 룬: 대상 자리에 작은 마법진이 돌다가 터진다 */
+  function runeAt(x, y, el) {
+    const c = pal(el);
+    const R = 16 * Z;
+    add({
+      life: 300,
+      draw(ctx, t, e) {
+        const a = t < 0.8 ? 1 : (1 - t) / 0.2;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.translate(x, y);
+        ctx.rotate(e.age / 120);
+        ctx.strokeStyle = hexA(c[1], 0.95 * a);
+        ctx.lineWidth = Math.max(1, Z);
+        ctx.beginPath(); ctx.arc(0, 0, R * (0.6 + t * 0.4), 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath();
+        for (let k = 0; k <= 5; k++) { const ang = (k * 4 * Math.PI) / 5; const px = Math.cos(ang) * R * 0.8; const py = Math.sin(ang) * R * 0.8; if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+        ctx.stroke();
+        glow(ctx, 0, 0, R * 1.4, c[2], 0.5 * a);
+        ctx.restore();
+      }
+    });
+    return X.sleep(240).then(() => impact(x, y, el, false));
+  }
+
+  /* ── 기술 종류별 덧연출 ── */
+  /* 독·저주: 대상 둘레에 피어오르는 거품·연기 */
+  function cloud(x, gy, kind) {
+    const col = kind === "curse" ? ["#c08aff", "#7a3ae0", "#f0d8ff"] : ["#b8f070", "#5ac040", "#e8ffc0"];
+    for (let i = 0; i < 14; i++) {
+      X.sleep(i * 40).then(() => spark(x + rand(-16, 16) * Z, gy - rand(0, 20) * Z, { vx: rand(-15, 15) * Z / 2, vy: rand(-70, -30) * Z / 2, life: rand(600, 1000), col: pick(col), glow: 0.7, size: rand(1.4, 2.6), shape: kind === "curse" ? "star" : "sq" }));
+    }
+    add({ life: 900, draw(ctx, t) { ctx.save(); ctx.globalCompositeOperation = "lighter"; glow(ctx, x, gy - 14 * Z, 30 * Z, col[1], 0.35 * (1 - t)); ctx.restore(); } });
+  }
+  /* 출혈: 붉은 방울이 튄다 */
+  function drops(x, y) {
+    for (let i = 0; i < 12; i++) spark(x, y, { vx: rand(-90, 90) * Z / 2, vy: rand(-150, -40) * Z / 2, grav: 520 * Z / 2, life: rand(400, 700), col: pick(["#ff3050", "#c0102a", "#ff8090"]), size: rand(1.2, 2.2) });
+  }
+  /* 흡수·마나: 대상에서 주인공에게 흘러 들어오는 빛 알갱이 */
+  function stream(from, to, col) {
+    for (let i = 0; i < 12; i++) {
+      X.sleep(i * 35).then(() => {
+        const sx = from[0] + rand(-8, 8) * Z;
+        const sy = from[1] + rand(-8, 8) * Z;
+        const dur = 380;
+        add({
+          life: dur,
+          draw(ctx, t) {
+            const k = t * t;
+            const px = sx + (to[0] - sx) * k;
+            const py = sy + (to[1] - sy) * k - Math.sin(t * Math.PI) * 20 * Z;
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            glow(ctx, px, py, 6 * Z, col, 0.9);
+            ctx.restore();
+          }
+        });
+      });
+    }
+  }
+  /* 혼란: 하트가 떠오른다 */
+  function hearts(x, y) {
+    for (let i = 0; i < 6; i++) {
+      const hx = x + rand(-14, 14) * Z;
+      const hy = y + rand(-6, 6) * Z;
+      add({
+        life: 800,
+        draw(ctx, t) {
+          const s = 3 * Z;
+          const py = hy - t * 26 * Z;
+          ctx.save();
+          ctx.globalAlpha = 1 - t;
+          ctx.fillStyle = "#ff7ab8";
+          ctx.beginPath();
+          ctx.arc(hx - s * 0.5, py, s * 0.6, 0, Math.PI * 2);
+          ctx.arc(hx + s * 0.5, py, s * 0.6, 0, Math.PI * 2);
+          ctx.moveTo(hx - s * 1.05, py + s * 0.2);
+          ctx.lineTo(hx, py + s * 1.3);
+          ctx.lineTo(hx + s * 1.05, py + s * 0.2);
+          ctx.fill();
+          ctx.restore();
+        }
+      });
+    }
+  }
+  /* 강탈: 동전이 대상에서 주인공 쪽으로 튀어 나온다 */
+  function coins(from, to) {
+    for (let i = 0; i < 6; i++) X.sleep(i * 50).then(() => shot([from[0] + rand(-6, 6) * Z, from[1]], [to[0] + rand(-6, 6) * Z, to[1]], "light", "coin"));
+  }
+  /* 도박: 주사위 두 개가 굴러 떨어지며 눈이 바뀐다 */
+  function dice(x, y) {
+    [-1, 1].forEach((sg) => {
+      const n0 = 1 + Math.floor(Math.random() * 6);
+      add({
+        life: 700,
+        draw(ctx, t) {
+          const s = 6 * Z;
+          const px = x + sg * 10 * Z;
+          const py = y - 30 * Z + t * 24 * Z;
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate((1 - t) * 6 * sg);
+          ctx.globalAlpha = t > 0.8 ? (1 - t) / 0.2 : 1;
+          ctx.fillStyle = "#1a1430";
+          ctx.fillRect(-s - Z * 0.5, -s - Z * 0.5, s * 2 + Z, s * 2 + Z);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(-s, -s, s * 2, s * 2);
+          ctx.fillStyle = "#d0203a";
+          const n = t < 0.7 ? 1 + (Math.floor(t * 20) % 6) : n0;
+          const pips = [[], [[0, 0]], [[-1, -1], [1, 1]], [[-1, -1], [0, 0], [1, 1]], [[-1, -1], [1, -1], [-1, 1], [1, 1]], [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]]][n];
+          pips.forEach(([a, b]) => ctx.fillRect(a * s * 0.55 - Z * 0.8, b * s * 0.55 - Z * 0.8, Z * 1.6, Z * 1.6));
+          ctx.restore();
+        }
+      });
+    });
+  }
+  /* 급소·처형: 대상 위에 X자로 두 번 긋는다 */
+  function cross(x, y, el) {
+    slash(x, y, 1, el, true, false);
+    X.sleep(80).then(() => slash(x, y, -1, el, true, true));
+  }
+  /* 약화: 아래로 떨어지는 화살표 */
+  function weaken(x, y) {
+    for (let i = 0; i < 3; i++) {
+      const ax = x + (i - 1) * 10 * Z;
+      add({
+        life: 700,
+        draw(ctx, t) {
+          const py = y - 20 * Z + t * 22 * Z;
+          const s = 3 * Z;
+          ctx.save();
+          ctx.globalAlpha = 1 - t;
+          ctx.fillStyle = "#b080ff";
+          ctx.beginPath();
+          ctx.moveTo(ax - s, py);
+          ctx.lineTo(ax + s, py);
+          ctx.lineTo(ax, py + s * 1.5);
+          ctx.fill();
+          ctx.fillRect(ax - s * 0.35, py - s * 1.6, s * 0.7, s * 1.6);
+          ctx.restore();
+        }
+      });
+    }
   }
 
   /* ── 땅에서 솟는 결정(얼음·바위·빛창·가시) ── */
@@ -993,6 +1343,7 @@
 
   F.spells = {
     PAL, ITEMS, setZoom(z) { Z = z; textCache.clear(); }, shot, rain, bladeWave, impact, slash, crystals, flames, tornado, bolt, circle, meteors, barrage, pillar, aura, heal,
+    thrust, ring, smash, punch, lash, sweep, beam, runeAt, cloud, drops, stream, hearts, coins, dice, cross, weaken,
     fxSprite, fxPut,
     shieldBubble, dust, levelUp, number, update, draw, drawNumbers, clear, orbAt, glow, spark, sparkBurst, add
   };

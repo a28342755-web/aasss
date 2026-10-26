@@ -535,7 +535,8 @@
         reach: sp.reach, quake: 0, dim: 0, flash: null,
         pickTargets: () => [dummy],
         applySkill: () => { this.hitT = 0.2; },
-        groundFx: Stage.groundFx
+        groundFx: Stage.groundFx,
+        deliver: Stage.deliver
       };
       return { fake, dummy, job };
     },
@@ -543,13 +544,10 @@
       const { fake, dummy, job } = this.demoStage();
       const lvP = { level: 10, job, weaponLv: 0, armorLv: 0 };
       const sp = this.demoSpot();
-      const hand = [sp.hx + 16 * Z, sp.gy - 24 * Z];
-      const target = [sp.dx, sp.gy - 15 * Z];
       if (step === "land") Sp.dust(sp.hx, sp.gy, 0, 6);
       if (step === "attack") {
         const a = job.attack;
-        if (!sp.reach.far) { Sp.slash(sp.hx + 22 * Z, sp.gy - 22 * Z, 1, a.el, false, false); X.sleep(120).then(() => { this.hitT = 0.15; }); }
-        else Sp.shot(hand, target, a.el, sp.reach.shot).then(() => { this.hitT = 0.15; });
+        weaponFx(fake, a.el, [dummy], sp.reach.weapon.far ? sp.reach.weapon.range : sp.reach.weapon.reach).then(() => { this.hitT = 0.15; });
       }
       if (step === "skill") {
         const sk = this.demoSkill();
@@ -600,8 +598,10 @@
         case "land": return { x: sp.hx, y: sp.gy, anim: k < 0.6 ? "land" : "idle", t: d.t, f: 0 };
         case "attack": case "skill": {
           const s = d.t;
-          if (caster) return { x: sp.hx, y: sp.gy, anim: s < 0.6 ? "cast" : "idle", t: s, f: s < 0.16 ? 0 : 1 };
-          return { x: sp.hx, y: sp.gy, anim: s < 0.13 ? "windup" : s < 0.26 ? "strike" : s < 0.45 ? "follow" : "idle", t: s, f: 0 };
+          const mo = sp.reach.motion;
+          if (s > 0.6) return { x: sp.hx, y: sp.gy, anim: "idle", t: s, f: 0 };
+          if (caster) return { x: sp.hx, y: sp.gy, anim: mo, t: s, f: s < 0.16 ? 0 : 1 };
+          return { x: sp.hx, y: sp.gy, anim: mo, t: s, f: s < 0.13 ? 0 : s < 0.28 ? 1 : 2 };
         }
         default: return { x: sp.hx, y: sp.gy, anim: d.t < 2.2 ? "cast" : "idle", t: d.t, f: d.t < 0.6 ? 0 : 1 };
       }
@@ -985,9 +985,40 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   /* 캐릭터 그림에 맞춘 싸움 방식: 근접은 베기, 활·총·던지기는 날아가는 것, 마법은 속성 주문 */
+  const CAST_OF = { staff: "cast", talisman: "cast", book: "read", orb: "raise", summon: "raise", music: "play" };
   function reachOf(job) {
     const style = F.heroes.styleOf(job);
-    return { style, shot: style.shot || "orb", caster: style.reach === "magic", far: style.reach !== "melee" };
+    const weapon = F.heroes.weaponOf(job);
+    const motion = weapon.far ? (weapon.caster ? CAST_OF[weapon.key] : "shoot") : weapon.motion;
+    return { style, weapon, motion, shot: weapon.shot || style.shot || "orb", caster: !!weapon.caster, far: !!weapon.far };
+  }
+  /* 무기별 공격 연출(기본 공격과 연타 기술이 같이 쓴다). st: 무대(hero·reach), targets: 맞을 몬스터(없으면 허공으로).
+     돌려주는 Promise가 끝나는 순간이 맞는 순간이다 */
+  function weaponFx(st, el, targets, range) {
+    const h = st.hero;
+    const W = st.reach.weapon;
+    const d = h.dir;
+    const hand = [px(h.x + d * 16), px(h.y - 24)];
+    const t0 = targets[0];
+    const aim = t0 ? [px(t0.x), px(t0.y - t0.h * 0.5)] : [px(h.x + d * range), hand[1]];
+    const hy = px(h.y - 22);
+    switch (W.key) {
+      case "spear": Sp.thrust(px(h.x + d * 8), hy, d, el, W.reach * Z * 0.95, false); return X.sleep(60);
+      case "dagger": Sp.thrust(px(h.x + d * 8), hy + 2 * Z, d, el, W.reach * Z * 0.85, false); return X.sleep(40);
+      case "heavy": Sp.smash(px(h.x + d * 16), px(h.y), d, el, false); st.quake = Math.max(st.quake || 0, 0.14); return X.sleep(90);
+      case "twin":
+        Sp.slash(px(h.x + d * 20), hy, d, el, false, false);
+        X.sleep(110).then(() => Sp.slash(px(h.x + d * 22), hy + 2 * Z, d, el, false, true));
+        return X.sleep(40);
+      case "fist": st.jab = !st.jab; Sp.punch(px(h.x + d * 24), hy + (st.jab ? 0 : 4) * Z, d, el); return X.sleep(30);
+      case "whip": Sp.lash(hand[0], hand[1], d, el, W.reach * Z); return X.sleep(110);
+      case "scythe": Sp.sweep(px(h.x + d * 4), px(h.y - 18), d, el); return X.sleep(90);
+      case "sword": st.swing = !st.swing; Sp.slash(px(h.x + d * 20), hy, d, el, false, st.swing); return X.sleep(30);
+      case "orb": return Sp.beam(hand, aim, el);
+      case "book": return Sp.runeAt(aim[0], aim[1], el);
+      case "cannon": return Sp.shot(hand, aim, el, "bomb").then(() => { st.quake = Math.max(st.quake || 0, 0.12); });
+      default: return Sp.shot(hand, aim, el, st.reach.shot);
+    }
   }
 
   /* 스프라이트의 불투명한 범위(발 위치와 몸통 크기를 정하는 데 쓴다) */
@@ -1422,8 +1453,11 @@
       if (this.dead || h.knock > 0 || h.stun > 0) anim = "hurt";
       else if (h.atk) {
         const k = h.atk.t;
-        if (h.atk.kind === "cast") { anim = "cast"; f = k < h.atk.hitAt ? 0 : 1; }
-        else anim = k < h.atk.hitAt ? "windup" : k < h.atk.hitAt + 0.13 ? "strike" : "follow";
+        const kind = h.atk.kind === "melee" ? "slash" : h.atk.kind;
+        anim = kind;
+        t = k;
+        if (kind === "cast" || kind === "read" || kind === "raise" || kind === "play") f = k < h.atk.hitAt ? 0 : 1;
+        else f = k < h.atk.hitAt ? 0 : k < h.atk.hitAt + 0.13 ? 1 : 2;
       } else if (h.rope) { anim = "climb"; t = h.climbT; }
       else if (!h.ground) anim = h.vy < 0 ? "jump" : "fall";
       else if (h.landT > 0) anim = "land";
@@ -1435,27 +1469,33 @@
     basicAttack() {
       const h = this.hero;
       if (this.dead || h.atk || h.atkCd > 0 || h.rope || h.casting || h.stun > 0 || h.knock > 0 || this.map.kind === "town") return;
-      h.atk = { t: 0, dur: ATK_TIME, hitAt: ATK_HIT, kind: this.reach.caster ? "cast" : "melee", fired: false, fire: () => this.basicHit() };
-      h.atkCd = ATK_TIME + 0.04;
+      const W = this.reach.weapon;
+      const dur = ATK_TIME * W.time;
+      h.atk = { t: 0, dur, hitAt: W.motion === "smash" ? dur * 0.45 : ATK_HIT * W.time, kind: this.reach.motion, fired: false, fire: () => this.basicHit() };
+      h.atkCd = dur + 0.04;
     },
     basicHit() {
       const h = this.hero;
       const p = G.player;
       const a = p.job.attack;
-      const opt = { stat: a.stat, el: a.el, mult: 1 };
-      const R = this.reach;
-      if (!R.far) {
-        const t = this.frontTargets(64, 1)[0];
-        this.swing = !this.swing;
-        Sp.slash(px(h.x + h.dir * 20), px(h.y - 22), h.dir, a.el, false, this.swing);
-        if (t) this.strike(t, opt, 1, true);
-        return;
-      }
-      const range = R.caster ? 210 : 240;
-      const t = this.frontTargets(range, 1)[0];
-      const from = [px(h.x + h.dir * 16), px(h.y - 24)];
-      const to = t ? [px(t.x), px(t.y - t.h * 0.5)] : [px(h.x + h.dir * range), from[1]];
-      Sp.shot(from, to, a.el, R.shot).then(() => { if (t && !t.dead) this.strike(t, opt, 1, true); });
+      const W = this.reach.weapon;
+      const opt = { stat: a.stat, el: a.el, mult: W.mult, critBonus: W.crit || 0 };
+      const range = W.far ? W.range : W.reach;
+      let targets;
+      if (W.back) {
+        /* 낫: 앞뒤를 함께 휩쓴다 */
+        const cy = h.y - 20;
+        targets = this.liveMons().filter((m) => { const dx = (m.x - h.x) * h.dir; return dx > -40 && dx < range + m.w / 2 && Math.abs(m.y - m.h / 2 - cy) < 30 + m.h / 2; }).slice(0, W.splash || 1);
+      } else targets = this.frontTargets(range, W.pierce || (W.far ? 1 : W.splash) || 1);
+      weaponFx(this, a.el, targets, range).then(() => {
+        let list = targets.filter((m) => !m.dead);
+        /* 포탄은 맞은 자리 둘레도 함께 */
+        if (W.far && W.splash && list[0]) {
+          const c = list[0];
+          list = list.concat(this.liveMons().filter((m) => m !== c && Math.hypot(m.x - c.x, m.y - c.y) < 44).slice(0, W.splash - 1));
+        }
+        list.forEach((m) => this.strike(m, opt, W.hits || 1, true));
+      });
     },
     liveMons() {
       return this.mons.filter((m) => !m.dead);
@@ -1537,7 +1577,7 @@
       if (plan.ult) this.castUlt(sk, plan);
       else if (plan.self) this.castSelf(sk, plan);
       else {
-        h.atk = { t: 0, dur: 0.5, hitAt: 0.16, kind: this.reach.caster ? "cast" : "melee", fired: false, fire: () => this.skillHit(sk, plan) };
+        h.atk = { t: 0, dur: 0.5, hitAt: 0.16, kind: this.reach.motion, fired: false, fire: () => this.skillHit(sk, plan) };
       }
       this.refresh();
     },
@@ -1652,7 +1692,70 @@
     },
     /* 기술 연출: 싸움 방식(베기·화살·총탄·던지기·주문)에 속성 효과를 얹는다.
        돌려주는 Promise가 끝나는 순간 피해가 들어간다 */
+    /* 기술 연출: 기술 종류마다 다른 동작과 덧연출. 돌려주는 Promise가 끝나는 순간 피해가 들어간다 */
     skillVisual(sk, plan, targets) {
+      const h = this.hero;
+      const el = sk.el;
+      const far = this.reach.far;
+      const hand = [px(h.x + h.dir * 16), px(h.y - 24)];
+      const list = targets.length ? targets.slice(0, 4) : [null];
+      const at = (m) => (m ? [px(m.x), px(m.y - m.h / 2)] : [px(h.x + h.dir * Math.min(plan.range, 200)), hand[1]]);
+      const gyOf = (m) => (m ? px(m.fly ? m.y + 10 : m.y) : px(h.y));
+      if (plan.area === "around") {
+        Sp.impact(px(h.x), px(h.y - 20), el, true);
+        [-1, 1].forEach((sg) => (el === "fire" ? Sp.flames : Sp.crystals)(px(h.x + sg * 50), px(h.y), el, 70 * Z, true));
+        Sp.ring(px(h.x), px(h.y), el, 120 * Z);
+        this.quake = 0.25;
+        return X.sleep(140);
+      }
+      let go;
+      switch (sk.type) {
+        case "pierce":
+          /* 꿰뚫기: 근접은 길게 찌르고, 원거리는 곧게 뻗는 광선 */
+          if (!far) Sp.thrust(px(h.x + h.dir * 8), px(h.y - 22), h.dir, el, plan.range * Z, true);
+          else Sp.beam(hand, [px(h.x + h.dir * plan.range), hand[1]], el);
+          this.quake = 0.1;
+          go = X.sleep(90);
+          break;
+        case "multi":
+          /* 연타: 무기 공격을 빠르게 세 번 */
+          go = Promise.all([0, 1, 2].map((i) => X.sleep(i * 110).then(() => weaponFx(this, el, targets, far ? 220 : plan.range))));
+          break;
+        case "strike":
+        case "stun":
+          /* 강타·기절: 내려찍고 땅이 울린다 */
+          if (!far) { Sp.smash(px(h.x + h.dir * 18), px(h.y), h.dir, el, true); go = X.sleep(110); }
+          else go = this.deliver(sk, plan, targets);
+          go = go.then(() => list.forEach((m) => Sp.ring(at(m)[0], gyOf(m), el, 64 * Z)));
+          this.quake = 0.18;
+          break;
+        default:
+          go = this.deliver(sk, plan, targets);
+      }
+      return go.then(() => {
+        list.forEach((m) => {
+          const [x, y] = at(m);
+          const gy = gyOf(m);
+          switch (sk.type) {
+            case "burn": Sp.flames(x, gy, "fire", 36 * Z, false); break;
+            case "poison": Sp.cloud(x, gy, "poison"); break;
+            case "curse": Sp.cloud(x, gy, "curse"); break;
+            case "bleed": Sp.drops(x, y); break;
+            case "freeze": Sp.crystals(x, gy, "ice", 40 * Z, false); break;
+            case "drain": Sp.stream([x, y], hand, "#ff5a7a"); break;
+            case "mana": Sp.stream([x, y], hand, "#5ac8ff"); break;
+            case "charm": Sp.hearts(x, y - 10 * Z); break;
+            case "debuff": Sp.weaken(x, y); break;
+            case "gold": Sp.coins([x, y], hand); break;
+            case "gamble": Sp.dice(x, y); break;
+            case "crit": case "execute": Sp.cross(x, y, el); break;
+            default: break;
+          }
+        });
+      });
+    },
+    /* 싸움 방식대로 기술을 날린다(근접은 무기 동작, 활·총·던지기는 물건, 마법은 속성 주문) */
+    deliver(sk, plan, targets) {
       const h = this.hero;
       const el = sk.el;
       const st = this.reach.style;
@@ -1661,18 +1764,10 @@
       const center = (m) => [px(m.x), px(m.y - m.h / 2)];
       const aim = first ? center(first) : [px(h.x + h.dir * Math.min(plan.range, 200)), hand[1]];
       const list = targets.length ? targets.slice(0, 4) : [null];
-      if (plan.area === "around") {
-        Sp.impact(px(h.x), px(h.y - 20), el, true);
-        [-1, 1].forEach((sg) => (el === "fire" ? Sp.flames : Sp.crystals)(px(h.x + sg * 50), px(h.y), el, 70 * Z, true));
-        this.quake = 0.2;
-        return X.sleep(140);
-      }
       if (st.reach === "melee") {
-        Sp.slash(px(h.x + h.dir * 26), px(h.y - 22), h.dir, el, true, false);
-        if (plan.hits > 1) X.sleep(90).then(() => Sp.slash(px(h.x + h.dir * 30), px(h.y - 20), h.dir, el, true, true));
-        if (plan.hits > 2) X.sleep(180).then(() => Sp.slash(px(h.x + h.dir * 34), px(h.y - 26), h.dir, el, true, false));
+        const go = weaponFx(this, el, targets, plan.range);
         if (el !== "phys") list.forEach((m) => this.groundFx(el, m, false));
-        return X.sleep(80);
+        return go;
       }
       if (st.reach !== "magic") {
         /* 활·총·던지기: 대상마다 자기 물건을 날리고, 속성이 있으면 맞은 자리에 터진다 */
