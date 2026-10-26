@@ -1470,7 +1470,7 @@
     const key = `mb${name}|${factor}`;
     if (cache.has(key)) return cache.get(key);
     const base = monsterPlain(name);
-    const up = factor === 3 ? scale3x(base) : factor === 4 ? scale2x(scale2x(base)) : factor === 6 ? scale3x(scale2x(base)) : scale2x(base);
+    const up = factor === 3 ? scale3x(base) : factor === 4 ? scale2x(scale2x(base)) : factor === 6 ? scale3x(scale2x(base)) : factor === 8 ? scale2x(scale2x(scale2x(base))) : scale2x(base);
     const out = autoShade(up, factor);
     cache.set(key, out);
     return out;

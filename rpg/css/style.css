@@ -243,31 +243,11 @@ button { cursor: pointer; }
 .buffs { position: absolute; right: 54px; top: 8px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px; max-width: 40%; }
 .boss-plate { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); min-width: min(300px, 46%); }
 .boss-plate i { height: 11px; }
-.stage-log { position: absolute; left: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 2px; max-width: 60%; font-size: 12px; }
-.stage-log p { margin: 0; padding: 1px 6px; background: rgba(8, 6, 20, 0.62); color: #e6e2ff; transition: opacity 0.6s steps(4); }
-.stage-log p.good { color: var(--cursor); }
-.stage-log p.bad { color: var(--bad); }
-.stage-log p.out { opacity: 0; }
-.slots { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 5px; pointer-events: auto; }
-.slot { position: relative; width: 40px; height: 40px; background: #0b0918; border: 2px solid #6d64b8; box-shadow: 0 0 0 2px #05040c; cursor: pointer; }
-.slot.pot { margin-left: 4px; border-color: #8a6a4a; }
-.slot img, .skillpad .pk img { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
-.slot .cd, .skillpad .pk .cd {
-  position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-size: 13px; color: #fff; text-shadow: 0 1px 0 #000, 1px 0 0 #000;
-  background: conic-gradient(rgba(5, 4, 12, 0.74) calc(var(--cd, 0) * 360deg), transparent 0);
-}
-.slot .key { position: absolute; left: 2px; top: 0; font-size: 10px; color: #fff; text-shadow: 1px 1px 0 #000; }
-.slot .lock { display: none; }
-.slot.locked img, .skillpad .pk.locked img { filter: grayscale(1) brightness(0.4); }
-.slot.locked .lock { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-style: normal; color: #d8d4ff; }
-.slot.short img, .skillpad .pk.short img { filter: saturate(0.35) brightness(0.65); }
-.slot .n { position: absolute; right: 2px; bottom: 0; font-size: 11px; font-style: normal; color: #fff; text-shadow: 1px 1px 0 #000; }
-.touch .slots { display: none; }
 .help dt { min-width: 7em; }
 
 /* ── 터치 패드 ── */
 #pad {
-  width: 100%; max-width: 560px; height: 196px; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px;
+  width: 100%; max-width: 560px; height: 164px; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px;
   padding: 6px 10px calc(10px + env(safe-area-inset-bottom, 0px));
 }
 .dpad { position: relative; width: 138px; height: 138px; flex: none; }
@@ -280,16 +260,74 @@ button { cursor: pointer; }
 .dpad .down { left: 46px; bottom: 0; width: 46px; height: 50px; }
 .dpad .left { left: 0; top: 46px; width: 50px; height: 46px; }
 .dpad .right { right: 0; top: 46px; width: 50px; height: 46px; }
-.actpad { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
-.skillpad { display: flex; gap: 8px; }
-.skillpad .pk { position: relative; width: 38px; height: 38px; padding: 0; overflow: hidden; }
-.mainpad { position: relative; width: 206px; height: 118px; }
-.mainpad .pot { left: 0; top: 0; width: 44px; height: 32px; font-size: 13px; color: #ffc8c8; background: #4a1e2a; }
-.mainpad .mpot { top: 42px; color: #c8dcff; background: #1e2a4a; }
-.mainpad .bbtn { left: 0; top: 84px; width: 44px; height: 32px; font-size: 14px; background: #24305a; color: #cfe0ff; }
-.jbtn, .abtn { border-radius: 50%; font-weight: 700; }
-.jbtn { right: 84px; bottom: 2px; width: 58px; height: 58px; font-size: 14px; background: #24405a; color: #c8f0ff; }
-.abtn { right: 2px; bottom: 6px; width: 74px; height: 74px; font-size: 17px; background: #5a2a52; color: #ffd0e8; }
+.actpad { position: relative; width: 170px; height: 138px; flex: none; }
+.bbtn, .abtn { border-radius: 50%; font-weight: 700; }
+.bbtn { left: 0; bottom: 6px; width: 62px; height: 62px; font-size: 18px; background: #24305a; color: #cfe0ff; }
+.abtn { right: 0; top: 10px; width: 80px; height: 80px; font-size: 22px; background: #5a2a52; color: #ffd0e8; }
+
+/* ── 마을 ── */
+.hud-r .pots { font-size: 11px; color: var(--muted); }
+.win-town { right: 10px; top: 54px; width: min(250px, calc(100% - 20px)); }
+@media (max-width: 559px) {
+  .win-town { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; padding: 8px 10px; }
+  .win-town .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 6px; }
+  .win-town .opt { min-height: 34px; font-size: 14px; }
+  .win-town .opt.primary { grid-column: 1 / -1; }
+}
+
+/* ── 전투(포켓몬처럼 1대1) ── */
+#hud.hud-battle { position: absolute; inset: 0; pointer-events: none; padding: 8px; }
+.hud-battle .foe-plate { position: absolute; left: 8px; top: 8px; min-width: min(240px, 52%); }
+.hud-battle .foe-plate i { height: 10px; }
+.hud-battle i.low b, .bme i.hp.low b { background: var(--bad); }
+.where-plate { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 4px 8px; font-size: 12px; color: #e6e2ff; background: rgba(8, 6, 20, 0.62); }
+.where-plate b { color: var(--cursor); margin-right: 4px; }
+.where-plate .dots { display: flex; gap: 4px; }
+.where-plate .dots i { width: 9px; height: 9px; border: 1px solid #8a84c0; background: #0b0918; transform: rotate(45deg); }
+.where-plate .dots i.done { background: #8a84c0; }
+.where-plate .dots i.now { background: var(--cursor); border-color: var(--cursor); }
+.where-plate .dots i.boss { border-color: var(--bad); }
+.where-plate .dots i.boss.now { background: var(--bad); }
+.win-battle { left: 0; right: 0; bottom: 0; padding: 8px 10px; border-width: 3px 0 0 0; box-shadow: 0 -3px 0 var(--edge-dark), inset 0 2px 0 #3a3470; max-height: none; }
+.bwin { display: grid; grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; gap: 6px; min-height: 0; height: 100%; }
+.bme { display: grid; grid-template-columns: auto 1fr 1fr; grid-template-areas: "name hp mp" "job st st"; gap: 2px 8px; align-items: center; font-size: 12px; }
+.bme > b { grid-area: name; font-size: 13px; }
+.bme > span { grid-area: job; }
+.bme .hp { grid-area: hp; }
+.bme .mp { grid-area: mp; }
+.bme .chips { grid-area: st; }
+.chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.bme i { position: relative; display: block; height: 9px; background: #0b0918; border: 1px solid #3a3470; }
+.bme i b { display: block; height: 100%; background: var(--hp); transition: width 0.3s steps(6); }
+.bme i.mp b { background: var(--mp); }
+.bme em { position: absolute; right: 2px; top: -3px; font-style: normal; font-size: 9px; line-height: 14px; text-shadow: 0 1px 0 #000, 1px 0 0 #000; }
+.bmsg { display: flex; flex-direction: column; justify-content: flex-end; height: 4.9em; overflow: hidden; font-size: 13px; line-height: 1.45; background: #0c0a1c; border: 1px solid #2c2756; padding: 3px 8px; }
+.bmsg p { margin: 0; }
+.bmsg p:not(:last-child) { color: var(--muted); }
+.bmsg p.ask { color: #fff; }
+.bmsg .sk-desc { color: #b9e8ff; }
+.bmsg .sk-desc b { color: var(--cursor); margin-right: 4px; }
+.bmsg .sk-desc em { color: var(--muted); font-style: normal; }
+.bcmd { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; align-content: start; overflow-y: auto; min-height: 0; }
+.bcmd .opt { flex-direction: column; align-items: flex-start; gap: 0; min-height: 44px; padding: 4px 6px 4px 22px; font-size: 14px; background: #0f0c22; }
+.bcmd .opt small { margin-left: 0; font-size: 11px; }
+.bcmd .opt.cur { background: #2a2456; }
+.bcmd .opt.sk { flex-direction: row; align-items: center; gap: 6px; }
+.bcmd .opt.sk img { height: 26px; }
+.bcmd .opt.sk span { display: flex; flex-direction: column; min-width: 0; }
+.bcmd .opt.sk:disabled img { filter: grayscale(1) brightness(0.5); }
+.bcmd .opt.ult { color: var(--cursor); }
+.bcmd.list { grid-template-columns: 1fr; }
+.bcmd.list .opt { flex-direction: row; align-items: center; min-height: 34px; }
+.bcmd.list .opt small { margin-left: auto; }
+.say-battle { z-index: 2; }
+@media (max-width: 559px) {
+  .win-battle { padding: 6px 8px; }
+  .bwin { gap: 4px; }
+  .bmsg { height: 3.4em; font-size: 12.5px; }
+  .bcmd .opt { min-height: 40px; font-size: 13.5px; }
+  .bcmd .opt.sk img { height: 22px; }
+}
 
 @media (max-width: 400px) {
   .roll-name { font-size: 23px; }

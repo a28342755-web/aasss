@@ -1,7 +1,7 @@
 /*
  * 삼천의 운명 — 게임 진행
- * 화면 하나(캔버스) 위에 장면(타이틀·운명 뽑기·횡스크롤 무대)을 그리고, 글자가 필요한 창은 DOM으로 띄운다.
- * 마을과 던전의 각 층(밤의 숲·언덕·폐성…)은 옆에서 보는 무대이고, 전투는 그 자리에서 실시간으로 벌어진다.
+ * 화면 하나(캔버스) 위에 장면(타이틀·운명 뽑기·마을·전투)을 그리고, 글자가 필요한 창은 DOM으로 띄운다.
+ * 마을은 메뉴로 다니고, 던전의 각 층(밤의 숲·언덕·폐성…)에서는 포켓몬처럼 몬스터와 1대1로 번갈아 싸운다.
  */
 (function (root) {
   "use strict";
@@ -64,7 +64,7 @@
   }
 
   /* ── 화면 ──
-     타이틀·운명 뽑기는 큰 도트(배율 2)로, 횡스크롤 무대(hires)는 화면 픽셀 그대로 그리고 캐릭터를 Z배로 그린다. */
+     hires 장면은 화면 픽셀 그대로 그리고 캐릭터·몬스터를 Z배로 그린다. */
   const cv = $("cv");
   const ctx = cv.getContext("2d");
   let VW = 360;
@@ -72,7 +72,7 @@
   let SCALE = 1;
   let Z = 2;
   const touch = !!(root.matchMedia && root.matchMedia("(pointer: coarse)").matches) || "ontouchstart" in root;
-  const PAD_H = 196;
+  const PAD_H = 164;
 
   function resize() {
     const pad = $("pad");
@@ -104,18 +104,13 @@
   }
 
   /* ── 입력 ──
-     방향키 이동, Space/C 점프, Z/Ctrl 공격, A S D F G 기술, Q W 물약, Enter 대화·결정, Esc/X 메뉴·취소 */
-  const held = { up: false, down: false, left: false, right: false, atk: false, jump: false, run: false };
+     방향키로 고르고 Z·Enter·Space로 결정, X·Esc로 취소. 모든 조작은 창(메뉴)으로 한다 */
   const KEYMAP = {
     ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
-    Space: "jump", KeyC: "jump", KeyZ: "atk", ControlLeft: "atk", ControlRight: "atk", ShiftLeft: "run", ShiftRight: "run",
-    KeyA: "s0", KeyS: "s1", KeyD: "s2", KeyF: "s3", KeyG: "s4", KeyQ: "hp", KeyW: "mp",
-    Enter: "a", NumpadEnter: "a", Escape: "b", KeyX: "b", Backspace: "b"
+    KeyZ: "a", Space: "a", Enter: "a", NumpadEnter: "a", Escape: "b", KeyX: "b", Backspace: "b"
   };
-  /* 창이 열려 있을 때는 공격·점프 키도 '결정'으로 읽는다 */
-  const WIN_KEY = { atk: "a", jump: "a", a: "a", b: "b", up: "up", down: "down", left: "left", right: "right" };
   function press(k) {
-    if (winTop()) { if (WIN_KEY[k]) winKey(WIN_KEY[k]); return; }
+    if (winTop()) { winKey(k); return; }
     if (G.scene && G.scene.key) G.scene.key(k);
   }
   doc.addEventListener("keydown", (ev) => {
@@ -126,17 +121,9 @@
     if (typing && k !== "b" && !(k === "a" && ev.code === "Enter")) return;
     if (typing && ev.code === "Backspace") return;
     ev.preventDefault();
-    if (held[k] !== undefined) {
-      if (!held[k]) { held[k] = true; press(k); }
-      return;
-    }
-    if (!ev.repeat) press(k);
+    /* 방향키는 누르고 있으면 되풀이, 결정·취소는 한 번만 */
+    if (!ev.repeat || k === "up" || k === "down" || k === "left" || k === "right") press(k);
   });
-  doc.addEventListener("keyup", (ev) => {
-    const k = KEYMAP[ev.code];
-    if (k && held[k] !== undefined) held[k] = false;
-  });
-  root.addEventListener("blur", () => { Object.keys(held).forEach((k) => { held[k] = false; }); });
 
   function bindPad() {
     doc.querySelectorAll("#pad [data-k]").forEach((btn) => {
@@ -144,13 +131,11 @@
       const down = (ev) => {
         ev.preventDefault();
         btn.classList.add("on");
-        if (held[k] !== undefined) held[k] = true;
         press(k);
       };
       const up = (ev) => {
         ev.preventDefault();
         btn.classList.remove("on");
-        if (held[k] !== undefined) held[k] = false;
       };
       btn.addEventListener("pointerdown", down);
       btn.addEventListener("pointerup", up);
@@ -337,13 +322,12 @@
   const Title = {
     hires: true,
     parade: [],
+    /* 타이틀: 무작위 직업 일곱이 한 줄로 서 있고, 가끔 한 명씩 다른 운명으로 바뀐다 */
     enter() {
       this.parade = [];
-      for (let i = 0; i < 7; i++) this.parade.push(this.walker(i * (VW / 6)));
+      for (let i = 0; i < 7; i++) this.parade.push({ job: E.randomJob(), t: Math.random() * 3, flash: 0 });
+      this.swapT = 2400;
       this.menu();
-    },
-    walker(x) {
-      return { job: F.JOBS[Math.floor(Math.random() * F.JOBS.length)], x: x === undefined ? -60 : x, v: 0.04 + Math.random() * 0.02 };
     },
     menu() {
       closeAll();
@@ -369,19 +353,31 @@
       });
     },
     update(dt) {
-      this.parade.forEach((w, i) => {
-        w.x += w.v * dt;
-        if (w.x > VW + 60) this.parade[i] = this.walker(-60);
-      });
+      this.swapT -= dt;
+      this.parade.forEach((w) => { w.t += dt / 1000; w.flash = Math.max(0, w.flash - dt / 1000); });
+      if (this.swapT <= 0) {
+        this.swapT = 2200 + Math.random() * 1200;
+        const w = this.parade[Math.floor(Math.random() * this.parade.length)];
+        w.job = E.randomJob();
+        w.flash = 0.5;
+      }
     },
     draw(t) {
       const ground = Math.round(VH * 0.86);
       drawSky(t, ground);
       ctx.drawImage(titleStrip(), 0, ground - 4);
       const hh = Math.round(Math.min(VH * 0.17, 110));
-      this.parade.forEach((w) => {
-        shadow(w.x, ground + 3, hh * 0.2, hh * 0.05);
-        HA.draw(ctx, w.job, w.x, ground + 4, { dir: 1, anim: "walk", t: t / 1000 + w.x * 0.01, h: hh });
+      const gap = VW / this.parade.length;
+      this.parade.forEach((w, i) => {
+        const x = Math.round(gap * (i + 0.5));
+        shadow(x, ground + 3, hh * 0.2, hh * 0.05);
+        HA.draw(ctx, w.job, x, ground + 4, { dir: i < this.parade.length / 2 ? 1 : -1, anim: "idle", t: w.t, h: hh, still: w.flash > 0 });
+        if (w.flash > 0) {
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          Sp.glow(ctx, x, ground - hh * 0.4, hh * 0.6, S.RARITY_COLOR[w.job.rarity], w.flash);
+          ctx.restore();
+        }
       });
     }
   };
@@ -496,13 +492,14 @@
       save();
       closeAll();
       fade(() => {
-        setScene(Stage, { floor: 0 });
+        setScene(Town);
         say([`<b>${esc(name)}</b>의 운명은 <b class="rar-t-${G.player.job.rarity}">${esc(G.player.job.name)}</b>.`,
-          `마을 오른쪽 돌문 너머가 던전이다. 건물 문 앞에서 ${touch ? "▲" : "↑"}를 누르면 들어간다. 상점에서는 물약과 장비를, 여관에서는 휴식을, 길드에서는 직업 도감과 조작 안내를 볼 수 있다.`]);
+          `전투는 차례대로 명령을 고르는 턴제다. 던전 한 층마다 몬스터 셋이 기다리고, 10층마다 마지막에 보스가 길을 막는다.`,
+          `마을 메뉴에서 던전으로 내려가거나 상점·여관·길드를 고를 수 있다. 쓰러지면 이 운명은 끝난다.`]);
       });
     },
-    /* ── 캐릭터 시트: 뽑힌 직업이 대기·걷기·점프·착지·기본 공격·기술·궁극기를 차례로 보여 준다 ── */
-    DEMO: [["idle", "대기", 1.2], ["walk", "걷기", 1.2], ["run", "달리기", 0.7], ["jump", "점프", 0.8], ["land", "착지", 0.4], ["attack", "기본 공격", 1.1], ["skill", "기술", 1.6], ["ult", "궁극기", 3.2]],
+    /* ── 캐릭터 시트: 뽑힌 직업이 기본 공격·기술·궁극기를 차례로 보여 준다 ── */
+    DEMO: [["idle", "대기", 1.2], ["attack", "기본 공격", 1.3], ["skill", "기술", 1.8], ["ult", "궁극기", 3.4]],
     heroH() {
       return Math.round(Math.min(VH * 0.27, 180, VW * 0.4));
     },
@@ -512,9 +509,9 @@
       const dx = Math.round(VW * 0.7);
       const hh = this.heroH();
       const hx = reach.far ? Math.round(VW * 0.32) : Math.round(dx - hh * 0.8);
-      return { reach, gy, dx, hx, start: hx - 96 * Z, mid: hx - 48 * Z };
+      return { reach, gy, dx, hx };
     },
-    /* 무대의 기술·궁극기 연출 코드를 가짜 무대(허수아비 하나)로 그대로 쓴다 */
+    /* 전투의 기술·궁극기 연출(Moves)을 가짜 무대(허수아비 하나)로 그대로 쓴다 */
     demoStage() {
       const sp = this.demoSpot();
       const job = this.shown;
@@ -523,45 +520,39 @@
         hero: { x: sp.hx / Z, y: sp.gy / Z, dir: 1, casting: false, inv: 0, atk: null },
         reach: sp.reach, quake: 0, dim: 0, flash: null,
         pickTargets: () => [dummy],
-        applySkill: () => { this.hitT = 0.2; },
-        groundFx: Stage.groundFx,
-        deliver: Stage.deliver
+        applySkill: () => { this.hitT = 0.2; }
       };
       return { fake, dummy, job };
     },
     demoFire(step) {
       const { fake, dummy, job } = this.demoStage();
-      const lvP = { level: 10, job, weaponLv: 0, armorLv: 0 };
       const sp = this.demoSpot();
-      if (step === "land") Sp.dust(sp.hx, sp.gy, 0, 6);
       if (step === "attack") {
         const a = job.attack;
         weaponFx(fake, a.el, [dummy], sp.reach.weapon.far ? sp.reach.weapon.range : sp.reach.weapon.reach).then(() => { this.hitT = 0.15; });
       }
       if (step === "skill") {
         const sk = this.demoSkill();
-        const plan = E.skillPlan(lvP, sk, sp.reach.far);
-        if (!plan.self) Stage.skillVisual.call(fake, sk, plan, [dummy]).then(() => { this.hitT = 0.2; });
+        const plan = visPlan(sk, sp.reach.far);
+        if (!SELF_TYPES.has(sk.type)) Moves.skillVisual.call(fake, sk, plan, [dummy]).then(() => { this.hitT = 0.2; });
         else {
           /* 공격 기술이 없는 직업은 자기 강화 연출을 보여 준다 */
           const el = sk.el === "phys" ? "light" : sk.el;
-          if (plan.heal || plan.regen) Sp.heal(sp.hx, sp.gy);
-          else if (plan.shield) Sp.shieldBubble(sp.hx, sp.gy - 22 * Z, 26 * Z);
+          if (sk.type === "heal" || sk.type === "regen") Sp.heal(sp.hx, sp.gy);
+          else if (sk.type === "shield") Sp.shieldBubble(sp.hx, sp.gy - 22 * Z, 26 * Z);
           else Sp.aura(sp.hx, sp.gy, el);
         }
       }
       if (step === "ult") {
         const sk = job.skills[4];
-        const plan = E.skillPlan(lvP, sk, sp.reach.far);
         this.demoFake = fake;
-        Stage.castUlt.call(fake, sk, plan);
+        Moves.castUlt.call(fake, sk, visPlan(sk, sp.reach.far));
       }
     },
     /* 시트에 보여 줄 기술: 앞쪽 네 기술 가운데 첫 공격 기술(없으면 첫 기술) */
     demoSkill() {
       const job = this.shown;
-      const lvP = { level: 10, job, weaponLv: 0, armorLv: 0 };
-      return job.skills.slice(0, 4).find((sk) => !E.skillPlan(lvP, sk, false).self) || job.skills[0];
+      return job.skills.slice(0, 4).find((sk) => !SELF_TYPES.has(sk.type)) || job.skills[0];
     },
     demoUpdate(dt) {
       const d = this.demo;
@@ -577,17 +568,12 @@
       const d = this.demo;
       const sp = this.demoSpot();
       if (!d || d.t < 0) return { x: sp.hx, y: sp.gy, anim: "idle", t: 0, f: 0 };
-      const k = d.t / this.DEMO[d.step][2];
       const caster = sp.reach.caster;
       switch (this.DEMO[d.step][0]) {
-        case "idle": return { x: sp.start, y: sp.gy, anim: "idle", t: d.t, f: 0 };
-        case "walk": return { x: sp.start + (sp.mid - sp.start) * k, y: sp.gy, anim: "walk", t: d.t, f: 0 };
-        case "run": return { x: sp.mid + (sp.hx - sp.mid) * Math.min(1, k * 1.15), y: sp.gy, anim: k < 0.87 ? "run" : "idle", t: d.t, f: 0 };
-        case "jump": return { x: sp.hx, y: sp.gy - Math.sin(Math.PI * k) * 60 * Z, anim: k < 0.5 ? "jump" : "fall", t: d.t, f: 0 };
-        case "land": return { x: sp.hx, y: sp.gy, anim: k < 0.6 ? "land" : "idle", t: d.t, f: 0 };
+        case "idle": return { x: sp.hx, y: sp.gy, anim: "idle", t: d.t, f: 0 };
         case "attack": case "skill": {
           const s = d.t;
-          const mo = sp.reach.motion;
+          const mo = sp.reach.motion === "melee" ? "slash" : sp.reach.motion;
           if (s > 0.6) return { x: sp.hx, y: sp.gy, anim: "idle", t: s, f: 0 };
           if (caster) return { x: sp.hx, y: sp.gy, anim: mo, t: s, f: s < 0.16 ? 0 : 1 };
           return { x: sp.hx, y: sp.gy, anim: mo, t: s, f: s < 0.13 ? 0 : s < 0.28 ? 1 : 2 };
@@ -746,11 +732,12 @@
   }
 
   function openHelp() {
-    const rows = touch
-      ? [["◀ ▶", "이동"], ["▲ ▼", "밧줄 오르내리기 · 문 들어가기"], ["점프", "점프 (▼ 누른 채면 발판 아래로)"], ["공격", "기본 공격 (누르고 있으면 연속)"], ["기술 버튼", "기술 5개 (Lv.1·1·4·7·10에 배움)"], ["HP · MP", "물약"]]
-      : [["← →", "이동"], ["↑ ↓", "밧줄 오르내리기 · 문 들어가기"], ["Space · C", "점프 (↓와 함께 누르면 발판 아래로)"], ["Z · Ctrl", "기본 공격 (누르고 있으면 연속)"], ["A S D F G", "기술 5개 (Lv.1·1·4·7·10에 배움)"], ["Q · W", "회복 물약 · 마나 물약"], ["Esc · X", "메뉴"]];
+    const rows = (touch
+      ? [["▲ ▼ ◀ ▶", "명령 고르기"], ["A", "결정 · 전투 연출 빨리 넘기기"], ["B", "취소 · 명령으로 돌아가기"]]
+      : [["방향키", "명령 고르기"], ["Z · Enter · Space", "결정 · 전투 연출 빨리 넘기기"], ["X · Esc", "취소 · 명령으로 돌아가기"]])
+      .concat([["공격", "무기로 치고 MP를 조금 회복"], ["기술", "MP를 써서 기술 사용 (Lv.1·1·4·7·10에 배움)"], ["방어", "받는 피해 절반, MP 회복"], ["도구", "물약 (한 차례를 쓴다)"], ["도망", "보상 없이 다음 싸움으로 (보스전 불가)"]]);
     openWin(`<h2 class="win-h">조작 안내</h2><dl class="sheet help">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
-      <p class="win-msg">몬스터에 부딪히면 피해를 입는다. 10층마다 보스가 다음 층으로 가는 문을 봉인한다. 쓰러지면 그 운명은 끝난다.</p>
+      <p class="win-msg">전투는 주인공과 몬스터가 한 번씩 번갈아 움직이는 턴제다. 한 층에 몬스터 셋, 10층마다 마지막에 보스. 쓰러지면 그 운명은 끝난다.</p>
       <div class="opts"><button class="opt" type="button" data-opt="close">닫기</button></div>`, { onPick: (v, b, w) => { if (v === "close") closeWin(w); } });
   }
 
@@ -765,12 +752,10 @@
   /* ─────────────────────── 메뉴·상점·상태 ─────────────────────── */
   function openMenu() {
     const p = G.player;
-    const inDungeon = G.place === "dungeon";
     const w = openWin(`<h2 class="win-h">메뉴</h2><div class="opts">
       <button class="opt" type="button" data-opt="status">상태</button>
       <button class="opt" type="button" data-opt="items">도구 <small>HP ${p.potions.hp} · MP ${p.potions.mp}</small></button>
       <button class="opt" type="button" data-opt="codex">직업 도감</button>
-      ${inDungeon ? '<button class="opt" type="button" data-opt="town">마을로 귀환</button>' : ""}
       <button class="opt" type="button" data-opt="help">조작 안내</button>
       <button class="opt" type="button" data-opt="title">저장하고 타이틀로</button>
       <button class="opt" type="button" data-opt="close">닫기</button></div>`, {
@@ -781,13 +766,6 @@
         if (v === "items") openItems();
         if (v === "codex") openCodex();
         if (v === "help") openHelp();
-        if (v === "town") {
-          ask("마을로 돌아갈까? 다음에는 " + p.floor + "층부터 다시 시작한다.", ["돌아간다", "그만둔다"], (i) => {
-            if (i !== 0) return;
-            closeAll();
-            fade(() => setScene(Stage, { floor: 0, x: 862, keep: true }));
-          });
-        }
         if (v === "title") { save(); closeAll(); fade(() => setScene(Title)); }
       }
     });
@@ -806,20 +784,21 @@
     });
   }
 
-  function openItems() {
+  function openItems(onDone) {
     const p = G.player;
     const pot = 1 + (p.job.passive.pot || 0);
     const w = openWin(`<h2 class="win-h">도구</h2><div class="opts">
       <button class="opt" type="button" data-opt="hp"${p.potions.hp ? "" : " disabled"}><img src="${S.icon("potion", 2)}" alt="">회복 물약 <small>${p.potions.hp}개 · HP ${Math.round(40 * pot)}%</small></button>
       <button class="opt" type="button" data-opt="mp"${p.potions.mp ? "" : " disabled"}><img src="${S.icon("ether", 2)}" alt="">마나 물약 <small>${p.potions.mp}개 · MP ${Math.round(50 * pot)}%</small></button>
       <button class="opt" type="button" data-opt="close">닫기</button></div><p class="win-msg" role="status"></p>`, {
+      onClose: onDone,
       onPick: (v) => {
         if (v === "close") { closeWin(w); return; }
         const res = E.drink(p, v);
-        if (G.scene === Stage) Stage.refresh();
         save();
+        w.o.onClose = null;
         closeWin(w);
-        openItems();
+        openItems(onDone);
         winTop().el.querySelector(".win-msg").textContent = res.msg;
       }
     });
@@ -850,16 +829,14 @@
             if (!res.ok) { say(res.msg); return; }
             discover(res.job);
             save();
-            if (G.scene === Stage) Stage.refresh();
             closeAll();
-            if (G.scene === Stage) Stage.jobChanged();
+            if (G.scene === Town) Town.jobChanged();
             say([`두루마리가 빛나며 운명이 다시 쓰였다!`, `새 직업: <b class="rar-t-${res.job.rarity}">${rarName(res.job.rarity)} ${esc(res.job.name)}</b>`], () => { if (onDone) onDone(); });
           });
           return;
         }
         const res = E.buy(p, v);
         save();
-        if (G.scene === Stage) Stage.refresh();
         const keep = w.idx;
         w.o.onClose = null;
         closeWin(w);
@@ -946,29 +923,11 @@
     });
   }
 
-  /* ─────────────────────── 횡스크롤 무대(마을·던전 각 층) ─────────────────────── */
-  /* 거리·속도는 기본 단위(주인공 키 ≈ 44), 화면에는 Z배로 그린다 */
-  const GRAV = 900;
-  const CLIMB = 58;
-  const MAX_FALL = 430;
-  /* 주인공의 움직임(참고: 마법사의 밤): 걷다가 방향키를 계속 누르거나 Shift를 누르면 달리고,
-     점프는 몬스터보다 가벼운 중력으로 조금 더 오래 떠 있다 */
-  const WALK = 64;
-  const RUN = 104;
-  const RUN_AFTER = 0.8;
-  const HERO_GRAV = 520;
-  const HERO_FALL = 360;
-  const JUMP_V = 206;
-  const HERO_HALF = 7;
-  const HERO_H = 40;
-  const ATK_TIME = 0.42;
-  const ATK_HIT = 0.13;
+  /* ─────────────────────── 마을·전투 장면 ─────────────────────── */
+  /* 거리는 기본 단위(주인공 키 ≈ 44)로 적고, 화면에는 Z배로 그린다 */
   const FLYERS = new Set(["bat", "harpy", "dragon", "ghost", "wisp", "bird", "eye"]);
   const SHOOTERS = new Set(["witch", "wisp", "eye", "caped"]);
-  const MON_SPEED = {
-    slime: 26, goblin: 40, rat: 50, beast: 58, boar: 62, bat: 46, mushroom: 22, skeleton: 36, bandit: 40, brute: 32, spider: 44, zombie: 22,
-    harpy: 44, lizard: 40, wisp: 34, ghost: 30, gargoyle: 34, dragon: 48, caped: 34, golem: 22, serpent: 30, knight: 34, witch: 30, eye: 28, bird: 50
-  };
+  const SELF_TYPES = new Set(["heal", "regen", "buff", "rage", "shield", "counter", "summon"]);
   const rnd = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -1076,612 +1035,9 @@
     return url;
   }
 
-  const Stage = {
-    hires: true,
-    map: null, hero: null, mons: [], npcs: [], drops: [], shots: [], summons: [], ambient: [],
-    enter(arg) {
-      const p = G.player;
-      const a = arg || {};
-      this.floor = a.floor || 0;
-      this.map = this.floor ? Wd.makeFloor(this.floor) : Wd.makeTown();
-      const prevBest = p.best;
-      if (this.floor) {
-        E.enterFloor(p, this.floor);
-        G.place = "dungeon";
-        if (p.best > prevBest && p.best > 1 && p.best % 10 === 1) {
-          G.tokens = Math.min(5, G.tokens + 1);
-          store.set("tokens", G.tokens);
-          this.pendingNote = "보스를 넘어선 보답으로 다음 운명의 재굴림 기회 +1";
-        }
-      } else G.place = "town";
-      this.reach = reachOf(p.job);
-      if (!a.keep || !this.ps) this.ps = E.newPlayerState(p);
-      if (!a.keep || !this.cds) this.cds = p.job.skills.map(() => 0);
-      const sx = a.x !== undefined ? a.x : this.map.spawnX;
-      this.hero = {
-        x: sx, y: this.map.groundY, vx: 0, vy: 0, dir: 1, ground: this.map.plats[0], rope: null, atk: null, atkCd: 0, inv: 1, stun: 0, knock: 0,
-        landT: 0, airT: 0, dropT: 0, dropPlat: null, walkT: 0, climbT: 0, idleT: 0, casting: false, runT: 0, wantDir: 0, running: false
-      };
-      this.mons = this.map.spawns.map((sp) => this.makeMon(sp));
-      this.drops = [];
-      this.shots = [];
-      this.summons = [];
-      this.ambient = [];
-      this.npcs = [];
-      if (this.map.kind === "town") for (let i = 0; i < 4; i++) this.npcs.push({ job: E.randomJob(), x: 120 + i * 200 + rnd(-40, 40), dir: Math.random() < 0.5 ? -1 : 1, walk: rnd(1, 3), t: 0 });
-      /* 주인공·주민 그림을 미리 부위로 나눠 둔다(처음 화면에 들 때 끊기지 않게) */
-      [p.job].concat(this.npcs.map((n) => n.job)).forEach((j) => HA.warm(j, HERO_PX()));
-      this.dead = false;
-      this.dim = 0;
-      this.quake = 0;
-      this.time = 0;
-      this.cam = null;
-      this.hudT = 0;
-      this.regenT = 0;
-      this.saveT = 0;
-      this.buildHud();
-      this.banner(this.map.name);
-      if (this.pendingNote) { this.log(this.pendingNote, "good"); this.pendingNote = null; }
-      save();
-    },
-    leave() {
-      Object.keys(held).forEach((k) => { held[k] = false; });
-    },
-    /* 전직의 두루마리: 무기 사거리·기술 칸을 새 직업에 맞춘다 */
-    jobChanged() {
-      this.reach = reachOf(G.player.job);
-      this.cds = G.player.job.skills.map(() => 0);
-      this.summons = [];
-      this.buildHud();
-      Sp.pillar(px(this.hero.x), px(this.hero.y), "light", true);
-    },
-    viewW() { return VW / Z; },
-    viewH() { return VH / Z; },
-
-    makeMon(sp) {
-      const mon = E.makeMonster(this.floor, sp.mon);
-      const look = S.MON_LOOK[mon.base] || ["slime"];
-      const tpl = look[0];
-      const big = mon.boss ? (Z >= 2 ? 6 : 4) : (Z >= 2 ? 3 : 2);
-      const img = S.monsterBig(mon.name, big);
-      const bd = bounds(img);
-      const pl = this.map.plats[sp.plat] || this.map.plats[0];
-      const fly = FLYERS.has(tpl) && !mon.boss;
-      const y = fly ? pl.y - rnd(30, 52) : pl.y;
-      return {
-        mon, tpl, img, bd, fly, shooter: SHOOTERS.has(tpl), heavy: mon.traits.includes("heavy"), sp,
-        x: sp.x, y, baseY: y, plat: pl, dir: Math.random() < 0.5 ? -1 : 1, t: Math.random() * 3,
-        state: "walk", stateT: rnd(1, 3), hitT: 99, flash: 0, hpBarT: 0, alpha: 1, dead: false, deadT: 0, stag: 0, kx: 0,
-        castCd: rnd(1.5, 3), heavyCd: rnd(2, 4), wind: 0, lunge: 0, aggro: mon.boss ? 99 : 0, dots: {}, vy: 0, air: false,
-        act: null, patT: 2.5, speed: (MON_SPEED[tpl] || 36) * (mon.boss ? 0.75 : 1) * rnd(0.9, 1.1),
-        w: bd.w / Z, h: bd.h / Z
-      };
-    },
-
-    /* ── HUD: 이 게임의 도트 창 모양을 그대로 쓴다 ── */
-    buildHud() {
-      const p = G.player;
-      $("hud").className = "hud-stage";
-      const slots = p.job.skills.map((sk, i) => `<div class="slot" data-slot="${i}"><img src="${skillIcon(sk)}" alt=""><i class="cd"></i><b class="key">${"ASDFG"[i]}</b><em class="lock">Lv.${sk.lv}</em></div>`).join("");
-      $("hud").innerHTML = `
-        <div class="hud-plate stage-plate">
-          <div class="hud-l"><b>${esc(p.name)}</b><span class="rar-t-${p.job.rarity}">${esc(p.job.name)}</span><span id="h-lv"></span></div>
-          <div class="hud-bars"><i class="hp"><b id="h-hp"></b><em id="h-hpt"></em></i><i class="mp"><b id="h-mp"></b><em id="h-mpt"></em></i><i class="xp"><b id="h-xp"></b><em id="h-xpt"></em></i></div>
-          <div class="hud-r"><span class="where" id="h-where"></span><span class="gold" id="h-gold"></span></div>
-        </div>
-        <button class="hud-menu" type="button" aria-label="메뉴">☰</button>
-        <div class="buffs" id="h-buffs"></div>
-        <div class="foe-plate boss-plate" id="h-boss" hidden><b id="h-bossn"></b><span id="h-bosslv"></span><i class="hp"><b id="h-bosshp"></b></i></div>
-        <div class="stage-log" id="h-log"></div>
-        <div class="slots" id="h-slots">${slots}<div class="slot pot" data-pot="hp"><img src="${S.icon("potion", 2)}" alt=""><b class="key">Q</b><em class="n" id="h-php"></em></div><div class="slot pot" data-pot="mp"><img src="${S.icon("ether", 2)}" alt=""><b class="key">W</b><em class="n" id="h-pmp"></em></div></div>`;
-      $("hud").querySelector(".hud-menu").addEventListener("click", () => { if (!winTop() && !G.busy && !this.dead) openMenu(); });
-      $("hud").querySelectorAll(".slot").forEach((el) => {
-        el.addEventListener("click", () => {
-          if (winTop() || G.busy) return;
-          if (el.dataset.pot) this.potion(el.dataset.pot);
-          else this.useSkill(Number(el.dataset.slot));
-        });
-      });
-      /* 터치 패드의 기술 버튼에도 같은 아이콘 */
-      p.job.skills.forEach((sk, i) => {
-        const b = doc.querySelector(`#pad [data-k="s${i}"]`);
-        if (b) b.innerHTML = `<img src="${skillIcon(sk)}" alt="${esc(sk.name)}"><i class="cd"></i>`;
-      });
-      this.refresh(true);
-    },
-    refresh(force) {
-      const p = G.player;
-      const d = E.derive(p);
-      const set = (id, v) => { const el = $(id); if (el && el.textContent !== v) el.textContent = v; };
-      const width = (id, r) => { const el = $(id); if (el) el.style.width = `${Math.max(0, Math.min(100, r * 100)).toFixed(1)}%`; };
-      set("h-lv", `Lv.${p.level}`);
-      width("h-hp", p.hp / d.maxHp);
-      width("h-mp", p.mp / d.maxMp);
-      width("h-xp", p.exp / E.expNeed(p.level));
-      set("h-hpt", `${fmt(Math.max(0, p.hp))}/${fmt(d.maxHp)}`);
-      set("h-mpt", `${fmt(p.mp)}/${fmt(d.maxMp)}`);
-      set("h-xpt", `${((p.exp / E.expNeed(p.level)) * 100).toFixed(1)}%`);
-      set("h-where", this.floor ? `${this.floor}층` : "마을");
-      set("h-gold", `${fmt(p.gold)} G`);
-      set("h-php", String(p.potions.hp));
-      set("h-pmp", String(p.potions.mp));
-      p.job.skills.forEach((sk, i) => {
-        const plan = E.skillPlan(p, sk, this.reach.far);
-        const left = this.cds[i];
-        const locked = p.level < sk.lv;
-        const short = !locked && (plan.hpCost ? p.hp <= d.maxHp * plan.hpCost + 1 : p.mp < plan.cost);
-        [doc.querySelector(`#h-slots [data-slot="${i}"]`), doc.querySelector(`#pad [data-k="s${i}"]`)].forEach((el) => {
-          if (!el) return;
-          el.classList.toggle("locked", locked);
-          el.classList.toggle("short", short);
-          const cd = el.querySelector(".cd");
-          if (cd) {
-            cd.style.setProperty("--cd", left > 0 ? (left / plan.cd).toFixed(3) : "0");
-            const txt = left > 0 ? String(Math.ceil(left)) : "";
-            if (cd.textContent !== txt) cd.textContent = txt;
-          }
-        });
-      });
-      const ps = this.ps;
-      const chips = [];
-      if (ps.barrier > 0) chips.push(`보호막 ${fmt(ps.barrier)}`);
-      [["atkUp", "공격↑"], ["rage", "광폭"], ["counter", "반격"], ["evade", "회피↑"], ["regen", "재생"], ["weaken", "쇠약"], ["poison", "중독"], ["burn", "화상"]].forEach(([k, label]) => {
-        if (ps[k]) chips.push(`${label} ${Math.ceil(ps[k].t)}`);
-      });
-      if (this.summons.length) chips.push(`소환수 ${Math.ceil(this.summons[0].t)}`);
-      const html = chips.map((c) => `<span class="chip">${c}</span>`).join("");
-      const bf = $("h-buffs");
-      if (bf && (force || bf.dataset.v !== html)) { bf.innerHTML = html; bf.dataset.v = html; }
-      const boss = this.mons.find((m) => m.mon.boss && !m.dead);
-      const bp = $("h-boss");
-      if (bp) {
-        bp.hidden = !boss;
-        if (boss) { set("h-bossn", boss.mon.name); set("h-bosslv", `Lv.${boss.mon.lv} · 보스${boss.mon.enraged ? " · 분노" : ""}`); width("h-bosshp", boss.mon.hp / boss.mon.maxHp); }
-      }
-    },
-    log(text, kind) {
-      const box = $("h-log");
-      if (!box) return;
-      const el = doc.createElement("p");
-      el.className = kind || "";
-      el.innerHTML = text;
-      box.appendChild(el);
-      while (box.children.length > 4) box.firstChild.remove();
-      setTimeout(() => el.classList.add("out"), 3600);
-      setTimeout(() => el.remove(), 4400);
-    },
-    banner(text) { banner(text); },
-
-    /* ── 입력 ── */
-    key(k) {
-      if (this.dead || G.busy) return;
-      if (k === "b") { openMenu(); return; }
-      if (k === "jump") { this.jump(); return; }
-      if (k === "up" || k === "a") { if (this.interact()) return; }
-      if (k === "atk") {
-        if (this.map.kind === "town" && this.interact()) return;
-        this.basicAttack();
-        return;
-      }
-      if (k === "hp" || k === "mp") { this.potion(k); return; }
-      if (k[0] === "s" && k.length === 2) this.useSkill(Number(k[1]));
-    },
-    jump() {
-      const h = this.hero;
-      if (this.dead || h.stun > 0 || h.knock > 0 || h.casting) return;
-      if (h.rope) {
-        if (!held.left && !held.right) return;
-        h.dir = held.left ? -1 : 1;
-        h.rope = null;
-        h.vy = -JUMP_V * 0.62;
-        h.vx = h.dir * WALK;
-        h.ground = null;
-        return;
-      }
-      if (!h.ground || h.atk) return;
-      if (held.down && !h.ground.ground) {
-        h.dropPlat = h.ground;
-        h.dropT = 0.3;
-        h.ground = null;
-        h.vy = 30;
-        return;
-      }
-      h.ground = null;
-      h.vy = -JUMP_V;
-      h.airT = 0;
-      Sp.dust(px(h.x), px(h.y), 0, 4);
-    },
-    potion(kind) {
-      const p = G.player;
-      if (this.dead || (this.potT || 0) > 0) return;
-      const before = kind === "mp" ? p.mp : p.hp;
-      const res = E.drink(p, kind);
-      if (!res.ok) { this.log(res.msg, "bad"); return; }
-      this.potT = 0.4;
-      const h = this.hero;
-      const gain = (kind === "mp" ? p.mp : p.hp) - before;
-      Sp.number(px(h.x), px(h.y - 46), "+" + gain, kind === "mp" ? "mp" : "heal", 0);
-      if (kind === "hp") { delete this.ps.poison; delete this.ps.burn; Sp.heal(px(h.x), px(h.y)); }
-      else Sp.aura(px(h.x), px(h.y), "ice");
-      this.refresh();
-    },
-    interact() {
-      const h = this.hero;
-      const door = (this.map.doors || []).find((d) => Math.abs(d.x - h.x) < (d.kind === "cave" ? 40 : 26) && Math.abs(d.y - h.y) < 8 && h.ground);
-      if (door) { this.useDoor(door); return true; }
-      const npc = this.npcs.find((n) => Math.abs(n.x - h.x) < 22 && Math.abs(this.map.groundY - h.y) < 8);
-      if (npc) { npcTalk(npc, h); return true; }
-      return false;
-    },
-    useDoor(d) {
-      const p = G.player;
-      const h = this.hero;
-      h.vx = 0;
-      if (d.kind === "down") {
-        if (d.locked) { this.log("붉은 봉인이 문을 막고 있다. 보스를 쓰러뜨려야 열린다.", "bad"); return; }
-        fade(() => setScene(Stage, { floor: this.floor + 1, keep: true }));
-        return;
-      }
-      if (d.kind === "up") {
-        ask(`돌아가는 문이다. 마을로 돌아갈까?<br><small>다음에는 ${this.floor}층부터 다시 시작한다.</small>`, ["돌아간다", "그만둔다"], (i) => {
-          if (i === 0) fade(() => setScene(Stage, { floor: 0, x: 862, keep: true }));
-        });
-        return;
-      }
-      if (d.kind === "cave") {
-        ask(`던전으로 가는 돌문이다. <b>${Math.max(1, p.floor)}층</b>부터 탐험할까?<br><small>최고 기록 ${p.best}층 · 10층마다 보스</small>`, ["들어간다", "그만둔다"], (i) => {
-          if (i === 0) fade(() => setScene(Stage, { floor: Math.max(1, p.floor), keep: true }));
-        });
-        return;
-      }
-      if (d.kind === "tablet") { tabletTalk(); return; }
-      if (d.kind === "inn") { innTalk(() => this.refresh()); return; }
-      if (d.kind === "shop") { openShop(() => this.refresh()); return; }
-      if (d.kind === "guild") guildMenu();
-    },
-
-    /* ── 주인공 ── */
-    landing(x, y0, y1, skip) {
-      let best = null;
-      this.map.plats.forEach((pl) => {
-        if (pl === skip) return;
-        if (x < pl.x1 - 3 || x > pl.x2 + 3) return;
-        if (y0 <= pl.y + 0.5 && y1 >= pl.y && (!best || pl.y < best.y)) best = pl;
-      });
-      return best;
-    },
-    ropeAt(h, up) {
-      return this.map.ropes.find((r) => Math.abs(h.x - r.x) < 8 && (up ? h.y > r.top.y + 1 && h.y <= r.y2 + 1 : h.ground === r.top));
-    },
-    updateHero(dt) {
-      const h = this.hero;
-      const m = this.map;
-      h.inv = Math.max(0, h.inv - dt);
-      h.stun = Math.max(0, h.stun - dt);
-      h.knock = Math.max(0, h.knock - dt);
-      h.landT = Math.max(0, h.landT - dt);
-      h.atkCd -= dt;
-      h.dropT -= dt;
-      this.potT = Math.max(0, (this.potT || 0) - dt);
-      const ctl = h.stun <= 0 && h.knock <= 0 && !h.casting;
-      if (h.atk) {
-        h.atk.t += dt;
-        if (!h.atk.fired && h.atk.t >= h.atk.hitAt) { h.atk.fired = true; h.atk.fire(); }
-        if (h.atk.t >= h.atk.dur) h.atk = null;
-      }
-      if (held.atk && ctl && !h.atk && h.atkCd <= 0 && !h.rope && m.kind !== "town") this.basicAttack();
-      if (held.jump && ctl && h.ground && !h.atk && !held.down) this.jump();
-      /* 밧줄 */
-      if (h.rope) {
-        const r = h.rope;
-        let v = 0;
-        if (held.up && ctl) v -= 1;
-        if (held.down && ctl) v += 1;
-        h.y += v * CLIMB * dt;
-        h.x = r.x;
-        h.vx = 0;
-        h.vy = 0;
-        if (v) h.climbT += dt;
-        if (h.y <= r.top.y) { h.y = r.top.y; h.rope = null; h.ground = r.top; }
-        else if (h.y >= r.y2) {
-          h.y = r.y2;
-          h.rope = null;
-          h.ground = this.landing(h.x, r.y2 - 1, r.y2 + 1, null);
-        }
-        return;
-      }
-      let want = 0;
-      if (ctl && held.left) want -= 1;
-      if (ctl && held.right) want += 1;
-      /* 같은 방향을 계속 누르면 달린다 */
-      if (want && want === h.wantDir) h.runT += dt;
-      else h.runT = 0;
-      h.wantDir = want;
-      h.running = !!want && (held.run || h.runT > RUN_AFTER);
-      if (h.knock <= 0) h.vx = h.atk && h.ground ? 0 : want * (h.running ? RUN : WALK);
-      if (want && !h.atk && ctl) h.dir = want;
-      if (ctl && !h.atk && (held.up || held.down)) {
-        const r = this.ropeAt(h, held.up && !held.down);
-        if (r) {
-          h.rope = r;
-          h.ground = null;
-          h.x = r.x;
-          h.y = held.up ? Math.min(h.y, r.y2) - 1 : r.top.y + 2;
-          h.climbT = 0;
-          return;
-        }
-      }
-      if (!h.ground) { h.vy = Math.min(HERO_FALL, h.vy + HERO_GRAV * dt); h.airT += dt; }
-      const py = h.y;
-      h.x = clamp(h.x + h.vx * dt, 10, m.W - 10);
-      h.y += h.vy * dt;
-      if (h.ground) {
-        if (h.x < h.ground.x1 - 3 || h.x > h.ground.x2 + 3) { h.ground = null; h.vy = 0; h.airT = 0; }
-        else h.y = h.ground.y;
-      } else if (h.vy >= 0) {
-        const land = this.landing(h.x, py, h.y, h.dropT > 0 ? h.dropPlat : null);
-        if (land) {
-          h.y = land.y;
-          if (h.airT > 0.3) { h.landT = 0.2; Sp.dust(px(h.x), px(h.y), 0, 6); }
-          h.vy = 0;
-          h.ground = land;
-          h.airT = 0;
-        }
-      }
-      if (h.ground && h.vx) {
-        h.walkT += dt;
-        if (Math.random() < dt * (h.running ? 9 : 3)) Sp.dust(px(h.x - h.dir * 6), px(h.y), -h.dir, h.running ? 2 : 1);
-      } else h.walkT = 0;
-      if (h.y > m.H + 40) { h.x = m.spawnX; h.y = m.groundY; h.vy = 0; h.ground = m.plats[0]; }
-    },
-    /* 지금 동작과 그 동작에 들어선 뒤의 시간 */
-    heroPose() {
-      const h = this.hero;
-      let anim = "idle";
-      let f = 0;
-      let t = this.time;
-      if (this.dead || h.knock > 0 || h.stun > 0) anim = "hurt";
-      else if (h.atk) {
-        const k = h.atk.t;
-        const kind = h.atk.kind === "melee" ? "slash" : h.atk.kind;
-        anim = kind;
-        t = k;
-        if (kind === "cast" || kind === "read" || kind === "raise" || kind === "play") f = k < h.atk.hitAt ? 0 : 1;
-        else f = k < h.atk.hitAt ? 0 : k < h.atk.hitAt + 0.13 ? 1 : 2;
-      } else if (h.rope) { anim = "climb"; t = h.climbT; }
-      else if (!h.ground) anim = h.vy < 0 ? "jump" : "fall";
-      else if (h.landT > 0) anim = "land";
-      else if (h.vx) { anim = h.running ? "run" : "walk"; t = h.walkT; }
-      return { anim, f, t, alt: !!(h.atk && h.atk.skill) };
-    },
-
-    /* ── 공격 ── */
-    basicAttack() {
-      const h = this.hero;
-      if (this.dead || h.atk || h.atkCd > 0 || h.rope || h.casting || h.stun > 0 || h.knock > 0 || this.map.kind === "town") return;
-      const W = this.reach.weapon;
-      const dur = ATK_TIME * W.time;
-      h.atk = { t: 0, dur, hitAt: W.motion === "smash" ? dur * 0.45 : ATK_HIT * W.time, kind: this.reach.motion, fired: false, fire: () => this.basicHit() };
-      h.atkCd = dur + 0.04;
-    },
-    basicHit() {
-      const h = this.hero;
-      const p = G.player;
-      const a = p.job.attack;
-      const W = this.reach.weapon;
-      const opt = { stat: a.stat, el: a.el, mult: W.mult, critBonus: W.crit || 0 };
-      const range = W.far ? W.range : W.reach;
-      let targets;
-      if (W.back) {
-        /* 낫: 앞뒤를 함께 휩쓴다 */
-        const cy = h.y - 20;
-        targets = this.liveMons().filter((m) => { const dx = (m.x - h.x) * h.dir; return dx > -40 && dx < range + m.w / 2 && Math.abs(m.y - m.h / 2 - cy) < 30 + m.h / 2; }).slice(0, W.splash || 1);
-      } else targets = this.frontTargets(range, W.pierce || (W.far ? 1 : W.splash) || 1);
-      weaponFx(this, a.el, targets, range).then(() => {
-        let list = targets.filter((m) => !m.dead);
-        /* 포탄은 맞은 자리 둘레도 함께 */
-        if (W.far && W.splash && list[0]) {
-          const c = list[0];
-          list = list.concat(this.liveMons().filter((m) => m !== c && Math.hypot(m.x - c.x, m.y - c.y) < 44).slice(0, W.splash - 1));
-        }
-        list.forEach((m) => this.strike(m, opt, W.hits || 1, true));
-      });
-    },
-    liveMons() {
-      return this.mons.filter((m) => !m.dead);
-    },
-    frontTargets(range, n) {
-      const h = this.hero;
-      const cy = h.y - 20;
-      return this.liveMons().filter((m) => {
-        const dx = (m.x - h.x) * h.dir;
-        return dx > -14 && dx < range + m.w / 2 && Math.abs(m.y - m.h / 2 - cy) < 30 + m.h / 2;
-      }).sort((a, b) => Math.abs(a.x - h.x) - Math.abs(b.x - h.x)).slice(0, n);
-    },
-    pickTargets(plan) {
-      const h = this.hero;
-      const cy = h.y - 20;
-      if (plan.area === "screen") {
-        const vw = this.viewW() / 2 + 10;
-        const vh = this.viewH() * 0.6;
-        return this.liveMons().filter((m) => Math.abs(m.x - h.x) < vw && Math.abs(m.y - m.h / 2 - cy) < vh)
-          .sort((a, b) => Math.abs(a.x - h.x) - Math.abs(b.x - h.x)).slice(0, plan.targets);
-      }
-      if (plan.area === "around") {
-        return this.liveMons().filter((m) => Math.hypot(m.x - h.x, (m.y - m.h / 2 - cy) * 1.4) < plan.range + m.w / 2)
-          .sort((a, b) => Math.abs(a.x - h.x) - Math.abs(b.x - h.x)).slice(0, plan.targets);
-      }
-      return this.frontTargets(plan.range, plan.targets);
-    },
-    /* 몬스터 하나를 hits번 때린다. 숫자는 위로 쌓인다 */
-    strike(m, opt, hits, basic) {
-      if (m.dead) return 0;
-      const p = G.player;
-      const d = E.derive(p);
-      let total = 0;
-      let line = 0;
-      for (let i = 0; i < hits && m.mon.hp > 0; i++) {
-        const r = E.hitMonster(p, d, m.mon, opt, this.ps);
-        total += r.dmg;
-        Sp.number(px(m.x), px(m.y - m.h) - 4 * Z, r.dmg, r.crit ? "crit" : "hit", line++);
-      }
-      if (p.job.passive.double && m.mon.hp > 0 && Math.random() < p.job.passive.double) {
-        const r = E.hitMonster(p, d, m.mon, Object.assign({}, opt, { mult: opt.mult * 0.5 }), this.ps);
-        total += r.dmg;
-        Sp.number(px(m.x), px(m.y - m.h) - 4 * Z, r.dmg, r.crit ? "crit" : "hit", line++);
-      }
-      m.flash = 0.09;
-      m.hpBarT = 4;
-      m.aggro = 8;
-      m.hitT = 0;
-      /* 맞은 몬스터는 잠깐 휘청이며 밀려나고, 그동안은 부딪혀도 피해가 없다. 근접 공격일수록 크게 민다 */
-      if (!m.mon.boss && !m.fly) {
-        const close = !this.reach.far;
-        m.stag = close ? 0.42 : 0.26;
-        m.kx = Math.sign(m.x - this.hero.x || 1) * (close ? 120 : 60);
-      }
-      if (basic) p.mp = Math.min(d.maxMp, p.mp + Math.max(1, Math.round(d.maxMp * 0.02)));
-      Sp.impact(px(m.x), px(m.y - m.h * 0.5), opt.el, false);
-      if (m.mon.hp <= 0) this.kill(m);
-      return total;
-    },
-
-    useSkill(i) {
-      const p = G.player;
-      const sk = p.job.skills[i];
-      const h = this.hero;
-      if (!sk || this.dead || h.stun > 0 || h.knock > 0 || h.rope || h.atk || h.casting) return;
-      if (this.map.kind === "town" && !(sk.type === "heal" || sk.type === "buff" || sk.type === "shield" || sk.type === "regen")) { this.log("마을에서는 공격 기술을 쓸 수 없다.", "bad"); return; }
-      const plan = E.skillPlan(p, sk, this.reach.far);
-      const ok = E.skillReady(p, sk, plan, this.cds[i]);
-      if (!ok.ok) {
-        if (ok.why === "MP 부족" || ok.why === "HP 부족") this.log(`${ok.why}: ${esc(sk.name)}`, "bad");
-        else if (p.level < sk.lv) this.log(`${esc(sk.name)}은(는) Lv.${sk.lv}에 배운다.`, "bad");
-        return;
-      }
-      const d = E.derive(p);
-      if (plan.hpCost) p.hp = Math.max(1, p.hp - Math.round(d.maxHp * plan.hpCost));
-      else p.mp -= plan.cost;
-      this.cds[i] = plan.cd;
-      this.skillName(sk);
-      if (plan.ult) this.castUlt(sk, plan);
-      else if (plan.self) this.castSelf(sk, plan);
-      else {
-        h.atk = { t: 0, dur: 0.5, hitAt: 0.16, kind: this.reach.motion, skill: true, fired: false, fire: () => this.skillHit(sk, plan) };
-      }
-      this.refresh();
-    },
-    skillName(sk) {
-      const h = this.hero;
-      Sp.add({
-        life: 900,
-        draw(c, t) {
-          c.save();
-          c.globalAlpha = t > 0.7 ? (1 - t) / 0.3 : 1;
-          c.font = `${Math.round(11 * Z / 1.5 + 2)}px Galmuri11, sans-serif`;
-          c.textAlign = "center";
-          c.lineWidth = 3;
-          c.strokeStyle = "#0b0918";
-          const y = px(h.y - 52) - t * 8 * Z;
-          c.strokeText(sk.name, px(h.x), y);
-          c.fillStyle = sk.tag === "ult" ? "#ffd75e" : "#ffffff";
-          c.fillText(sk.name, px(h.x), y);
-          c.restore();
-        }
-      });
-    },
-    castSelf(sk, plan) {
-      const h = this.hero;
-      const p = G.player;
-      h.atk = {
-        t: 0, dur: 0.45, hitAt: 0.18, kind: "cast", skill: true, fired: false,
-        fire: () => {
-          const d = E.derive(p);
-          const pa = p.job.passive;
-          const ps = this.ps;
-          const hx = px(h.x);
-          const hy = px(h.y);
-          if (plan.heal) {
-            const before = p.hp;
-            p.hp = Math.min(d.maxHp, p.hp + Math.round((d.maxHp * plan.heal + d.s.wis * 1.5) * (1 + (pa.heal || 0))));
-            Sp.heal(hx, hy);
-            Sp.number(hx, hy - 46 * Z, "+" + (p.hp - before), "heal", 0);
-          }
-          if (plan.regen) { ps.regen = { t: plan.regen.sec, v: Math.round((d.maxHp * plan.regen.v * (1 + (pa.heal || 0))) / (plan.regen.sec / 2)), next: 2 }; Sp.heal(hx, hy); }
-          if (plan.buff) { ps[plan.buff.kind] = { t: plan.buff.sec, v: plan.buff.v || 0 }; Sp.aura(hx, hy, sk.el === "phys" ? "light" : sk.el); }
-          if (plan.shield) {
-            const amount = Math.round(d.maxHp * plan.shield + d.s[sk.stat] * 2);
-            ps.barrier = (ps.barrier || 0) + amount;
-            Sp.shieldBubble(hx, hy - 22 * Z, 26 * Z);
-            Sp.number(hx, hy - 46 * Z, "+" + amount, "mp", 0);
-          }
-          if (plan.summon) {
-            const dmg = Math.round(E.power(p, d, sk.stat) * plan.summon.pow);
-            this.summons = [{ x: h.x - h.dir * 20, y: h.y - 46, t: plan.summon.sec, el: sk.el === "phys" ? "arcane" : sk.el, dmg, cd: 1, bob: Math.random() * 6 }];
-            Sp.aura(hx, hy, sk.el === "phys" ? "arcane" : sk.el);
-          }
-          this.refresh();
-        }
-      };
-    },
-    skillHit(sk, plan) {
-      const h = this.hero;
-      const p = G.player;
-      let targets;
-      if (plan.dash) {
-        /* 돌진: 지나간 길 위의 적을 벤다 */
-        const g = h.ground;
-        const from = h.x;
-        const lim = g ? [g.x1 + 4, g.x2 - 4] : [10, this.map.W - 10];
-        h.x = clamp(h.x + h.dir * plan.dash, lim[0], lim[1]);
-        const lo = Math.min(from, h.x) - 20;
-        const hi = Math.max(from, h.x) + 20;
-        targets = this.liveMons().filter((m) => m.x > lo && m.x < hi && Math.abs(m.y - m.h / 2 - (h.y - 20)) < 30 + m.h / 2).slice(0, plan.targets);
-        Sp.slash(px((from + h.x) / 2), px(h.y - 22), h.dir, sk.el, true, false);
-        for (let k = 0; k < 6; k++) Sp.dust(px(from + (h.x - from) * (k / 6)), px(h.y), -h.dir, 2);
-        h.inv = Math.max(h.inv, 0.4);
-      } else targets = this.pickTargets(plan);
-      this.skillVisual(sk, plan, targets).then(() => this.applySkill(sk, plan, targets));
-    },
-    applySkill(sk, plan, targets) {
-      const p = G.player;
-      const d = E.derive(p);
-      const pa = p.job.passive;
-      const opt = { stat: sk.stat, el: sk.el, mult: plan.mult, pen: plan.pen, critBonus: plan.critBonus, execute: plan.execute };
-      let dealt = 0;
-      targets.forEach((m) => {
-        if (m.dead) return;
-        const o = Object.assign({}, opt);
-        if (plan.gamble) o.mult = (0.1 + Math.random() * 3.1) * plan.gamble;
-        dealt += this.strike(m, o, plan.hits, false);
-        if (m.dead) return;
-        const mon = m.mon;
-        if (plan.dot) {
-          const pw = E.power(p, d, sk.stat);
-          m.dots[plan.dot.kind] = { dmg: Math.max(1, Math.round((pw * plan.dot.pow) / 2)), ticks: plan.dot.ticks, next: 1 };
-        }
-        if (plan.stun && Math.random() < plan.stun.chance * (mon.boss ? 0.5 : 1)) { mon.st.stun = mon.boss ? 1.2 : plan.stun.sec; mon.st.stunKind = plan.stun.kind; }
-        if (plan.status) mon.st[plan.status.kind] = plan.status.sec;
-      });
-      if (plan.drain && dealt) {
-        const before = p.hp;
-        p.hp = Math.min(d.maxHp, p.hp + Math.round(dealt * plan.drain * (1 + (pa.heal || 0) * 0.5)));
-        if (p.hp > before) Sp.number(px(this.hero.x), px(this.hero.y - 46), "+" + (p.hp - before), "heal", 0);
-      }
-      if (plan.mana) {
-        const before = p.mp;
-        p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * plan.mana));
-        if (p.mp > before) Sp.number(px(this.hero.x), px(this.hero.y - 46), "+" + (p.mp - before), "mp", 0);
-      }
-      if (plan.gold && targets[0]) {
-        const g = Math.round((4 + this.floor * 2.5) * plan.gold * (1 + (pa.gold || 0)));
-        this.spawnDrop({ kind: "gold", amount: g }, targets[0].x, targets[0].y - targets[0].h / 2);
-      }
-      if (plan.buff) this.ps[plan.buff.kind] = { t: plan.buff.sec, v: plan.buff.v || 0 };
-      this.refresh();
-    },
-    /* 기술 연출: 싸움 방식(베기·화살·총탄·던지기·주문)에 속성 효과를 얹는다.
-       돌려주는 Promise가 끝나는 순간 피해가 들어간다 */
+  /* 기술 연출(전투와 운명 뽑기 시연이 같이 쓴다). this는 무대: hero{x,y,dir,casting}, reach, quake, dim, flash,
+     pickTargets(plan), applySkill(궁극기가 내리치는 순간). 돌려주는 Promise가 끝나는 순간 피해가 들어간다 */
+  const Moves = {
     /* 기술 연출: 기술 종류마다 다른 동작과 덧연출. 돌려주는 Promise가 끝나는 순간 피해가 들어간다 */
     skillVisual(sk, plan, targets) {
       const h = this.hero;
@@ -1715,12 +1071,12 @@
         case "stun":
           /* 강타·기절: 내려찍고 땅이 울린다 */
           if (!far) { Sp.smash(px(h.x + h.dir * 18), px(h.y), h.dir, el, true); go = X.sleep(110); }
-          else go = this.deliver(sk, plan, targets);
+          else go = Moves.deliver.call(this, sk, plan, targets);
           go = go.then(() => list.forEach((m) => Sp.ring(at(m)[0], gyOf(m), el, 64 * Z)));
           this.quake = 0.18;
           break;
         default:
-          go = this.deliver(sk, plan, targets);
+          go = Moves.deliver.call(this, sk, plan, targets);
       }
       return go.then(() => {
         list.forEach((m) => {
@@ -1756,17 +1112,17 @@
       const list = targets.length ? targets.slice(0, 4) : [null];
       if (st.reach === "melee") {
         const go = weaponFx(this, el, targets, plan.range);
-        if (el !== "phys") list.forEach((m) => this.groundFx(el, m, false));
+        if (el !== "phys") list.forEach((m) => Moves.groundFx.call(this, el, m, false));
         return go;
       }
       if (st.reach !== "magic") {
         /* 활·총·던지기: 대상마다 자기 물건을 날리고, 속성이 있으면 맞은 자리에 터진다 */
         return Promise.all(list.map((m, i) => X.sleep(i * 70).then(() => Sp.shot(hand, m ? center(m) : aim, el, this.reach.shot))))
-          .then(() => { if (el !== "phys") list.forEach((m) => this.groundFx(el, m, false)); });
+          .then(() => { if (el !== "phys") list.forEach((m) => Moves.groundFx.call(this, el, m, false)); });
       }
       switch (el) {
         case "fire":
-          return Sp.shot(hand, aim, "fire", "fireball").then(() => list.forEach((m) => this.groundFx("fire", m, false)));
+          return Sp.shot(hand, aim, "fire", "fireball").then(() => list.forEach((m) => Moves.groundFx.call(this, "fire", m, false)));
         case "bolt": {
           let prev = hand;
           list.forEach((m) => { const to = m ? center(m) : aim; Sp.bolt(prev, to, "bolt"); prev = to; });
@@ -1775,7 +1131,7 @@
         case "dark": case "arcane": case "phys":
           return Sp.shot(hand, aim, el === "phys" ? "arcane" : el, "fireball");
         default:
-          list.forEach((m) => this.groundFx(el, m, plan.targets > 3));
+          list.forEach((m) => Moves.groundFx.call(this, el, m, plan.targets > 3));
           return X.sleep(170);
       }
     },
@@ -1799,11 +1155,9 @@
       const el = sk.el === "phys" ? "light" : sk.el;
       const st = this.reach.style;
       h.casting = true;
-      h.inv = Math.max(h.inv, 2);
-      h.atk = { t: 0, dur: 1.5, hitAt: 0.6, kind: "cast", skill: true, fired: true, fire() {} };
       Sp.circle(px(h.x), px(h.y), el, 1500);
       this.dim = 0.25;
-      X.sleep(620).then(() => {
+      return X.sleep(620).then(() => {
         const targets = this.pickTargets(plan);
         this.dim = 0.5;
         this.flash = { col: Sp.PAL[el][1], t: 0.22 };
@@ -1814,7 +1168,7 @@
         switch (st.ult) {
           case "blade":
             burst = Sp.bladeWave(px(h.x + h.dir * 20), px(h.y - 24), h.dir, sk.el, VW * 0.7);
-            if (sk.el !== "phys") xs.forEach((x, i) => X.sleep(120 + i * 60).then(() => this.groundFx(sk.el, targets[i] || null, true)));
+            if (sk.el !== "phys") xs.forEach((x, i) => X.sleep(120 + i * 60).then(() => Moves.groundFx.call(this, sk.el, targets[i] || null, true)));
             break;
           case "arrows": burst = Sp.rain("arrow", xs, gy, sk.el); break;
           case "bombard": burst = Sp.meteors(xs, gy, "fire"); break;
@@ -1838,412 +1192,24 @@
           return X.sleep(300);
         });
       }).then(() => { h.casting = false; this.dim = 0; });
-    },
+    }
+  };
 
-    /* ── 몬스터 ── */
-    kill(m) {
-      if (m.dead) return;
-      m.dead = true;
-      m.deadT = 0;
-      m.mon.hp = 0;
-      const p = G.player;
-      const rw = E.killReward(p, m.mon);
-      p.kills++;
-      const lv = E.gainExp(p, rw.exp);
-      this.log(`${esc(m.mon.name)} 처치 · 경험치 +${fmt(rw.exp)}`);
-      rw.drops.forEach((dr) => this.spawnDrop(dr, m.x, m.y - m.h / 2));
-      const pa = p.job.passive;
-      if (pa.post) {
-        const d = E.derive(p);
-        p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * pa.post * 0.25));
-      }
-      if (lv.levels.length) {
-        const h = this.hero;
-        Sp.levelUp(px(h.x), px(h.y));
-        this.log(`<b>레벨 업! Lv.${p.level}</b> HP·MP가 가득 찼다.`, "good");
-        lv.unlocked.forEach((n) => this.log(`새 기술: <b>${esc(n)}</b>`, "good"));
-        save();
-      }
-      if (m.mon.boss) {
-        const door = this.map.doors.find((d) => d.kind === "down");
-        if (door) { door.locked = false; Sp.pillar(px(door.x), px(door.y), "light", true); }
-        this.mons.forEach((o) => { if (!o.dead && o.minion) this.kill(o); });
-        this.banner("보스 처치! 문의 봉인이 풀렸다");
-        save();
-      }
-      this.refresh();
-    },
-    spawnDrop(dr, x, y) {
-      this.drops.push(Object.assign({ x, y, vx: rnd(-50, 50), vy: -rnd(140, 200), ground: null, t: 0, spin: Math.random() * 6 }, dr));
-    },
-    hurtHero(src, mult) {
-      const h = this.hero;
-      const p = G.player;
-      if (this.dead || h.inv > 0) return;
-      const d = E.derive(p);
-      const mon = src.mon;
-      const raw = mon.atk * mult * (mon.st.debuff ? 0.7 : 1) * (mon.enraged ? 1.4 : 1);
-      const res = E.hurtPlayer(p, d, raw, this.ps);
-      h.inv = 1;
-      if (res.miss) { Sp.number(px(h.x), px(h.y - 46), "MISS", "miss", 0); return; }
-      Sp.number(px(h.x), px(h.y - 46), res.dmg, "taken", 0);
-      if (res.absorbed) Sp.shieldBubble(px(h.x), px(h.y - 22), 24 * Z);
-      h.knock = 0.28;
-      h.vx = (h.x < src.x ? -1 : 1) * 120;
-      h.vy = -150;
-      h.ground = null;
-      h.rope = null;
-      if (!h.casting) h.atk = null;
-      if (res.reflect && !src.dead) {
-        mon.hp -= res.reflect;
-        Sp.number(px(src.x), px(src.y - src.h), res.reflect, "hit", 0);
-        if (mon.hp <= 0) this.kill(src);
-      }
-      mon.traits.forEach((tr) => {
-        if (tr === "poison" || tr === "burn") this.ps[tr] = { t: 6, dmg: Math.max(1, Math.round(raw * 0.1)), next: 1 };
-        if (tr === "drain") mon.hp = Math.min(mon.maxHp, mon.hp + Math.round(res.dmg * 0.6));
-        if (tr === "steal" && Math.random() < 0.5) {
-          const lost = Math.min(p.gold, 3 + this.floor * 2);
-          if (lost) { p.gold -= lost; this.log(`${esc(mon.name)}에게 ${lost}G를 빼앗겼다!`, "bad"); }
-        }
-        if (tr === "stun" && Math.random() < 0.35) h.stun = 0.7;
-        if (tr === "weaken" && Math.random() < 0.4) this.ps.weaken = { t: 8 };
-      });
-      this.refresh();
-      if (p.hp <= 0) this.die(mon);
-    },
-    touching(m) {
-      const h = this.hero;
-      return Math.abs(h.x - m.x) < HERO_HALF + m.w * 0.36 && h.y - HERO_H < m.y - 2 && h.y > m.y - m.h * 0.85;
-    },
-    updateMons(dt) {
-      const h = this.hero;
-      this.mons.forEach((m) => {
-        m.t += dt;
-        if (m.dead) {
-          m.deadT += dt;
-          m.alpha = Math.max(0, 1 - m.deadT / 0.45);
-          if (!m.mon.boss && !m.minion && m.deadT > 8 && Math.abs(m.sp.x - h.x) > this.viewW() / 2 + 40) Object.assign(m, this.makeMon(m.sp));
-          return;
-        }
-        const st = m.mon.st;
-        ["stun", "charm", "debuff", "curse"].forEach((k) => { if (st[k] > 0) { st[k] -= dt; if (st[k] <= 0) delete st[k]; } });
-        Object.keys(m.dots).forEach((k) => {
-          const o = m.dots[k];
-          o.next -= dt;
-          if (o.next > 0) return;
-          o.next = 1;
-          o.ticks--;
-          m.mon.hp -= o.dmg;
-          Sp.number(px(m.x), px(m.y - m.h), o.dmg, "dot", 0);
-          if (o.ticks <= 0) delete m.dots[k];
-        });
-        if (m.mon.hp <= 0) { this.kill(m); return; }
-        m.flash = Math.max(0, m.flash - dt);
-        m.hpBarT -= dt;
-        m.hitT += dt;
-        m.castCd -= dt;
-        m.heavyCd -= dt;
-        if (!m.mon.boss) m.aggro -= dt;
-        if (m.mon.traits.includes("enrage") && !m.mon.enraged && m.mon.hp < m.mon.maxHp * 0.5) { m.mon.enraged = true; this.log(`${esc(m.mon.name)}이(가) 분노했다!`, "bad"); }
-        if (m.mon.traits.includes("heal") && m.hitT > 4 && m.mon.hp < m.mon.maxHp) m.mon.hp = Math.min(m.mon.maxHp, m.mon.hp + m.mon.maxHp * 0.03 * dt);
-        if (m.stag > 0) {
-          m.stag -= dt;
-          m.x += m.kx * dt;
-          m.kx *= 0.85;
-          this.keepOnPlat(m);
-          return;
-        }
-        if (st.stun > 0) return;
-        if (!m.aggro || m.aggro < 0) m.aggro = 0;
-        /* 3층부터는 같은 높이에서 가까이 다가가면 먼저 덤빈다 */
-        if (m.mon.lv >= 3 && !m.aggro && !this.dead && Math.abs(h.y - m.y) < 26 && Math.abs(h.x - m.x) < 90) m.aggro = 5;
-        if (m.mon.boss) this.bossAI(m, dt);
-        else this.monAI(m, dt);
-        /* 보스는 몸통 박치기보다 내려찍기·탄막이 위험하다 */
-        if (!this.dead && !st.charm && h.inv <= 0 && this.touching(m)) this.hurtHero(m, m.mon.boss ? 0.55 : m.lunge > 0 ? 1.6 : 1);
-      });
-    },
-    keepOnPlat(m) {
-      if (m.fly) { m.x = clamp(m.x, 40, this.map.W - 40); return; }
-      const lo = m.plat.x1 + 8;
-      const hi = m.plat.x2 - 8;
-      if (m.x < lo) { m.x = lo; m.dir = 1; }
-      if (m.x > hi) { m.x = hi; m.dir = -1; }
-    },
-    monAI(m, dt) {
-      const h = this.hero;
-      const mon = m.mon;
-      const spd = m.speed * (mon.enraged ? 1.4 : 1) * (mon.st.charm ? 0.6 : 1);
-      const level = m.fly || Math.abs(h.y - m.y) < 26;
-      const dx = h.x - m.x;
-      if (m.wind > 0) {
-        m.wind -= dt;
-        if (m.wind <= 0) m.lunge = 0.3;
-        return;
-      }
-      if (m.lunge > 0) {
-        m.lunge -= dt;
-        m.x += m.dir * 220 * dt;
-        this.keepOnPlat(m);
-        return;
-      }
-      if (m.castT > 0) { m.castT -= dt; return; }
-      if (m.aggro > 0 && !mon.st.charm && level && !this.dead) {
-        m.dir = dx < 0 ? -1 : 1;
-        if (m.heavy && Math.abs(dx) < 90 && m.heavyCd <= 0) { m.wind = 0.5; m.heavyCd = rnd(3.5, 5); return; }
-        if (m.shooter && Math.abs(dx) < 220 && m.castCd <= 0) { this.enemyShot(m, 1); m.castCd = rnd(2.4, 3.2); m.castT = 0.4; return; }
-        if (!(m.shooter && Math.abs(dx) < 130) && Math.abs(dx) > 6) m.x += m.dir * spd * 1.35 * dt;
-        if (m.fly) m.baseY += clamp(h.y - 24 - m.baseY, -40 * dt, 40 * dt);
-      } else {
-        m.stateT -= dt;
-        if (m.stateT <= 0) {
-          if (m.state === "walk") { m.state = "idle"; m.stateT = rnd(0.6, 1.8); }
-          else { m.state = "walk"; m.stateT = rnd(1.5, 4); if (Math.random() < 0.5) m.dir = -m.dir; }
-        }
-        if (m.state === "walk") m.x += m.dir * spd * dt;
-      }
-      if (m.fly) m.y = m.baseY + Math.sin(m.t * 2.2) * 6;
-      else m.y = m.plat.y;
-      this.keepOnPlat(m);
-    },
-    /* 보스: 쫓아오다가 내려찍기·탄막·부하 부르기를 번갈아 */
-    bossAI(m, dt) {
-      const h = this.hero;
-      const mon = m.mon;
-      const dx = h.x - m.x;
-      if (m.air) {
-        m.vy += GRAV * 0.9 * dt;
-        m.y += m.vy * dt;
-        m.x += m.dir * 60 * dt;
-        this.keepOnPlat(m);
-        if (m.y >= m.plat.y) {
-          m.y = m.plat.y;
-          m.air = false;
-          this.quake = 0.35;
-          Sp.dust(px(m.x), px(m.y), 0, 14);
-          [-1, 1].forEach((s) => Sp.crystals(px(m.x + s * 70), px(m.y), mon.el === "phys" ? "earth" : mon.el, 60 * Z, false));
-          if (h.ground === this.map.plats[0] && Math.abs(dx) < 210 && h.inv <= 0) this.hurtHero(m, 1.3);
-        }
-        return;
-      }
-      if (m.act) {
-        m.act.t -= dt;
-        if (m.act.t > 0) return;
-        const a = m.act.kind;
-        m.act = null;
-        if (a === "slam") { m.air = true; m.vy = -330; m.dir = dx < 0 ? -1 : 1; }
-        if (a === "volley") for (let k = -2; k <= 2; k++) this.enemyShot(m, 1.1, k * 0.22);
-        if (a === "summon") {
-          const pool = this.map.pool && this.map.pool.length ? this.map.pool : E.MONSTERS.filter((x) => x.tier === E.floorTier(this.floor) && !x.boss);
-          for (let k = 0; k < 2; k++) {
-            const mm = this.makeMon({ x: clamp(m.x + (k ? 50 : -50), 40, this.map.W - 40), plat: 0, mon: pool[Math.floor(Math.random() * pool.length)] });
-            mm.aggro = 99;
-            mm.minion = true;
-            this.mons.push(mm);
-            Sp.circle(px(mm.x), px(mm.y), mon.el === "phys" ? "dark" : mon.el, 700);
-          }
-        }
-        return;
-      }
-      m.dir = dx < 0 ? -1 : 1;
-      if (Math.abs(dx) > 30) m.x += m.dir * m.speed * (mon.enraged ? 1.4 : 1) * dt;
-      this.keepOnPlat(m);
-      m.patT -= dt;
-      if (m.patT <= 0) {
-        const minions = this.mons.filter((o) => o.minion && !o.dead).length;
-        const opts = ["slam", "volley", "volley"];
-        if (mon.hp < mon.maxHp * 0.7 && minions < 3) opts.push("summon");
-        const kind = opts[Math.floor(Math.random() * opts.length)];
-        m.act = { kind, t: kind === "slam" ? 0.6 : 0.5 };
-        m.flash = 0.15;
-        m.patT = mon.enraged ? 2.4 : 3.4;
-      }
-    },
-    enemyShot(m, mult, spread) {
-      const h = this.hero;
-      const sx = m.x + m.dir * m.w * 0.3;
-      const sy = m.y - m.h * 0.55;
-      let ang = Math.atan2(h.y - 22 - sy, h.x - sx) + (spread || 0);
-      if (!m.mon.boss) ang = Math.atan2(clamp(h.y - 22 - sy, -40, 40), h.x - sx);
-      const v = 130;
-      this.shots.push({ x: sx, y: sy, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v, el: m.mon.el === "phys" ? "dark" : m.mon.el, src: m, mult, life: 3.2 });
-    },
-    updateShots(dt) {
-      const h = this.hero;
-      for (let i = this.shots.length - 1; i >= 0; i--) {
-        const s = this.shots[i];
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        s.life -= dt;
-        const hit = !this.dead && h.inv <= 0 && Math.abs(s.x - h.x) < 10 && s.y > h.y - HERO_H && s.y < h.y;
-        if (hit) { this.hurtHero(s.src, s.mult); Sp.impact(px(s.x), px(s.y), s.el, false); }
-        if (hit || s.life <= 0) this.shots.splice(i, 1);
-      }
-    },
-    updateSummons(dt) {
-      const h = this.hero;
-      for (let i = this.summons.length - 1; i >= 0; i--) {
-        const s = this.summons[i];
-        s.t -= dt;
-        if (s.t <= 0) { this.summons.splice(i, 1); continue; }
-        const tx = h.x - h.dir * 22;
-        const ty = h.y - 50 + Math.sin(this.time * 3 + s.bob) * 4;
-        s.x += (tx - s.x) * Math.min(1, dt * 4);
-        s.y += (ty - s.y) * Math.min(1, dt * 4);
-        s.cd -= dt;
-        if (s.cd > 0) continue;
-        const t = this.liveMons().filter((m) => Math.hypot(m.x - s.x, m.y - m.h / 2 - s.y) < 170).sort((a, b) => Math.abs(a.x - s.x) - Math.abs(b.x - s.x))[0];
-        if (!t) continue;
-        s.cd = 1.2;
-        Sp.shot([px(s.x), px(s.y)], [px(t.x), px(t.y - t.h / 2)], s.el, "orb").then(() => {
-          if (t.dead) return;
-          const dmg = Math.max(1, Math.round((s.dmg * (t.mon.st.curse ? 1.25 : 1) * 100) / (100 + t.mon.def * 1.2)));
-          t.mon.hp -= dmg;
-          t.hpBarT = 4;
-          t.aggro = 6;
-          Sp.number(px(t.x), px(t.y - t.h), dmg, "hit", 0);
-          if (t.mon.hp <= 0) this.kill(t);
-        });
-      }
-    },
-    updateDrops(dt) {
-      const h = this.hero;
-      const p = G.player;
-      for (let i = this.drops.length - 1; i >= 0; i--) {
-        const d = this.drops[i];
-        d.t += dt;
-        if (!d.ground) {
-          const py = d.y;
-          d.vy = Math.min(MAX_FALL, d.vy + GRAV * dt);
-          d.x = clamp(d.x + d.vx * dt, 10, this.map.W - 10);
-          d.y += d.vy * dt;
-          if (d.vy > 0) { const land = this.landing(d.x, py, d.y, null); if (land) { d.y = land.y; d.ground = land; d.vx = 0; } }
-        }
-        if (d.t > 0.35 && !this.dead && Math.abs(d.x - h.x) < 14 && d.y > h.y - HERO_H - 4 && d.y < h.y + 6) {
-          if (d.kind === "gold") { p.gold += d.amount; Sp.number(px(d.x), px(d.y - 10), "+" + d.amount + "G", "gold", 0); }
-          else { p.potions[d.kind]++; this.log(d.kind === "hp" ? "회복 물약을 주웠다." : "마나 물약을 주웠다."); }
-          this.drops.splice(i, 1);
-          this.refresh();
-          continue;
-        }
-        if (d.t > 60) this.drops.splice(i, 1);
-      }
-    },
-    updateNpcs(dt) {
-      this.npcs.forEach((n) => {
-        n.t += dt;
-        n.walk -= dt;
-        if (n.walk <= 0) { n.moving = !n.moving; n.walk = n.moving ? rnd(1.5, 3.5) : rnd(1, 3); if (n.moving && Math.random() < 0.5) n.dir = -n.dir; }
-        if (n.moving) {
-          n.x += n.dir * 30 * dt;
-          if (n.x < 80) { n.x = 80; n.dir = 1; }
-          if (n.x > 780) { n.x = 780; n.dir = -1; }
-        }
-      });
-    },
-    /* 강화 효과·지속 피해·자연 회복 */
-    updateBuffs(dt) {
-      const p = G.player;
-      const ps = this.ps;
-      const d = E.derive(p);
-      const pa = p.job.passive;
-      this.cds = this.cds.map((c) => Math.max(0, c - dt));
-      ["atkUp", "rage", "counter", "evade", "weaken"].forEach((k) => { if (ps[k]) { ps[k].t -= dt; if (ps[k].t <= 0) delete ps[k]; } });
-      if (ps.regen) {
-        ps.regen.t -= dt;
-        ps.regen.next -= dt;
-        if (ps.regen.next <= 0) { ps.regen.next = 2; p.hp = Math.min(d.maxHp, p.hp + ps.regen.v); }
-        if (ps.regen.t <= 0) delete ps.regen;
-      }
-      ["poison", "burn"].forEach((k) => {
-        const o = ps[k];
-        if (!o || this.dead) return;
-        o.t -= dt;
-        o.next -= dt;
-        if (o.next <= 0) {
-          o.next = 1;
-          p.hp -= o.dmg;
-          Sp.number(px(this.hero.x), px(this.hero.y - 46), o.dmg, "dot", 0);
-          if (p.hp <= 0) this.die(null);
-        }
-        if (o.t <= 0) delete ps[k];
-      });
-      this.regenT += dt;
-      if (this.regenT >= 5) {
-        this.regenT = 0;
-        if (!this.dead) {
-          p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * (0.01 + (pa.regen || 0))));
-          p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * (0.03 + (pa.mregen || 0))));
-        }
-      }
-      if (pa.barrier) {
-        ps.barrierT = (ps.barrierT || 0) + dt;
-        if (ps.barrierT >= 20) { ps.barrierT = 0; ps.barrier = Math.max(ps.barrier || 0, Math.round(d.maxHp * pa.barrier)); }
-      }
-    },
-    /* 쓰러짐: 불사조 특성이 있으면 한 번 되살아나고, 아니면 이 운명은 여기서 끝난다 */
-    die(cause) {
-      const p = G.player;
-      const h = this.hero;
-      if (this.dead) return;
-      if (p.job.passive.revive && !p.reviveUsed) {
-        p.reviveUsed = true;
-        const d = E.derive(p);
-        p.hp = Math.round(d.maxHp * 0.3);
-        h.inv = 2;
-        Sp.pillar(px(h.x), px(h.y), "fire", true);
-        this.log("불사조의 불꽃이 타올라 되살아났다!", "good");
-        this.refresh();
-        return;
-      }
-      p.hp = 0;
-      this.dead = true;
-      h.atk = null;
-      h.rope = null;
-      this.refresh();
-      X.sleep(1300).then(() => gameOver(cause ? cause.name : "독"));
-    },
+  /* 연출에 쓰는 기술 범위(피해·효과는 engine이 정한다) */
+  function visPlan(sk, far) {
+    const ult = sk.tag === "ult";
+    const pierce = sk.type === "pierce";
+    return {
+      ult, area: ult ? "screen" : sk.type === "nuke" ? "around" : "front",
+      range: pierce ? (far ? 250 : 160) : far ? 190 : 84, targets: sk.type === "nuke" ? 8 : 1
+    };
+  }
 
-    /* ── 갱신 ── */
-    update(dtMs) {
-      if (this.cam === null) this.snapCamera();
-      if (winTop() || G.busy) return;
-      const dt = Math.min(0.05, dtMs / 1000);
-      this.time += dt;
-      this.updateHero(dt);
-      this.updateMons(dt);
-      this.updateShots(dt);
-      this.updateSummons(dt);
-      this.updateDrops(dt);
-      this.updateNpcs(dt);
-      if (!this.dead) this.updateBuffs(dt);
-      this.quake = Math.max(0, this.quake - dt);
-      if (this.flash) this.flash.t -= dt;
-      this.updateCamera(dt);
-      this.updateAmbient(dt);
-      this.hudT -= dt;
-      if (this.hudT <= 0) { this.hudT = 0.1; this.refresh(); }
-      this.saveT += dt;
-      if (this.saveT > 12) { this.saveT = 0; save(); }
-    },
-    camTarget() {
-      const h = this.hero;
-      const m = this.map;
-      const tx = clamp(px(h.x) - VW / 2, 0, Math.max(0, px(m.W) - VW));
-      const ty = clamp(px(h.y) - VH * 0.62, Math.min(0, px(m.H) - VH), Math.max(0, px(m.H) - VH));
-      return [tx, ty];
-    },
-    snapCamera() { this.cam = this.camTarget(); },
-    updateCamera(dt) {
-      const [tx, ty] = this.camTarget();
-      const k = Math.min(1, dt * 7);
-      this.cam[0] += (tx - this.cam[0]) * k;
-      this.cam[1] += (ty - this.cam[1]) * k;
-    },
-    updateAmbient(dt) {
-      const kind = this.map.theme.ambient;
-      const A = this.ambient;
+  /* 밤하늘에 떠도는 것(눈·불티·반딧불이·꽃잎·먼지) */
+  const Ambient = {
+    list: [],
+    update(dt, kind) {
+      const A = this.list;
       if (A.length < 26 && Math.random() < dt * 8) {
         const a = { x: Math.random() * VW, y: Math.random() * VH, vx: 0, vy: 0, t: 0, life: rnd(3, 7), kind };
         if (kind === "snow") { a.y = -4; a.vx = rnd(-8, 8); a.vy = rnd(18, 34); }
@@ -2261,206 +1227,8 @@
         if (a.t > a.life || a.y > VH + 8 || a.y < -10) A.splice(i, 1);
       }
     },
-
-    /* ── 그리기 ── */
-    draw(t) {
-      const m = this.map;
-      if (!this.cam) this.snapCamera();
-      const qx = this.quake ? Math.round(rnd(-3, 3) * Z) : 0;
-      const qy = this.quake ? Math.round(rnd(-2, 2) * Z) : 0;
-      const cx = Math.round(this.cam[0]) + qx;
-      const cy = Math.round(this.cam[1]) + qy;
-      Wd.drawBackground(ctx, m, Z, cx, cy, VW, VH, t);
-      ctx.save();
-      ctx.translate(-cx, -cy);
-      ctx.drawImage(Wd.renderMap(m, Z), 0, 0);
-      /* 빛 번짐과 불꽃 */
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      (m.lights || []).forEach((L) => {
-        const lx = px(L.x);
-        const r = L.r * Z;
-        if (lx < cx - r || lx > cx + VW + r) return;
-        const fl = L.flame ? 0.85 + 0.15 * Math.sin(t / 70 + L.seed) : 0.9 + 0.1 * Math.sin(t / 600 + L.seed);
-        Sp.glow(ctx, lx, px(L.y), r * fl, L.col, 0.32);
-      });
-      ctx.restore();
-      (m.lights || []).forEach((L) => { if (L.flame && L.r > 40) Wd.drawFlame(ctx, px(L.x), px(L.y) + 4 * Z, Z, t, L.seed); });
-      (m.doors || []).forEach((d) => { if (d.locked) Wd.drawSeal(ctx, d.x, d.y, Z, t); });
-      this.drawNpcs(t);
-      this.drawDrops(t);
-      this.mons.forEach((mm) => this.drawMon(mm, t));
-      this.drawSummons(t);
-      this.drawHero(t);
-      this.shots.forEach((s) => Sp.orbAt(ctx, px(s.x), px(s.y), 5 * Z, s.el));
-      Sp.draw(ctx);
-      X.draw(ctx);
-      Sp.drawNumbers(ctx);
-      this.drawHints(t);
-      ctx.restore();
-      if (this.dim) { ctx.fillStyle = `rgba(4,2,14,${this.dim})`; ctx.fillRect(0, 0, VW, VH); }
-      if (this.flash && this.flash.t > 0) {
-        ctx.globalAlpha = Math.min(0.45, this.flash.t * 2);
-        ctx.fillStyle = this.flash.col;
-        ctx.fillRect(0, 0, VW, VH);
-        ctx.globalAlpha = 1;
-      }
-      this.drawAmbient();
-      if (this.dead) {
-        ctx.fillStyle = "rgba(20,0,10,0.35)";
-        ctx.fillRect(0, 0, VW, VH);
-      }
-    },
-    drawHero(t) {
-      const h = this.hero;
-      const pose = this.heroPose();
-      const blink = h.inv > 0 && !this.dead && !h.casting && Math.floor(t / 80) % 2;
-      if (h.ground) {
-        ctx.fillStyle = "rgba(0,0,0,0.28)";
-        ctx.beginPath();
-        ctx.ellipse(px(h.x), px(h.ground.y), 13 * Z, 3.2 * Z, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      HA.draw(ctx, G.player.job, px(h.x), px(h.y) + Z, {
-        dir: h.dir, anim: pose.anim, f: pose.f, t: pose.t, alt: pose.alt, h: HERO_PX(),
-        alpha: this.dead ? 0.6 : blink ? 0.45 : 1, tint: pose.anim === "hurt" && !this.dead ? "#ff4050" : null, tintA: 0.35
-      });
-      if (this.ps.barrier > 0 && !this.dead) {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        ctx.strokeStyle = `rgba(150,220,255,${0.25 + 0.1 * Math.sin(t / 150)})`;
-        ctx.lineWidth = Math.max(1, Z);
-        ctx.beginPath();
-        ctx.ellipse(px(h.x), px(h.y - 21), 15 * Z, 24 * Z, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      const rar = G.player.job.rarity;
-      if (rar >= 3 && !this.dead && Math.random() < 0.15) Sp.spark(px(h.x + rnd(-10, 10)), px(h.y - rnd(0, 6)), { vy: -rnd(20, 50) * Z, life: 700, col: S.RARITY_COLOR[rar], glow: 0.7, size: 1 });
-    },
-    drawMon(m, t) {
-      if (m.alpha <= 0) return;
-      const img = m.img;
-      const bd = m.bd;
-      const mon = m.mon;
-      let bob = 0;
-      let sx = 1;
-      let sy = 1;
-      const moving = !m.dead && !mon.st.stun && (m.state === "walk" || m.aggro > 0);
-      if (m.tpl === "slime") { const k = Math.sin(m.t * 6); sx = 1 + k * 0.06; sy = 1 - k * 0.06; }
-      else if (m.fly) bob = Math.sin(m.t * 9) * 2 * Z;
-      else if (moving) bob = -Math.abs(Math.sin(m.t * 7)) * 2 * Z;
-      if (m.wind > 0 || (m.act && m.act.kind === "slam")) { sy = 0.88; sx = 1.08; }
-      const fx = px(m.x);
-      const fy = px(m.y);
-      if (!m.fly && !m.air) {
-        ctx.fillStyle = "rgba(0,0,0,0.25)";
-        ctx.beginPath();
-        ctx.ellipse(fx, fy, bd.w * 0.36, 3 * Z, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.save();
-      ctx.globalAlpha = m.alpha;
-      ctx.translate(fx, fy + bob - (m.dead ? m.deadT * 30 * Z : 0));
-      ctx.scale((m.dir < 0 ? -1 : 1) * sx, sy);
-      const ox = -(bd.x0 + bd.w / 2);
-      const oy = -(bd.y1 + 1);
-      ctx.drawImage(img, Math.round(ox), Math.round(oy));
-      if (m.flash > 0 || m.dead) { ctx.globalAlpha = m.alpha * (m.dead ? 0.6 : 0.8); ctx.drawImage(S.silhouette(img, "#ffffff"), Math.round(ox), Math.round(oy)); }
-      else if (mon.enraged) { ctx.globalAlpha = 0.25 + 0.1 * Math.sin(t / 120); ctx.drawImage(S.silhouette(img, "#ff3030"), Math.round(ox), Math.round(oy)); }
-      else if (mon.st.charm) { ctx.globalAlpha = 0.25; ctx.drawImage(S.silhouette(img, "#ff8ad8"), Math.round(ox), Math.round(oy)); }
-      ctx.restore();
-      if (m.dead) return;
-      const top = fy - bd.h - 6 * Z + bob;
-      if (mon.st.stun) {
-        for (let k = 0; k < 3; k++) {
-          const a = t / 200 + (k * Math.PI * 2) / 3;
-          ctx.fillStyle = mon.st.stunKind === "freeze" ? "#bff0ff" : "#ffe066";
-          ctx.fillRect(Math.round(fx + Math.cos(a) * 10 * Z), Math.round(top + Math.sin(a) * 3 * Z), Math.max(2, Math.round(2 * Z)), Math.max(2, Math.round(2 * Z)));
-        }
-      }
-      if (m.hpBarT > 0 && !mon.boss) {
-        const w = Math.max(30 * Z, bd.w * 0.7);
-        const x0 = Math.round(fx - w / 2);
-        const y0 = Math.round(top - 2 * Z);
-        ctx.fillStyle = "#0b0918";
-        ctx.fillRect(x0 - 1, y0 - 1, Math.round(w) + 2, Math.round(3 * Z) + 2);
-        ctx.fillStyle = "#3a1018";
-        ctx.fillRect(x0, y0, Math.round(w), Math.round(3 * Z));
-        ctx.fillStyle = "#e8504a";
-        ctx.fillRect(x0, y0, Math.round(w * Math.max(0, mon.hp / mon.maxHp)), Math.round(3 * Z));
-      }
-    },
-    drawNpcs(t) {
-      const h = this.hero;
-      this.npcs.forEach((n) => {
-        ctx.fillStyle = "rgba(0,0,0,0.25)";
-        ctx.beginPath();
-        ctx.ellipse(px(n.x), px(this.map.groundY), 12 * Z, 3 * Z, 0, 0, Math.PI * 2);
-        ctx.fill();
-        HA.draw(ctx, n.job, px(n.x), px(this.map.groundY) + Z, { dir: n.dir, anim: n.moving ? "walk" : "idle", t: n.t, h: HERO_PX() });
-        if (Math.abs(n.x - h.x) < 22 && !this.dead) this.bubble(px(n.x), px(this.map.groundY - 50), "대화", t);
-      });
-    },
-    drawHints(t) {
-      const h = this.hero;
-      if (this.dead || !h.ground) return;
-      (this.map.doors || []).forEach((d) => {
-        if (Math.abs(d.x - h.x) < (d.kind === "cave" ? 40 : 26)) {
-          const label = d.kind === "down" ? (d.locked ? "봉인됨" : "내려가기") : d.kind === "up" ? "마을로" : d.label;
-          this.bubble(px(d.x), px(d.y - (d.kind === "cave" ? 92 : d.kind === "tablet" ? 76 : d.kind === "up" || d.kind === "down" ? 100 : 66)), label, t);
-        }
-      });
-    },
-    bubble(x, y, text, t) {
-      ctx.save();
-      ctx.font = `${Math.round(10 * Z / 1.5 + 4)}px Galmuri11, sans-serif`;
-      const label = `▲ ${text}`;
-      const w = ctx.measureText(label).width + 10 * Z / 1.5;
-      const hgt = Math.round(10 * Z / 1.5 + 10);
-      const yy = Math.round(y + Math.sin(t / 250) * 2 * Z);
-      ctx.fillStyle = "rgba(11,9,24,0.85)";
-      ctx.fillRect(Math.round(x - w / 2), yy - hgt, Math.round(w), hgt);
-      ctx.strokeStyle = "#ece8ff";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(Math.round(x - w / 2) + 0.5, yy - hgt + 0.5, Math.round(w) - 1, hgt - 1);
-      ctx.fillStyle = "#ffd75e";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, Math.round(x), yy - hgt / 2 + 1);
-      ctx.restore();
-    },
-    drawDrops(t) {
-      this.drops.forEach((d) => {
-        const x = px(d.x);
-        const y = px(d.y) - (d.ground ? 4 * Z + Math.sin(t / 250 + d.spin) * 1.5 * Z : 0);
-        if (d.kind === "gold") {
-          const w = Math.abs(Math.cos(t / 160 + d.spin)) * 4 * Z + Z;
-          ctx.fillStyle = "#8a5a10";
-          ctx.beginPath(); ctx.ellipse(x, y, w + Z * 0.6, 4.6 * Z, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = "#ffcf3a";
-          ctx.beginPath(); ctx.ellipse(x, y, w, 4 * Z, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = "#fff6c0";
-          ctx.fillRect(Math.round(x - w * 0.4), Math.round(y - 2.5 * Z), Math.max(1, Math.round(w * 0.4)), Math.max(1, Math.round(Z)));
-        } else {
-          const img = potionImg(d.kind);
-          if (img.complete) ctx.drawImage(img, Math.round(x - img.width / 2), Math.round(y - img.height + 2 * Z));
-        }
-      });
-    },
-    drawSummons(t) {
-      this.summons.forEach((s) => {
-        const x = px(s.x);
-        const y = px(s.y);
-        Sp.orbAt(ctx, x, y, 6 * Z, s.el);
-        ctx.fillStyle = "#0b0918";
-        ctx.fillRect(Math.round(x - 2 * Z), Math.round(y - Z), Math.max(1, Math.round(Z)), Math.max(1, Math.round(Z)));
-        ctx.fillRect(Math.round(x + Z), Math.round(y - Z), Math.max(1, Math.round(Z)), Math.max(1, Math.round(Z)));
-        if (Math.random() < 0.2) Sp.spark(x + rnd(-6, 6) * Z, y + rnd(-6, 6) * Z, { vy: -20 * Z, life: 500, col: Sp.PAL[s.el][1], glow: 0.7, size: 1 });
-      });
-    },
-    drawAmbient() {
-      this.ambient.forEach((a) => {
+    draw() {
+      this.list.forEach((a) => {
         const f = Math.min(1, a.t * 2, (a.life - a.t) * 2);
         const s = Math.max(1, Math.round(Z));
         ctx.globalAlpha = Math.max(0, f) * 0.8;
@@ -2475,6 +1243,800 @@
         }
       });
       ctx.globalAlpha = 1;
+    }
+  };
+
+  /* 주인공 한 명 그리기: 발밑 그림자, 그림, 보호막 테두리, 등급 반짝이 */
+  function drawHeroAt(job, x, y, pose, o) {
+    const hh = HERO_PX();
+    shadow(x, y + Z, hh * 0.2, hh * 0.05, 0.32);
+    HA.draw(ctx, job, x, y + Z, {
+      dir: 1, anim: pose.anim, f: pose.f, t: pose.t, alt: pose.alt, h: hh, alpha: o && o.alpha !== undefined ? o.alpha : 1,
+      tint: o && o.hurt ? "#ff4050" : null, tintA: 0.35
+    });
+    if (o && o.barrier) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = `rgba(150,220,255,${0.25 + 0.1 * Math.sin(G.t / 150)})`;
+      ctx.lineWidth = Math.max(1, Z);
+      ctx.beginPath();
+      ctx.ellipse(x, y - 21 * Z, 15 * Z, 24 * Z, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (job.rarity >= 3 && Math.random() < 0.12) Sp.spark(x + rnd(-10, 10) * Z, y - rnd(0, 6) * Z, { vy: -rnd(20, 50) * Z, life: 700, col: S.RARITY_COLOR[job.rarity], glow: 0.7, size: 1 });
+  }
+
+  /* ─────────────────────── 마을 ─────────────────────── */
+  /* 걸어 다니지 않는 마을: 메뉴에서 고른 곳으로 화면이 옮겨 가고, 주인공은 그 앞에 서 있다 */
+  const TOWN_SPOTS = { dungeon: 862, shop: 150, inn: 330, guild: 540, tablet: 436 };
+  const Town = {
+    hires: true,
+    enter() {
+      const p = G.player;
+      G.place = "town";
+      this.map = Wd.makeTown();
+      this.spot = "dungeon";
+      this.pick = "dungeon";
+      this.camX = null;
+      this.hx = TOWN_SPOTS.dungeon - 40;
+      this.npcs = [255, 640, 738].map((x) => ({ job: E.randomJob(), x: x + rnd(-20, 20), dir: Math.random() < 0.5 ? -1 : 1, t: Math.random() * 3 }));
+      [p.job].concat(this.npcs.map((n) => n.job)).forEach((j) => HA.warm(j, HERO_PX()));
+      Ambient.list = [];
+      this.hud();
+      save();
+    },
+    hud() {
+      const p = G.player;
+      const d = E.derive(p);
+      const r = (a, b) => `${Math.max(0, Math.min(100, (a / b) * 100)).toFixed(1)}%`;
+      $("hud").className = "hud-stage";
+      $("hud").innerHTML = `
+        <div class="hud-plate stage-plate">
+          <div class="hud-l"><b>${esc(p.name)}</b><span class="rar-t-${p.job.rarity}">${esc(p.job.name)}</span><span>Lv.${p.level}</span></div>
+          <div class="hud-bars"><i class="hp"><b style="width:${r(p.hp, d.maxHp)}"></b><em>${fmt(p.hp)}/${fmt(d.maxHp)}</em></i><i class="mp"><b style="width:${r(p.mp, d.maxMp)}"></b><em>${fmt(p.mp)}/${fmt(d.maxMp)}</em></i><i class="xp"><b style="width:${r(p.exp, E.expNeed(p.level))}"></b></i></div>
+          <div class="hud-r"><span class="where">마을</span><span class="gold">${fmt(p.gold)} G</span><span class="pots">물약 ${p.potions.hp} · ${p.potions.mp}</span></div>
+        </div>`;
+      this.hudKey = `${p.hp}|${p.mp}|${p.gold}|${p.level}|${p.exp}|${p.job.id}|${p.potions.hp}|${p.potions.mp}`;
+    },
+    menu() {
+      const p = G.player;
+      const pr = E.prices(p);
+      openWin(`<h2 class="win-h">마을 <small>${esc(Wd.TOWN_THEME.name)}</small></h2><div class="opts">
+        <button class="opt primary" type="button" data-opt="dungeon">던전으로 <small>${Math.max(1, p.floor)}층부터</small></button>
+        <button class="opt" type="button" data-opt="shop">상점 <small>${fmt(p.gold)}G</small></button>
+        <button class="opt" type="button" data-opt="inn">여관 <small>${pr.inn ? fmt(pr.inn) + "G" : "무료"}</small></button>
+        <button class="opt" type="button" data-opt="guild">모험가 길드</button>
+        <button class="opt" type="button" data-opt="tablet">운명의 석판</button>
+        <button class="opt" type="button" data-opt="talk">주민과 이야기</button>
+        <button class="opt" type="button" data-opt="menu">메뉴 <small>상태·도구·저장</small></button></div>`, {
+        cls: "win-town", noBack: true, focus: this.pick || "dungeon",
+        onFocus: (v) => { if (TOWN_SPOTS[v]) this.spot = v; },
+        onPick: (v, b, w) => {
+          closeWin(w);
+          this.pick = v;
+          if (TOWN_SPOTS[v]) this.spot = v;
+          if (v === "dungeon") goFloor(Math.max(1, p.floor));
+          if (v === "shop") openShop();
+          if (v === "inn") innTalk();
+          if (v === "guild") guildMenu();
+          if (v === "tablet") tabletTalk();
+          if (v === "talk") { const n = this.npcs.reduce((a, c) => (Math.abs(c.x - this.hx) < Math.abs(a.x - this.hx) ? c : a)); npcTalk(n, { x: this.hx }); }
+          if (v === "menu") openMenu();
+        }
+      });
+    },
+    /* 전직의 두루마리로 직업이 바뀌면 새 그림을 미리 준비한다 */
+    jobChanged() {
+      HA.warm(G.player.job, HERO_PX());
+      Sp.pillar(px(this.hx) - this.camX, this.groundScreenY(), "light", true);
+    },
+    groundScreenY() {
+      return Math.round(VH * (VW < 560 ? 0.5 : 0.72));
+    },
+    update(dt) {
+      const p = G.player;
+      if (!winTop() && !G.busy) this.menu();
+      const s = dt / 1000;
+      /* 고른 곳으로 화면이 미끄러지고, 주인공은 그 건물 앞에 선다 */
+      const goal = TOWN_SPOTS[this.spot] + (this.spot === "dungeon" ? -40 : 20);
+      if (Math.abs(goal - this.hx) > 1) {
+        this.fadeT = (this.fadeT || 0) + s;
+        if (this.fadeT > 0.12) { this.hx = goal; this.fadeT = 0; Sp.sparkBurst(px(this.hx), this.groundScreenY() + (this.camY || 0) - 20 * Z, "light", 8, 40); }
+      }
+      const tx = clamp(px(this.hx) - VW * (VW < 560 ? 0.5 : 0.36), 0, Math.max(0, px(this.map.W) - VW));
+      if (this.camX === null) this.camX = tx;
+      this.camX += (tx - this.camX) * Math.min(1, s * 6);
+      this.camY = px(this.map.groundY) - this.groundScreenY();
+      this.npcs.forEach((n) => { n.t += s; });
+      Ambient.update(s, this.map.theme.ambient);
+      const key = `${p.hp}|${p.mp}|${p.gold}|${p.level}|${p.exp}|${p.job.id}|${p.potions.hp}|${p.potions.mp}`;
+      if (key !== this.hudKey) this.hud();
+    },
+    draw(t) {
+      const m = this.map;
+      const cx = Math.round(this.camX || 0);
+      const cy = Math.round(this.camY || 0);
+      Wd.drawBackground(ctx, m, Z, cx, cy, VW, VH, t);
+      ctx.save();
+      ctx.translate(-cx, -cy);
+      const img = Wd.renderMap(m, Z);
+      ctx.drawImage(img, 0, 0);
+      ctx.fillStyle = m.theme.ground.body;
+      if (img.height - cy < VH) ctx.fillRect(cx, img.height, VW, VH - (img.height - cy));
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      (m.lights || []).forEach((L) => {
+        const lx = px(L.x);
+        const r = L.r * Z;
+        if (lx < cx - r || lx > cx + VW + r) return;
+        const fl = L.flame ? 0.85 + 0.15 * Math.sin(t / 70 + L.seed) : 0.9 + 0.1 * Math.sin(t / 600 + L.seed);
+        Sp.glow(ctx, lx, px(L.y), r * fl, L.col, 0.32);
+      });
+      ctx.restore();
+      (m.lights || []).forEach((L) => { if (L.flame && L.r > 40) Wd.drawFlame(ctx, px(L.x), px(L.y) + 4 * Z, Z, t, L.seed); });
+      const gy = px(m.groundY);
+      this.npcs.forEach((n) => {
+        shadow(px(n.x), gy + Z, HERO_PX() * 0.2, HERO_PX() * 0.05, 0.25);
+        HA.draw(ctx, n.job, px(n.x), gy + Z, { dir: n.dir, anim: "idle", t: n.t, h: HERO_PX() });
+      });
+      const p = G.player;
+      const d = E.derive(p);
+      drawHeroAt(p.job, px(this.hx), gy, { anim: "idle", t: t / 1000 }, { barrier: false, alpha: p.hp < d.maxHp * 0.25 ? 0.85 : 1 });
+      Sp.draw(ctx);
+      X.draw(ctx);
+      Sp.drawNumbers(ctx);
+      ctx.restore();
+      Ambient.draw();
+    }
+  };
+
+  /* 던전 n층으로: 처음 내려가는 층이면 최고 기록을 고치고, 보스를 넘어선 보답을 준다 */
+  function goFloor(n) {
+    closeAll();
+    fade(() => setScene(Battle, { floor: n, idx: 0 }));
+  }
+
+  /* ─────────────────────── 턴제 전투 ─────────────────────── */
+  /* 포켓몬처럼 1대1: 왼쪽에 주인공, 오른쪽에 몬스터. 한 층에 몬스터 셋, 10층마다 마지막에 보스 */
+  const DOT_FX = { burn: "flames", poison: "cloud", bleed: "drops", curse: "cloud" };
+  const Battle = {
+    hires: true,
+    enter(arg) {
+      const p = G.player;
+      this.floor = arg.floor;
+      this.idx = arg.idx || 0;
+      /* 층의 마지막 전투를 이긴 직후에 저장됐다면 다음 층에서 시작 */
+      if (this.idx >= E.floorFights(this.floor)) { this.floor++; this.idx = 0; arg = { floor: this.floor }; }
+      G.place = "dungeon";
+      const prevBest = p.best;
+      E.enterFloor(p, this.floor);
+      this.note = null;
+      if (p.best > prevBest && p.best > 1 && p.best % 10 === 1) {
+        G.tokens = Math.min(5, G.tokens + 1);
+        store.set("tokens", G.tokens);
+        this.note = "보스를 넘어선 보답으로 다음 운명의 재굴림 기회 +1";
+      }
+      this.theme = Wd.THEMES[Wd.floorThemeIndex(this.floor)];
+      this.reach = reachOf(p.job);
+      this.quake = 0;
+      this.dim = 0;
+      this.flash = null;
+      this.vw = 0;
+      this.hero = { x: 0, y: 0, dir: 1, casting: false, flash: 0, alpha: 1, ko: false };
+      this.pose = { anim: "idle", t0: 0 };
+      Ambient.list = [];
+      HA.warm(p.job, HERO_PX());
+      this.layout();
+      this.hero.x = -40 / Z;
+      this.ui();
+      if (this.idx === 0) banner(Wd.floorName(this.floor));
+      this.encounter(arg.mon ? E.monsterByName(arg.mon) : null, true);
+    },
+    leave() { G.fast = false; },
+    layout() {
+      this.vw = VW;
+      this.vh = VH;
+      this.cmdH = VW < 560 ? 204 : Math.min(228, Math.max(206, Math.round(VH * 0.36)));
+      this.sceneH = VH - this.cmdH;
+      this.gy = Math.round(this.sceneH * 0.86);
+      this.heroX0 = Math.round(VW * (VW < 560 ? 0.25 : 0.3));
+      this.foeX0 = Math.round(VW * (VW < 560 ? 0.72 : 0.68));
+      this.sky = { theme: this.theme, groundY: this.gy / Z };
+      const W = Math.ceil(VW / Z) + 4;
+      this.strip = { id: `battle${Wd.floorThemeIndex(this.floor)}-${W}`, theme: this.theme, W, H: 90, groundY: 4, seed: 7 + this.floor, plats: [{ x1: 0, x2: W, y: 4, ground: true }], ropes: [], deco: [] };
+      if (this.hero && !this.busyMove) { this.hero.x = this.heroX0 / Z; this.hero.y = this.gy / Z; }
+      if (this.foe) { this.foe.x = this.foeX0 / Z; this.foe.y = this.gy / Z - (this.foe.fly ? 34 : 0); }
+      if (this.win) this.win.el.style.height = this.cmdH + "px";
+    },
+    /* 몬스터 하나를 불러낸다 */
+    encounter(mon, first) {
+      const p = G.player;
+      const boss = E.isBossFight(this.floor, this.idx);
+      this.b = E.startBattle(p, { floor: this.floor, monster: mon || E.pickMonster(this.floor, boss) });
+      const e = this.b.enemy;
+      const tpl = (S.MON_LOOK[e.base] || ["slime"])[0];
+      /* 포켓몬처럼 몬스터도 주인공만큼 크게(보스는 더 크게) */
+      const img = S.monsterBig(e.name, e.boss ? (Z >= 2 ? 8 : 6) : (Z >= 2 ? 6 : 4));
+      const bd = bounds(img);
+      const fly = FLYERS.has(tpl) && !e.boss;
+      this.foe = {
+        img, bd, tpl, fly, shooter: SHOOTERS.has(tpl), mon: e, w: bd.w / Z, h: bd.h / Z,
+        x: (VW + bd.w) / Z, y: this.gy / Z - (fly ? 34 : 0), t: Math.random() * 3, flash: 0, alpha: 1, dead: false, deadT: 0
+      };
+      this.mode = "intro";
+      this.plates();
+      $("bcmd").innerHTML = "";
+      const lines = this.b.log.map((l) => esc(l.text));
+      if (this.note) { lines.push(`<b class="lvup">${esc(this.note)}</b>`); this.note = null; }
+      this.msg(lines);
+      save({ fight: this.idx, mon: e.base });
+      const ins = [tween(this.foe, { x: this.foeX0 / Z }, 520)];
+      if (first) ins.push(tween(this.hero, { x: this.heroX0 / Z }, 520));
+      Promise.all(ins).then(() => X.sleep(e.boss ? 700 : 350)).then(() => {
+        if (e.boss) { this.quake = 0.4; Sp.ring(px(this.foe.x), px(this.foe.y), e.el === "phys" ? "dark" : e.el, 120 * Z); }
+        this.mode = "cmd";
+        this.commands();
+      });
+    },
+    ui() {
+      $("hud").className = "hud-battle";
+      $("hud").innerHTML = `<div class="foe-plate"><b id="bf-name"></b><span id="bf-lv"></span><i class="hp"><b id="bf-hp"></b></i><div class="chips" id="bf-st"></div></div>
+        <div class="where-plate" id="bf-where"></div>`;
+      closeAll();
+      this.win = openWin(`<div class="bwin">
+        <div class="bme"><b id="bm-name"></b><span id="bm-job"></span><i class="hp"><b id="bm-hp"></b><em id="bm-hpt"></em></i><i class="mp"><b id="bm-mp"></b><em id="bm-mpt"></em></i><div class="chips" id="bm-st"></div></div>
+        <div class="bmsg" id="bmsg" aria-live="polite"></div>
+        <div class="bcmd" id="bcmd"></div>
+      </div>`, {
+        cls: "win-battle", noBack: true, cols: 3,
+        onPick: (v) => this.pick(v), onBack: () => this.back(), onFocus: (v) => this.focusInfo(v),
+        onA: (w) => {
+          if (this.mode !== "cmd") { G.fast = true; return; }
+          const b = opts2(w)[w.idx];
+          if (b) b.click();
+        }
+      });
+      this.win.el.style.height = this.cmdH + "px";
+    },
+    plates() {
+      const p = G.player;
+      const d = E.derive(p);
+      const e = this.b.enemy;
+      $("bf-name").textContent = e.name;
+      $("bf-lv").textContent = `Lv.${e.lv}${e.boss ? " · 보스" : ""}`;
+      $("bf-hp").style.width = `${Math.max(0, (e.hp / e.maxHp) * 100)}%`;
+      $("bf-hp").parentNode.classList.toggle("low", e.hp / e.maxHp < 0.25);
+      const est = [];
+      ["burn", "poison", "bleed", "curse"].forEach((k) => { if (e.st[k]) est.push({ burn: "화상", poison: "중독", bleed: "출혈", curse: "저주" }[k]); });
+      if (e.st.stun) est.push(e.st.stunLabel === "얼어붙어" ? "빙결" : "기절");
+      if (e.st.charm) est.push("혼란");
+      if (e.st.debuff) est.push("약화");
+      if (e.enraged) est.push("분노");
+      const weak = this.b.weakKnown && e.weak ? `<span class="chip weak">약점 ${D.ELEMENTS[e.weak]}</span>` : "";
+      $("bf-st").innerHTML = weak + est.map((s) => `<span class="chip">${s}</span>`).join("");
+      const n = E.floorFights(this.floor);
+      $("bf-where").innerHTML = `<b>${this.floor}층</b> ${esc(this.theme.name)}<span class="dots">${Array.from({ length: n }, (_, i) => `<i class="${i < this.idx ? "done" : i === this.idx ? "now" : ""}${E.isBossFight(this.floor, i) ? " boss" : ""}"></i>`).join("")}</span>`;
+      $("bm-name").textContent = p.name;
+      $("bm-job").innerHTML = `<span class="rar-t-${p.job.rarity}">${esc(p.job.name)}</span> · Lv.${p.level}`;
+      $("bm-hp").style.width = `${Math.max(0, (p.hp / d.maxHp) * 100)}%`;
+      $("bm-hp").parentNode.classList.toggle("low", p.hp / d.maxHp < 0.25);
+      $("bm-mp").style.width = `${Math.max(0, (p.mp / d.maxMp) * 100)}%`;
+      $("bm-hpt").textContent = `${fmt(Math.max(0, p.hp))}/${fmt(d.maxHp)}`;
+      $("bm-mpt").textContent = `${fmt(p.mp)}/${fmt(d.maxMp)}`;
+      const ps = this.b.ps;
+      const pst = [];
+      if (ps.barrier > 0) pst.push(`보호막 ${fmt(ps.barrier)}`);
+      const turns = (v) => (v && typeof v === "object" ? v.t : v);
+      [["atkUp", "공격↑"], ["rage", "광폭"], ["counter", "반격"], ["evade", "회피↑"], ["regen", "재생"], ["summon", "소환수"], ["burn", "화상"], ["poison", "중독"], ["weaken", "쇠약"]].forEach(([k, label]) => {
+        if (ps[k]) pst.push(`${label} ${turns(ps[k])}`);
+      });
+      $("bm-st").innerHTML = pst.map((s) => `<span class="chip">${s}</span>`).join("");
+    },
+    msg(lines) {
+      const el = $("bmsg");
+      if (!el) return;
+      this.lastMsg = lines.slice(-3).map((l) => `<p>${l}</p>`).join("");
+      el.innerHTML = this.lastMsg;
+    },
+    /* 명령: 포켓몬의 '싸운다·가방·도망' 자리에 공격·기술·방어·도구·도망·정보 */
+    commands() {
+      const p = G.player;
+      this.sub = null;
+      if (this.lastMsg !== undefined) $("bmsg").innerHTML = this.lastMsg + `<p class="ask">${esc(J(p.name, "은/는"))} 무엇을 할까?</p>`;
+      const box = $("bcmd");
+      box.className = "bcmd";
+      box.innerHTML = `
+        <button class="opt" type="button" data-opt="attack">공격<small>${esc(p.job.attack.name)}</small></button>
+        <button class="opt" type="button" data-opt="skills">기술<small>${p.job.skills.filter((s) => s.lv <= p.level).length}개</small></button>
+        <button class="opt" type="button" data-opt="guard">방어<small>피해↓ MP↑</small></button>
+        <button class="opt" type="button" data-opt="items"${p.potions.hp + p.potions.mp ? "" : " disabled"}>도구<small>HP ${p.potions.hp} · MP ${p.potions.mp}</small></button>
+        <button class="opt" type="button" data-opt="flee"${this.b.enemy.boss ? " disabled" : ""}>도망<small>${this.b.enemy.boss ? "보스전" : Math.round(E.fleeChance(p, this.b) * 100) + "%"}</small></button>
+        <button class="opt" type="button" data-opt="info">정보<small>상태·기술</small></button>`;
+      this.win.o.cols = 3;
+      this.win.idx = this.lastCmd || 0;
+      focusOpt(this.win);
+    },
+    skillList() {
+      const p = G.player;
+      this.sub = "skills";
+      const box = $("bcmd");
+      box.className = "bcmd skills";
+      box.innerHTML = p.job.skills.map((sk, i) => {
+        const av = E.skillAvailable(p, this.b, i);
+        const sub = av.ok ? (av.hpCost ? "HP 소모" : `MP ${av.cost}`) : av.why;
+        return `<button class="opt sk${sk.tag === "ult" ? " ult" : ""}" type="button" data-opt="sk${i}"${av.ok ? "" : " disabled"}><img src="${skillIcon(sk)}" alt=""><span>${esc(sk.name)}<small>${sub}</small></span></button>`;
+      }).join("") + `<button class="opt" type="button" data-opt="back">돌아가기<small>명령으로</small></button>`;
+      this.win.o.cols = 3;
+      this.win.idx = 0;
+      focusOpt(this.win);
+    },
+    itemList() {
+      const p = G.player;
+      this.sub = "items";
+      const pot = 1 + (p.job.passive.pot || 0);
+      const box = $("bcmd");
+      box.className = "bcmd list";
+      box.innerHTML = `<button class="opt" type="button" data-opt="ihp"${p.potions.hp ? "" : " disabled"}><img src="${S.icon("potion", 2)}" alt="">회복 물약<small>${p.potions.hp}개 · HP ${Math.round(40 * pot)}%</small></button>
+        <button class="opt" type="button" data-opt="imp"${p.potions.mp ? "" : " disabled"}><img src="${S.icon("ether", 2)}" alt="">마나 물약<small>${p.potions.mp}개 · MP ${Math.round(50 * pot)}%</small></button>
+        <button class="opt" type="button" data-opt="back">돌아가기</button>`;
+      this.win.o.cols = 1;
+      this.win.idx = 0;
+      focusOpt(this.win);
+    },
+    focusInfo(v) {
+      const el = $("bmsg");
+      if (!el || !v) return;
+      if (this.sub === "skills" && v.startsWith("sk")) {
+        const sk = G.player.job.skills[Number(v.slice(2))];
+        el.innerHTML = `<p class="sk-desc"><b>${esc(sk.name)}</b> ${esc(E.describeSkill(sk, G.player))}${G.player.level < sk.lv ? ` <em>(Lv.${sk.lv}에 배움)</em>` : ""}</p>`;
+      } else if (this.sub === "skills") el.innerHTML = this.lastMsg || "";
+    },
+    back() {
+      if (this.mode === "cmd" && this.sub) this.commands();
+    },
+    pick(v) {
+      if (this.mode !== "cmd") return;
+      if (!this.sub) this.lastCmd = this.win.idx;
+      if (v === "skills") { this.skillList(); return; }
+      if (v === "items") { this.itemList(); return; }
+      if (v === "back") { this.commands(); return; }
+      if (v === "info") { openStatus(); return; }
+      let action = null;
+      if (v === "attack") action = { kind: "attack" };
+      if (v === "guard") action = { kind: "guard" };
+      if (v === "flee") action = { kind: "flee" };
+      if (v === "ihp") action = { kind: "potion", item: "hp" };
+      if (v === "imp") action = { kind: "potion", item: "mp" };
+      if (v.startsWith("sk")) action = { kind: "skill", idx: Number(v.slice(2)) };
+      if (action) this.run(action);
+    },
+    /* 한 차례: 엔진이 결과를 정하고, 화면은 단계별로 연출과 문장을 보여 준다 */
+    async run(action) {
+      const b = this.b;
+      const p = G.player;
+      const before = b.logCount;
+      this.action = action;
+      E.act(p, b, action);
+      const n = b.logCount - before;
+      const logs = b.log.slice(-n);
+      const fxs = b.fx.slice();
+      this.mode = "anim";
+      $("bcmd").innerHTML = "";
+      await this.animate(logs, fxs);
+      G.fast = false;
+      this.plates();
+      if (b.result === "win") return this.victory();
+      if (b.result === "lose") return this.defeat();
+      if (b.result === "fled") return this.fled();
+      save({ fight: this.idx, mon: b.enemy.base });
+      this.mode = "cmd";
+      this.commands();
+    },
+    async animate(logs, fxs) {
+      const phases = Array.from(new Set(logs.map((l) => l.ph).concat(fxs.map((f) => f.ph)))).sort((a, b) => a - b);
+      const shown = [];
+      for (const ph of phases) {
+        const L = logs.filter((l) => l.ph === ph);
+        L.forEach((l) => shown.push(esc(l.text)));
+        if (L.length) this.msg(shown);
+        const list = fxs.filter((f) => f.ph === ph);
+        let i = 0;
+        while (i < list.length) {
+          const f = list[i];
+          if (f.kind === "act") {
+            const hits = [];
+            let j = i + 1;
+            while (j < list.length && list[j].kind !== "act") { hits.push(list[j]); j++; }
+            if (f.target === "player") await this.playerAct(f, hits);
+            else await this.enemyAct(f, hits);
+            i = j;
+            continue;
+          }
+          await this.applyFx(f);
+          i++;
+        }
+        this.plates();
+        await X.sleep(L.length ? 620 : 160);
+      }
+    },
+    setPose(anim, alt) { this.pose = { anim, t0: G.t, alt: !!alt }; },
+    heroPose(t) {
+      const P = this.pose;
+      const s = (t - P.t0) / 1000;
+      const idle = { anim: "idle", f: 0, t: t / 1000 };
+      const mo = this.reach.motion === "melee" ? "slash" : this.reach.motion;
+      switch (P.anim) {
+        case "act": {
+          if (s > 0.62) return idle;
+          if (this.reach.caster) return { anim: mo, f: s < 0.16 ? 0 : 1, t: s, alt: P.alt };
+          return { anim: mo, f: s < 0.13 ? 0 : s < 0.28 ? 1 : 2, t: s, alt: P.alt };
+        }
+        case "wind": return { anim: mo, f: 0, t: s, alt: P.alt };
+        case "cast": return { anim: "cast", f: s < 0.35 ? 0 : 1, t: s };
+        case "hurt": return s < 0.4 ? { anim: "hurt", f: 0, t: s } : idle;
+        case "ko": return { anim: "hurt", f: 0, t: s };
+        case "victory": return { anim: "victory", f: 0, t: s };
+        default: return idle;
+      }
+    },
+    foeCenter() {
+      const Fo = this.foe;
+      return [px(Fo.x), px(Fo.y - Fo.h * 0.5)];
+    },
+    heroCenter() {
+      const H = this.hero;
+      return [px(H.x), px(H.y - 24)];
+    },
+    /* Moves가 쓰는 무대 함수: 대상은 언제나 눈앞의 몬스터 하나 */
+    pickTargets() { return this.foe.dead ? [] : [this.foe]; },
+    applySkill() { if (this.onUltHit) { const f = this.onUltHit; this.onUltHit = null; f(); } },
+    async playerAct(act, hits) {
+      const p = G.player;
+      const H = this.hero;
+      const el = act.el || "phys";
+      if (act.action === "item") {
+        this.setPose("cast");
+        await X.sleep(220);
+        for (const h of hits) await this.applyFx(h);
+        await X.sleep(120);
+        this.setPose("idle");
+        return;
+      }
+      const sk = act.action === "skill" ? p.job.skills[this.action.idx] : null;
+      const plan = sk ? visPlan(sk, this.reach.far) : null;
+      if (sk && plan.ult) {
+        this.setPose("cast");
+        let landed = null;
+        this.onUltHit = () => { landed = this.hitFx(hits); };
+        await Moves.castUlt.call(this, sk, plan);
+        if (landed) await landed;
+        else await this.hitFx(hits);
+        this.setPose("idle");
+        return;
+      }
+      if (sk && SELF_TYPES.has(sk.type)) {
+        this.setPose("cast");
+        await X.sleep(260);
+        for (const h of hits) await this.applyFx(h);
+        await X.sleep(160);
+        this.setPose("idle");
+        return;
+      }
+      /* 근접은 몬스터 앞까지 한달음에 다가가 휘두르고 돌아온다 */
+      const melee = !this.reach.far;
+      const home = this.heroX0 / Z;
+      if (melee) {
+        this.setPose("wind", !!sk);
+        this.busyMove = true;
+        await tween(H, { x: this.foe.x - this.foe.w * 0.45 - 22 }, 170);
+      }
+      this.setPose("act", !!sk);
+      await X.sleep(this.reach.caster ? 140 : 90);
+      const W = this.reach.weapon;
+      const go = sk ? Moves.skillVisual.call(this, sk, plan, [this.foe]) : weaponFx(this, el, [this.foe], W.far ? W.range : W.reach);
+      await go;
+      await this.hitFx(hits);
+      await X.sleep(180);
+      if (melee) {
+        this.setPose("idle");
+        await tween(H, { x: home }, 200);
+        this.busyMove = false;
+      }
+      this.setPose("idle");
+    },
+    async hitFx(hits) {
+      for (const h of hits) await this.applyFx(h);
+    },
+    /* 몬스터 차례: 달려들어 치거나(근접), 마력을 쏘거나(마법형), 특성에 맞는 덧연출 */
+    async enemyAct(act, hits) {
+      const Fo = this.foe;
+      const trait = act.trait || "attack";
+      const el = act.el && act.el !== "phys" ? act.el : null;
+      const [hx, hy] = this.heroCenter();
+      const hgy = px(this.hero.y);
+      const home = Fo.x;
+      const ranged = Fo.shooter || trait === "drain" || (el && Math.random() < 0.35);
+      Fo.wind = 1;
+      await X.sleep(trait === "heavy" ? 380 : 160);
+      Fo.wind = 0;
+      if (ranged) {
+        await Sp.shot([px(Fo.x - Fo.w * 0.3), px(Fo.y - Fo.h * 0.55)], [hx, hy], el || "dark", "orb");
+      } else {
+        await tween(Fo, { x: this.hero.x + Fo.w * 0.45 + 18 }, 150);
+        if (trait === "heavy") { Sp.smash(hx - 6 * Z, hgy, -1, el || "phys", true); this.quake = 0.3; }
+        else Sp.slash(hx + 4 * Z, hy, -1, el || "phys", false, Math.random() < 0.5);
+      }
+      if (trait === "drain") Sp.stream([hx, hy], this.foeCenter(), "#ff5a7a");
+      if (trait === "stun") Sp.bolt([hx + 16 * Z, hy - 120 * Z], [hx, hy], "bolt");
+      if (trait === "steal") Sp.coins([hx, hy], this.foeCenter());
+      if (trait === "weaken") Sp.weaken(hx, hy);
+      if (trait === "poison") Sp.cloud(hx, hgy, "poison");
+      if (trait === "burn") Sp.flames(hx, hgy, "fire", 30 * Z, false);
+      await X.sleep(70);
+      for (const h of hits) await this.applyFx(h);
+      if (!ranged) await tween(Fo, { x: home }, 200);
+    },
+    async applyFx(f) {
+      const H = this.hero;
+      const Fo = this.foe;
+      const [hx, hy] = this.heroCenter();
+      const [fx, fy] = this.foeCenter();
+      const ftop = px(Fo.y - Fo.h) - 2 * Z;
+      const htop = px(H.y - 46);
+      switch (f.kind) {
+        case "hit": case "crit":
+          if (f.target === "enemy") {
+            if (f.src === "summon") await Sp.shot([px(H.x - 20), px(H.y - 52)], [fx, fy], "arcane", "orb");
+            if (f.src === "counter") Sp.slash(fx, fy, 1, "phys", false, false);
+            if (f.src === "self") Sp.impact(fx, fy, "dark", false);
+            Fo.flash = 0.12;
+            Fo.shake = 0.2;
+            Sp.number(fx, ftop, f.amount, f.kind === "crit" ? "crit" : "hit", 0);
+            if (f.kind === "crit") this.quake = Math.max(this.quake, 0.16);
+          } else {
+            H.flash = 0.2;
+            this.setPose("hurt");
+            Sp.number(hx, htop, f.amount, "taken", 0);
+            if (f.absorbed) Sp.shieldBubble(hx, hy + 2 * Z, 24 * Z);
+            this.quake = Math.max(this.quake, f.amount > E.derive(G.player).maxHp * 0.25 ? 0.22 : 0.1);
+            await X.sleep(150);
+          }
+          await X.sleep(100);
+          break;
+        case "miss":
+          Sp.number(hx, htop, "MISS", "miss", 0);
+          await tween(H, { x: H.x - 14 }, 90);
+          await tween(H, { x: H.x + 14 }, 120);
+          break;
+        case "dot": {
+          const enemy = f.target === "enemy";
+          const x = enemy ? fx : hx;
+          const gy = enemy ? px(Fo.y) : px(H.y);
+          const kind = DOT_FX[f.dot] || "cloud";
+          if (kind === "flames") Sp.flames(x, gy, "fire", 30 * Z, false);
+          else if (kind === "drops") Sp.drops(x, enemy ? fy : hy);
+          else Sp.cloud(x, gy, f.dot === "curse" ? "curse" : "poison");
+          if (enemy) Fo.flash = 0.08; else H.flash = 0.1;
+          Sp.number(x, enemy ? ftop : htop, f.amount, "dot", 0);
+          await X.sleep(260);
+          break;
+        }
+        case "status":
+          switch (f.st) {
+            case "freeze": Sp.crystals(fx, px(Fo.y), "ice", 46 * Z, false); break;
+            case "stun": Sp.ring(fx, px(Fo.y), "bolt", 50 * Z); break;
+            case "charm": Sp.hearts(fx, fy - 8 * Z); break;
+            case "debuff": Sp.weaken(fx, fy); break;
+            case "curse": case "poison": Sp.cloud(fx, px(Fo.y), f.st); break;
+            case "burn": Sp.flames(fx, px(Fo.y), "fire", 36 * Z, false); break;
+            case "bleed": Sp.drops(fx, fy); break;
+            case "enrage": Fo.flash = 0.25; this.quake = 0.25; Sp.impact(fx, fy, "fire", true); break;
+            default: break;
+          }
+          await X.sleep(200);
+          break;
+        case "heal":
+          if (f.target === "enemy") { Sp.heal(fx, px(Fo.y)); Sp.number(fx, ftop, "+" + f.amount, "heal", 0); }
+          else {
+            if (f.src === "revive") Sp.pillar(hx, px(H.y), "fire", true);
+            else Sp.heal(hx, px(H.y));
+            Sp.number(hx, htop, "+" + f.amount, "heal", 0);
+          }
+          await X.sleep(280);
+          break;
+        case "mana":
+          Sp.aura(hx, px(H.y), "ice");
+          Sp.number(hx, htop, "+" + f.amount, "mp", 0);
+          await X.sleep(220);
+          break;
+        case "shield":
+          Sp.shieldBubble(hx, hy + 2 * Z, 26 * Z);
+          Sp.number(hx, htop, "+" + f.amount, "mp", 0);
+          await X.sleep(240);
+          break;
+        case "buff":
+          Sp.aura(hx, px(H.y), f.el && f.el !== "phys" ? f.el : "light");
+          if (f.summon) Sp.circle(px(H.x - 20), px(H.y), f.el && f.el !== "phys" ? f.el : "arcane", 700);
+          await X.sleep(260);
+          break;
+        case "gold":
+          Sp.coins([fx, fy], [hx, hy]);
+          Sp.number(hx, htop, "+" + f.amount + "G", "gold", 0);
+          await X.sleep(200);
+          break;
+        default:
+          break;
+      }
+    },
+    async victory() {
+      const b = this.b;
+      const e = b.enemy;
+      const Fo = this.foe;
+      const [fx, fy] = this.foeCenter();
+      Sp.impact(fx, fy, e.el === "phys" ? "light" : e.el, true);
+      if (e.boss) { Sp.pillar(fx, px(Fo.y), "light", true); this.quake = 0.4; }
+      Fo.dead = true;
+      await tween(Fo, { alpha: 0 }, 420);
+      const rw = b.reward;
+      const lines = [`<b>${esc(J(e.name, "을/를"))}</b> 쓰러뜨렸다!`, `경험치 <b>+${fmt(rw.exp)}</b> · <b>${fmt(rw.gold)}G</b>`];
+      rw.drops.forEach((d) => lines.push(esc(d)));
+      if (rw.post) lines.push(`전투 후 회복 HP +${fmt(rw.post)}`);
+      if (rw.levels.length) {
+        lines.push(`<b class="lvup">레벨 업! Lv.${rw.levels[rw.levels.length - 1]}</b>`);
+        Sp.levelUp(px(this.hero.x), px(this.hero.y));
+      }
+      if (rw.unlocked.length) lines.push(`새 기술: <b>${rw.unlocked.map(esc).join(", ")}</b>`);
+      this.setPose("victory");
+      this.plates();
+      this.msg(lines.slice(0, 2));
+      save({ fight: this.idx + 1, mon: null });
+      await X.sleep(500);
+      G.fast = false;
+      const pages = [lines.slice(0, 2).join("<br>")];
+      if (lines.length > 2) pages.push(lines.slice(2).join("<br>"));
+      say(pages, () => { this.setPose("idle"); this.next(); }, { cls: "say-battle" });
+    },
+    /* 다음 몬스터, 또는 층을 다 돌았으면 갈림길 */
+    next() {
+      const p = G.player;
+      this.idx++;
+      if (this.idx < E.floorFights(this.floor)) {
+        this.ui();
+        this.encounter(null, false);
+        return;
+      }
+      p.floor = this.floor + 1;
+      save({ fight: 0, mon: null });
+      this.crossroads();
+    },
+    crossroads() {
+      const p = G.player;
+      const d = E.derive(p);
+      const n = this.floor;
+      closeAll();
+      openWin(`<h2 class="win-h">${n}층 돌파! <small>HP ${fmt(p.hp)}/${fmt(d.maxHp)} · MP ${fmt(p.mp)}/${fmt(d.maxMp)} · 물약 ${p.potions.hp}·${p.potions.mp}</small></h2>
+        <div class="opts">
+          <button class="opt primary" type="button" data-opt="down">${n + 1}층으로 내려간다 <small>${esc(Wd.floorName(n + 1))}</small></button>
+          <button class="opt" type="button" data-opt="items">도구 쓰기</button>
+          <button class="opt" type="button" data-opt="town">마을로 돌아간다 <small>다음엔 ${n + 1}층부터</small></button>
+        </div>`, {
+        cls: "win-center", noBack: true,
+        onPick: (v) => {
+          if (v === "down") goFloor(n + 1);
+          if (v === "items") openItems(() => this.crossroads());
+          if (v === "town") { closeAll(); G.place = "town"; fade(() => setScene(Town)); }
+        }
+      });
+    },
+    async fled() {
+      await tween(this.hero, { x: -40 / Z }, 300);
+      this.hero.x = this.heroX0 / Z;
+      const p = G.player;
+      say(`${esc(J(p.name, "은/는"))} 몸을 피해 다음 길로 빠져나갔다. (보상 없음)`, () => this.next(), { cls: "say-battle" });
+    },
+    async defeat() {
+      const e = this.b.enemy;
+      this.setPose("ko");
+      this.hero.ko = true;
+      await tween(this.hero, { alpha: 0.45 }, 600);
+      await X.sleep(500);
+      G.fast = false;
+      gameOver(e.name);
+    },
+    key(k) {
+      if (this.mode === "anim" && k === "a") G.fast = true;
+    },
+    update(dt) {
+      if (this.vw !== VW || this.vh !== VH) this.layout();
+      const s = dt / 1000;
+      this.quake = Math.max(0, this.quake - s);
+      if (this.flash) this.flash.t -= s;
+      const H = this.hero;
+      const Fo = this.foe;
+      H.flash = Math.max(0, H.flash - s);
+      if (Fo) { Fo.t += s; Fo.flash = Math.max(0, Fo.flash - s); Fo.shake = Math.max(0, (Fo.shake || 0) - s); }
+      Ambient.update(s, this.theme.ambient);
+    },
+    draw(t) {
+      const qx = this.quake ? Math.round(rnd(-3, 3) * Z) : 0;
+      const qy = this.quake ? Math.round(rnd(-2, 2) * Z) : 0;
+      ctx.save();
+      ctx.translate(qx, qy);
+      Wd.drawBackground(ctx, this.sky, Z, 0, 0, VW, VH, t);
+      const strip = Wd.renderMap(this.strip, Z);
+      ctx.drawImage(strip, -2 * Z, this.gy - 4 * Z);
+      ctx.fillStyle = this.theme.ground.body;
+      ctx.fillRect(-8, this.gy - 4 * Z + strip.height, VW + 16, VH);
+      /* 둘이 서는 자리: 포켓몬의 둥근 받침처럼 땅 위의 옅은 타원 */
+      [[this.heroX0, 30], [this.foeX0, this.foe && this.foe.mon.boss ? 54 : 38]].forEach(([x, r]) => {
+        ctx.fillStyle = "rgba(255,255,255,0.06)";
+        ctx.beginPath();
+        ctx.ellipse(x, this.gy + 3 * Z, r * Z, 6 * Z, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      if (this.foe) this.drawFoe(t);
+      this.drawHero(t);
+      Sp.draw(ctx);
+      X.draw(ctx);
+      Sp.drawNumbers(ctx);
+      ctx.restore();
+      if (this.dim) { ctx.fillStyle = `rgba(4,2,14,${this.dim})`; ctx.fillRect(0, 0, VW, VH); }
+      if (this.flash && this.flash.t > 0) {
+        ctx.globalAlpha = Math.min(0.45, this.flash.t * 2);
+        ctx.fillStyle = this.flash.col;
+        ctx.fillRect(0, 0, VW, VH);
+        ctx.globalAlpha = 1;
+      }
+      Ambient.draw();
+    },
+    drawHero(t) {
+      const p = G.player;
+      const H = this.hero;
+      const pose = this.heroPose(t);
+      const blink = H.flash > 0 && Math.floor(t / 60) % 2;
+      drawHeroAt(p.job, px(H.x), px(H.y), pose, { alpha: H.alpha * (blink ? 0.6 : 1), hurt: pose.anim === "hurt" && !H.ko, barrier: this.b && this.b.ps.barrier > 0 && !H.ko });
+      if (this.b && this.b.ps.summon && !H.ko) {
+        const x = px(H.x - 22);
+        const y = px(H.y - 54) + Math.sin(t / 300) * 3 * Z;
+        Sp.orbAt(ctx, x, y, 6 * Z, "arcane");
+        if (Math.random() < 0.2) Sp.spark(x + rnd(-6, 6) * Z, y + rnd(-6, 6) * Z, { vy: -20 * Z, life: 500, col: Sp.PAL.arcane[1], glow: 0.7, size: 1 });
+      }
+    },
+    drawFoe(t) {
+      const Fo = this.foe;
+      if (Fo.alpha <= 0) return;
+      const { img, bd, mon } = Fo;
+      let bob = 0;
+      let sx = 1;
+      let sy = 1;
+      if (Fo.tpl === "slime") { const k = Math.sin(Fo.t * 4); sx = 1 + k * 0.05; sy = 1 - k * 0.05; }
+      else if (Fo.fly) bob = Math.sin(Fo.t * 5) * 3 * Z;
+      else sy = 1 + Math.sin(Fo.t * 2.4) * 0.018;
+      if (Fo.wind) { sy = 0.9; sx = 1.07; }
+      const shake = Fo.shake > 0 ? Math.round(Math.sin(t / 18) * 3 * Z) : 0;
+      const x = px(Fo.x) + shake;
+      const y = px(Fo.y);
+      shadow(px(Fo.x), px(this.gy / Z) + Z, bd.w * 0.34, 3.4 * Z, Fo.fly ? 0.18 : 0.3);
+      ctx.save();
+      ctx.globalAlpha = Fo.alpha;
+      ctx.translate(x, y + bob);
+      ctx.scale(-sx, sy);
+      const ox = Math.round(-(bd.x0 + bd.w / 2));
+      const oy = Math.round(-(bd.y1 + 1));
+      ctx.drawImage(img, ox, oy);
+      if (Fo.flash > 0 || Fo.dead) { ctx.globalAlpha = Fo.alpha * (Fo.dead ? 0.7 : 0.8); ctx.drawImage(S.silhouette(img, "#ffffff"), ox, oy); }
+      else if (mon.enraged) { ctx.globalAlpha = 0.25 + 0.1 * Math.sin(t / 120); ctx.drawImage(S.silhouette(img, "#ff3030"), ox, oy); }
+      else if (mon.st.charm) { ctx.globalAlpha = 0.25; ctx.drawImage(S.silhouette(img, "#ff8ad8"), ox, oy); }
+      else if (mon.st.stun && mon.st.stunLabel === "얼어붙어") { ctx.globalAlpha = 0.35; ctx.drawImage(S.silhouette(img, "#9ae6ff"), ox, oy); }
+      ctx.restore();
+      if (Fo.dead || !mon.st.stun) return;
+      const top = y + bob - bd.h - 4 * Z;
+      for (let k = 0; k < 3; k++) {
+        const a = t / 200 + (k * Math.PI * 2) / 3;
+        ctx.fillStyle = mon.st.stunLabel === "얼어붙어" ? "#bff0ff" : "#ffe066";
+        ctx.fillRect(Math.round(x + Math.cos(a) * 10 * Z), Math.round(top + Math.sin(a) * 3 * Z), Math.max(2, Math.round(2 * Z)), Math.max(2, Math.round(2 * Z)));
+      }
     }
   };
   const px = (v) => v * Z;
@@ -2530,20 +2092,26 @@
     }
   }
 
-  /* ── 이어하기 ── */
+  /* ── 이어하기: 던전에서 저장했으면 그 층의 그 싸움부터 ── */
+  function resume(saved) {
+    if (saved.place === "dungeon") setScene(Battle, { floor: Math.max(1, G.player.floor), idx: saved.fight || 0, mon: saved.mon || null });
+    else setScene(Town);
+  }
   function continueGame() {
     const saved = store.get("save", null);
     if (!saved) { Title.menu(); return; }
     G.player = unpackPlayer(saved.player);
     closeAll();
-    fade(() => setScene(Stage, { floor: saved.place === "dungeon" ? Math.max(1, G.player.floor) : 0 }));
+    fade(() => resume(saved));
   }
 
   /* ── 루프 ── */
   let last = 0;
   function frame(now) {
-    const dt = Math.min(50, now - (last || now));
+    const real = Math.min(50, now - (last || now));
     last = now;
+    /* 전투 연출 중 결정 키를 누르면 세 배 빠르게 */
+    const dt = G.fast ? real * 3 : real;
     G.t += dt;
     X.tick(dt);
     X.update(dt);
@@ -2560,7 +2128,8 @@
   }
 
   function snapshot() {
-    return { player: G.player ? packPlayer(G.player) : null, place: G.place };
+    const saved = store.get("save", null);
+    return { player: G.player ? packPlayer(G.player) : null, place: G.place, fight: saved && saved.fight, mon: saved && saved.mon };
   }
 
   function start(data) {
@@ -2573,12 +2142,12 @@
     root.addEventListener("resize", () => resize());
     if (data && data.player) {
       G.player = unpackPlayer(data.player);
-      setScene(Stage, { floor: data.place === "dungeon" ? Math.max(1, G.player.floor) : 0 });
+      resume(data);
     } else setScene(Title);
     root.requestAnimationFrame(frame);
   }
 
-  F.game = { G, Stage, Title, Roll, setScene, openCodex, openHall, held, closeAll };
+  F.game = { G, Town, Battle, Title, Roll, setScene, openCodex, openHall, closeAll };
 
   const hot = root.claude && root.claude.hot;
   if (hot && typeof hot.snapshot === "function") hot.snapshot(snapshot);

@@ -6,7 +6,7 @@
 <!-- HEAD:START -->
 <title>삼천의 운명</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="3,000개의 직업 중 하나가 무작위로 정해지는 횡스크롤 도트 액션 RPG">
+<meta name="description" content="3,000개의 직업 중 하나가 무작위로 정해지는 턴제 도트 RPG">
 <!-- HEAD:END -->
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -27,23 +27,11 @@
       <button type="button" class="pk down" data-k="down" aria-label="아래">▼</button>
     </div>
     <div class="actpad">
-      <div class="skillpad">
-        <button type="button" class="pk sk" data-k="s0" aria-label="기술 1"></button>
-        <button type="button" class="pk sk" data-k="s1" aria-label="기술 2"></button>
-        <button type="button" class="pk sk" data-k="s2" aria-label="기술 3"></button>
-        <button type="button" class="pk sk" data-k="s3" aria-label="기술 4"></button>
-        <button type="button" class="pk sk" data-k="s4" aria-label="기술 5"></button>
-      </div>
-      <div class="mainpad">
-        <button type="button" class="pk pot" data-k="hp" aria-label="회복 물약">HP</button>
-        <button type="button" class="pk pot mpot" data-k="mp" aria-label="마나 물약">MP</button>
-        <button type="button" class="pk bbtn" data-k="b" aria-label="메뉴 또는 취소">B</button>
-        <button type="button" class="pk jbtn" data-k="jump" aria-label="점프">점프</button>
-        <button type="button" class="pk abtn" data-k="atk" aria-label="공격 또는 결정">공격</button>
-      </div>
+      <button type="button" class="pk bbtn" data-k="b" aria-label="취소">B</button>
+      <button type="button" class="pk abtn" data-k="a" aria-label="결정">A</button>
     </div>
   </div>
-  <p id="keys-hint">← → 이동(계속 누르거나 Shift: 달리기) · ↑ ↓ 밧줄·문 · Space 점프 · Z 공격 · A S D F G 기술 · Q W 물약 · Esc 메뉴</p>
+  <p id="keys-hint">방향키 고르기 · Z·Enter·Space 결정 · X·Esc 취소</p>
 </div>
 <!-- BODY:END -->
 <!-- SCRIPTS:START -->
