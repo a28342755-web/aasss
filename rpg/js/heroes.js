@@ -499,7 +499,8 @@
     if (!pal && (mod || i > 0)) pal = PALS[(mod ? fnv(mod.name) : i - 1) % PALS.length];
     const lk = Object.assign({ size: 1, wide: 1 }, ml, { pal });
     /* 그림마다 첫 기본 직업은 원래 인물, 나머지는 다른 그림의 머리를 단다 */
-    if (mod || i > 0) lk.head = pickHead(job, heroArtId(job), mod ? mod.name : null, F.FAMILY_LIST[job.fam].combat);
+    /* 마법사 그림은 참고 시트의 프레임으로 움직이므로 머리를 바꾸지 않는다 */
+    if ((mod || i > 0) && heroArtId(job) !== "m_wizard") lk.head = pickHead(job, heroArtId(job), mod ? mod.name : null, F.FAMILY_LIST[job.fam].combat);
     if (lk.head && HEAD_TAG[lk.head] === "b") { delete lk.ears; delete lk.horns; delete lk.skin; }
     if (!lk.aura && mod && mod.el && mod.el !== "phys" && mod.tier >= 1) lk.aura = mod.el;
     /* 머리카락 색: 그림마다 첫 기본 직업은 원래 색, 나머지는 이름으로 고른다(원래 색도 섞인다) */

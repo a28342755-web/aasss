@@ -1422,7 +1422,7 @@
         const land = this.landing(h.x, py, h.y, h.dropT > 0 ? h.dropPlat : null);
         if (land) {
           h.y = land.y;
-          if (h.airT > 0.3) { h.landT = 0.13; Sp.dust(px(h.x), px(h.y), 0, 6); }
+          if (h.airT > 0.3) { h.landT = 0.2; Sp.dust(px(h.x), px(h.y), 0, 6); }
           h.vy = 0;
           h.ground = land;
           h.airT = 0;
@@ -1452,7 +1452,7 @@
       else if (!h.ground) anim = h.vy < 0 ? "jump" : "fall";
       else if (h.landT > 0) anim = "land";
       else if (h.vx) { anim = h.running ? "run" : "walk"; t = h.walkT; }
-      return { anim, f, t };
+      return { anim, f, t, alt: !!(h.atk && h.atk.skill) };
     },
 
     /* ── 공격 ── */
@@ -1567,7 +1567,7 @@
       if (plan.ult) this.castUlt(sk, plan);
       else if (plan.self) this.castSelf(sk, plan);
       else {
-        h.atk = { t: 0, dur: 0.5, hitAt: 0.16, kind: this.reach.motion, fired: false, fire: () => this.skillHit(sk, plan) };
+        h.atk = { t: 0, dur: 0.5, hitAt: 0.16, kind: this.reach.motion, skill: true, fired: false, fire: () => this.skillHit(sk, plan) };
       }
       this.refresh();
     },
@@ -1594,7 +1594,7 @@
       const h = this.hero;
       const p = G.player;
       h.atk = {
-        t: 0, dur: 0.45, hitAt: 0.18, kind: "cast", fired: false,
+        t: 0, dur: 0.45, hitAt: 0.18, kind: "cast", skill: true, fired: false,
         fire: () => {
           const d = E.derive(p);
           const pa = p.job.passive;
@@ -1800,7 +1800,7 @@
       const st = this.reach.style;
       h.casting = true;
       h.inv = Math.max(h.inv, 2);
-      h.atk = { t: 0, dur: 1.5, hitAt: 0.6, kind: "cast", fired: true, fire() {} };
+      h.atk = { t: 0, dur: 1.5, hitAt: 0.6, kind: "cast", skill: true, fired: true, fire() {} };
       Sp.circle(px(h.x), px(h.y), el, 1500);
       this.dim = 0.25;
       X.sleep(620).then(() => {
@@ -2322,7 +2322,7 @@
         ctx.fill();
       }
       HA.draw(ctx, G.player.job, px(h.x), px(h.y) + Z, {
-        dir: h.dir, anim: pose.anim, f: pose.f, t: pose.t, h: HERO_PX(),
+        dir: h.dir, anim: pose.anim, f: pose.f, t: pose.t, alt: pose.alt, h: HERO_PX(),
         alpha: this.dead ? 0.6 : blink ? 0.45 : 1, tint: pose.anim === "hurt" && !this.dead ? "#ff4050" : null, tintA: 0.35
       });
       if (this.ps.barrier > 0 && !this.dead) {
