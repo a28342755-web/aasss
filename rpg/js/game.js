@@ -967,7 +967,7 @@
      점프는 몬스터보다 가벼운 중력으로 조금 더 오래 떠 있다 */
   const WALK = 64;
   const RUN = 104;
-  const RUN_AFTER = 0.45;
+  const RUN_AFTER = 0.8;
   const HERO_GRAV = 520;
   const HERO_FALL = 360;
   const JUMP_V = 206;
@@ -2485,7 +2485,7 @@
     }
   };
   const px = (v) => v * Z;
-  const HERO_PX = () => Math.round(52 * Z);
+  const HERO_PX = () => Math.round(62 * Z);
   const potionCache = {};
   function potionImg(kind) {
     const key = kind + Z;

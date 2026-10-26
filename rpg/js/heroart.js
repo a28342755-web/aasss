@@ -1,7 +1,7 @@
 /*
  * 삼천의 운명 — 주인공 그림과 동작
- * 미리 그린 캐릭터 그림(오른쪽을 봄)을 원하는 키로 줄여 두고, 발밑을 축으로 기울이기·늘이기·눌림으로
- * 대기(숨쉬기)·걷기·점프·낙하·착지·공격(뒤로 젖혔다 내지르기)·시전·피격 동작을 만든다.
+ * 미리 그린 캐릭터 그림(오른쪽을 봄)을 원하는 키로 줄여 두고, 다리를 번갈아 흔든 프레임 위에 몸을 기울이고
+ * 늘이고 눌러 동작마다 뚜렷한 자세 프레임(대기·걷기·달리기·점프·낙하·착지·무기별 공격·시전·피격)을 만든다.
  * 같은 그림을 쓰는 직업끼리 달라 보이도록 heroes.lookOf가 정한 대로 옷 색과 피부색을 바꾸고,
  * 날개·고리·뿔·귀·왕관·분신·기운을 덧그린다.
  */
@@ -547,87 +547,6 @@
     return out;
   }
 
-  /* 동작별 변형. t는 그 동작에 들어선 뒤 흐른 초 */
-  function motion(anim, t, f) {
-    const m = { rot: 0, sx: 1, sy: 1, dx: 0, dy: 0 };
-    switch (anim) {
-      case "walk": {
-        /* 다리가 모이는 순간 몸이 가장 높다(다리 프레임과 같은 박자) */
-        const ph = t * WALK_RATE;
-        m.dy = -Math.abs(Math.cos(ph)) * 0.03;
-        m.rot = Math.sin(ph) * 0.03;
-        m.sy = 1 + Math.cos(ph * 2) * 0.01;
-        break;
-      }
-      case "run": {
-        const ph = t * RUN_RATE;
-        m.dy = -Math.abs(Math.cos(ph)) * 0.05;
-        m.rot = -0.08 + Math.sin(ph) * 0.03;
-        m.sy = 1 + Math.cos(ph * 2) * 0.018;
-        m.dx = 0.02;
-        break;
-      }
-      case "jump": m.sy = 1.07; m.sx = 0.94; m.rot = -0.08; break;
-      case "fall": m.sy = 1.03; m.sx = 0.98; m.rot = 0.05; break;
-      case "land": m.sy = 0.86; m.sx = 1.1; break;
-      case "windup": m.rot = 0.13; m.dx = -0.05; m.sy = 0.98; break;
-      case "strike": m.rot = -0.17; m.dx = 0.09; m.sx = 1.05; break;
-      case "follow": m.rot = -0.07; m.dx = 0.05; break;
-      case "cast":
-        if (f) { m.rot = -0.07; m.dx = 0.04; m.sx = 1.03; }
-        else { m.rot = 0.06; m.dy = -0.02; m.sy = 1.02; }
-        break;
-      /* 무기별 공격 동작. f: 0 준비, 1 내지르기, 2 마무리 */
-      case "slash":
-        if (f === 0) { m.rot = 0.13; m.dx = -0.05; m.sy = 0.98; } else if (f === 1) { m.rot = -0.17; m.dx = 0.09; m.sx = 1.05; } else { m.rot = -0.07; m.dx = 0.05; }
-        break;
-      case "thrust":
-        if (f === 0) { m.rot = 0.05; m.dx = -0.09; m.sx = 0.95; } else if (f === 1) { m.rot = -0.04; m.dx = 0.17; m.sx = 1.1; m.sy = 0.97; } else { m.dx = 0.08; m.sx = 1.03; }
-        break;
-      case "smash":
-        if (f === 0) { m.rot = 0.24; m.dx = -0.05; m.dy = -0.05; m.sy = 1.07; m.sx = 0.95; } else if (f === 1) { m.rot = -0.27; m.dx = 0.06; m.sy = 0.86; m.sx = 1.1; } else { m.rot = -0.12; m.sy = 0.95; m.dx = 0.04; }
-        break;
-      case "twin":
-        if (f === 0) { m.rot = 0.08; m.dx = -0.03; } else if (f === 1) { m.rot = -0.15; m.dx = 0.07; m.sx = 1.04; } else { m.rot = 0.1; m.dx = 0.05; m.sx = 1.03; }
-        break;
-      case "jab":
-        if (f === 0) { m.dx = -0.03; m.rot = 0.03; } else if (f === 1) { m.dx = 0.11; m.rot = -0.07; m.sx = 1.05; } else { m.dx = 0.04; }
-        break;
-      case "lash":
-        if (f === 0) { m.rot = 0.18; m.dx = -0.06; m.dy = -0.02; } else if (f === 1) { m.rot = -0.11; m.dx = 0.05; m.sx = 1.04; } else { m.rot = -0.05; m.dx = 0.02; }
-        break;
-      case "sweep":
-        if (f === 0) { m.rot = 0.2; m.dx = -0.07; m.sy = 0.97; } else if (f === 1) { m.rot = -0.24; m.dx = 0.04; m.sx = 1.08; m.sy = 0.95; } else { m.rot = -0.15; m.dx = 0.02; }
-        break;
-      case "stab":
-        if (f === 0) { m.dx = -0.05; m.rot = 0.06; m.sy = 0.97; } else if (f === 1) { m.dx = 0.13; m.rot = -0.09; m.sx = 1.06; } else { m.dx = 0.05; }
-        break;
-      case "shoot":
-        if (f === 0) { m.dx = -0.02; m.rot = 0.04; m.sy = 0.99; } else if (f === 1) { m.dx = -0.06; m.rot = -0.05; m.sx = 1.02; } else { m.dx = -0.02; }
-        break;
-      /* 시전 동작: 마도서는 몸을 숙여 읽고, 수정구·소환은 두 팔을 들어 올리고, 악기는 박자를 탄다 */
-      case "read":
-        if (f) { m.rot = -0.06; m.dx = 0.04; m.sx = 1.02; } else { m.rot = 0.04; m.sy = 0.98; }
-        break;
-      case "raise":
-        if (f) { m.rot = -0.04; m.sy = 1.04; m.dy = -0.03; } else { m.sy = 1.06; m.sx = 0.96; m.dy = -0.04; }
-        break;
-      case "play":
-        m.rot = Math.sin(t * 14) * 0.07;
-        m.dy = -Math.abs(Math.sin(t * 14)) * 0.025;
-        break;
-      case "hurt": m.rot = 0.2; m.dx = -0.06; m.sy = 0.96; break;
-      case "climb": m.dx = Math.sin(t * 9) * 0.02; m.rot = Math.sin(t * 9) * 0.035; m.dy = -Math.abs(Math.cos(t * 9)) * 0.015; break;
-      case "victory": m.dy = -Math.abs(Math.sin(t * 6)) * 0.05; m.sy = 1.03; break;
-      default: {
-        const b = Math.sin(t * 2.6);
-        m.sy = 1 + b * 0.018;
-        m.sx = 1 - b * 0.01;
-      }
-    }
-    return m;
-  }
-
   /* ── 다리 움직임 ──
      그림 한 장에서 두 다리를 찾아 엉덩이를 축으로 번갈아 흔든 프레임(걷기·달리기 8장, 점프·낙하·매달리기)을
      만든다. 발목 높이에서 떨어진 두 덩어리(두 발)를 찾고, 그 사이 틈을 따라 올라가 다리가 갈라지는 곳(가랑이·옷단)을
@@ -753,15 +672,95 @@
     m.set(key, out);
     return out;
   }
-  function frameFor(cv, anim, t) {
-    switch (anim) {
-      case "walk": return legFrame(cv, "walk", Math.floor(((t * WALK_RATE) / TAU) * 8) % 8);
-      case "run": return legFrame(cv, "run", Math.floor(((t * RUN_RATE) / TAU) * 8) % 8);
-      case "jump": return legFrame(cv, "jump", 0);
-      case "fall": return legFrame(cv, "fall", 0);
-      case "climb": return legFrame(cv, "climb", Math.floor(t * 6) % 2);
-      default: return cv;
+  /* ── 자세 프레임 ──
+     참고 시트처럼 동작마다 뚜렷하게 다른 자세를 몇 장씩 만들어 끊어서 번갈아 보여 준다. 자세 한 장은
+     다리 프레임(legFrame) 위에서 몸을 가로 띠로 나눠 띠마다 옮겨 그린 것이다:
+     lean 위로 갈수록 앞으로 기울기, sq 발밑을 축으로 늘이기·누르기, trail 머리카락·망토가 뒤로 날리기, wave 물결 */
+  const WALK_FPS = 10;
+  const RUN_FPS = 14;
+  function warp(src, p) {
+    const W = src.width;
+    const H = src.height;
+    const padX = Math.ceil(H * 0.32);
+    const padT = Math.ceil(H * 0.2);
+    const out = canvas(W + padX * 2, H + padT);
+    const g = out.getContext("2d");
+    g.imageSmoothingEnabled = true;
+    const N = 20;
+    const sq = p.sq || 1;
+    for (let i = 0; i < N; i++) {
+      const y0 = (i * H) / N;
+      const hs = H / N;
+      const u = 1 - (y0 + hs / 2) / H;
+      const dx = (p.lean || 0) * H * u
+        - (p.trail || 0) * H * Math.pow(Math.max(0, u - 0.35) / 0.65, 1.6)
+        + (p.wave || 0) * H * Math.sin((p.phase || 0) + u * 6) * u;
+      g.drawImage(src, 0, y0, W, hs + 0.6, padX + dx, padT + H - (H - y0) * sq, W, hs * sq + 0.8);
     }
+    out.anchorX = (src.anchorX === undefined ? W * 0.46 : src.anchorX) + padX;
+    return out;
+  }
+  /* 공격 자세 [준비, 내지르기, 마무리]. dx·dy는 키 비율, ghost는 잔상 */
+  const LUNGE = ["run", 2];
+  const ATTACK_POSE = {
+    slash: [{ lean: -0.14, sq: 0.95, dx: -0.05, trail: -0.02 }, { lean: 0.2, sq: 0.97, sx: 1.1, dx: 0.12, trail: 0.08, ghost: 1, legs: LUNGE }, { lean: 0.08, dx: 0.06, trail: 0.03, legs: LUNGE }],
+    thrust: [{ lean: -0.08, sx: 0.9, dx: -0.1 }, { lean: 0.12, sx: 1.16, dx: 0.22, trail: 0.1, ghost: 1, legs: LUNGE }, { lean: 0.05, dx: 0.1, legs: LUNGE }],
+    smash: [{ lean: -0.18, sq: 1.14, sx: 0.9, dy: -0.06 }, { lean: 0.24, sq: 0.8, sx: 1.2, dx: 0.08, trail: 0.06, ghost: 1, legs: LUNGE }, { lean: 0.1, sq: 0.92, dx: 0.04, legs: LUNGE }],
+    twin: [{ lean: -0.08, dx: -0.03 }, { lean: 0.18, sx: 1.08, dx: 0.1, trail: 0.06, ghost: 1, legs: LUNGE }, { lean: -0.06, sx: 1.06, dx: 0.08, ghost: 1, legs: LUNGE }],
+    jab: [{ lean: -0.05, dx: -0.04 }, { lean: 0.14, sx: 1.08, dx: 0.14, ghost: 1, legs: LUNGE }, { lean: 0.04, dx: 0.05 }],
+    lash: [{ lean: -0.16, dx: -0.06, dy: -0.02 }, { lean: 0.14, sx: 1.06, dx: 0.06, trail: 0.05, legs: LUNGE }, { lean: 0.04 }],
+    sweep: [{ lean: -0.15, sq: 0.94, dx: -0.07 }, { lean: 0.22, sq: 0.92, sx: 1.12, dx: 0.05, trail: 0.08, ghost: 1, legs: LUNGE }, { lean: 0.1, dx: 0.02, legs: LUNGE }],
+    stab: [{ lean: -0.08, sq: 0.95, dx: -0.06 }, { lean: 0.16, sx: 1.1, dx: 0.16, ghost: 1, legs: LUNGE }, { lean: 0.05, dx: 0.06 }],
+    shoot: [{ lean: -0.04, dx: -0.02 }, { lean: -0.1, dx: -0.08, sx: 1.03 }, { lean: -0.03, dx: -0.03 }],
+    cast: [{ lean: -0.1, sq: 1.05, dy: -0.03, trail: -0.03 }, { lean: 0.12, sx: 1.06, dx: 0.06, trail: 0.05 }],
+    read: [{ lean: 0.06, sq: 0.97 }, { lean: 0.12, dx: 0.05 }],
+    raise: [{ lean: -0.06, sq: 1.08, dy: -0.05, trail: -0.04 }, { lean: 0.02, sq: 1.05, dy: -0.03 }]
+  };
+  const LEGACY = { windup: ["slash", 0], strike: ["slash", 1], follow: ["slash", 2] };
+  function poseOf(anim, t, f) {
+    const P = { key: anim, legs: null, lean: 0, sq: 1, sx: 1, dx: 0, dy: 0, trail: 0, wave: 0, phase: 0, ghost: 0 };
+    if (LEGACY[anim]) { f = LEGACY[anim][1]; anim = LEGACY[anim][0]; }
+    if (ATTACK_POSE[anim]) {
+      const list = ATTACK_POSE[anim];
+      const k = Math.min(list.length - 1, f || 0);
+      return Object.assign(P, list[k], { key: anim + k });
+    }
+    switch (anim) {
+      case "walk": {
+        const i = Math.floor(t * WALK_FPS) % 6;
+        const ph = (i / 6) * TAU;
+        return Object.assign(P, { key: "walk" + i, legs: ["walk", Math.round((i * 8) / 6) % 8], lean: 0.05, sq: 1 + 0.035 * Math.cos(2 * ph), dy: -0.045 * Math.abs(Math.cos(ph)), trail: 0.025 + 0.015 * Math.sin(ph), wave: 0.012, phase: ph });
+      }
+      case "run": {
+        const i = Math.floor(t * RUN_FPS) % 6;
+        const ph = (i / 6) * TAU;
+        return Object.assign(P, { key: "run" + i, legs: ["run", Math.round((i * 8) / 6) % 8], lean: 0.17, sq: 1 + 0.05 * Math.cos(2 * ph), dy: -0.07 * Math.abs(Math.cos(ph)), trail: 0.08 + 0.025 * Math.sin(ph * 2), wave: 0.02, phase: ph });
+      }
+      case "jump": return Object.assign(P, { key: "jump", legs: ["jump", 0], sq: 1.1, sx: 0.92, lean: 0.06, trail: -0.03 });
+      case "fall": return Object.assign(P, { key: "fall", legs: ["fall", 0], sq: 1.04, lean: -0.03, trail: -0.07 });
+      case "land": return Object.assign(P, { key: "land", legs: ["jump", 0], sq: 0.8, sx: 1.16, lean: 0.04 });
+      case "climb": { const i = Math.floor(t * 6) % 2; return Object.assign(P, { key: "climb" + i, legs: ["climb", i], dy: -0.02 * i }); }
+      case "hurt": return Object.assign(P, { key: "hurt", lean: -0.16, dx: -0.06, sq: 0.95, trail: -0.04 });
+      case "play": { const i = Math.floor(t * 8) % 4; return Object.assign(P, { key: "play" + i, lean: [0.06, 0, -0.06, 0][i], sq: [1, 1.03, 1, 0.98][i], dy: -0.02 * (i % 2) }); }
+      case "victory": { const i = Math.floor(t * 6) % 2; return Object.assign(P, { key: "victory" + i, sq: i ? 1.06 : 0.96, dy: i ? -0.05 : 0 }); }
+      default: {
+        /* 대기: 숨쉬기 네 장 */
+        const i = Math.floor(t * 3) % 4;
+        return Object.assign(P, { key: "idle" + i, sq: [1, 1.015, 1.028, 1.015][i], lean: [0, 0.005, 0.01, 0.005][i], wave: 0.006, phase: (i * Math.PI) / 2 });
+      }
+    }
+  }
+  const poseCache = new WeakMap();
+  function poseFrame(base, P) {
+    let m = poseCache.get(base);
+    if (!m) poseCache.set(base, (m = new Map()));
+    let fr = m.get(P.key);
+    if (!fr) {
+      const src = P.legs ? legFrame(base, P.legs[0], P.legs[1]) : base;
+      fr = warp(src, P);
+      m.set(P.key, fr);
+    }
+    return fr;
   }
 
   /* ── 덧그림. 좌표는 그림의 발밑이 (0,0)인 로컬 좌표(오른쪽을 봄) ── */
@@ -1171,48 +1170,65 @@
     const hh = o.h * lk.size;
     const base = sprite(job, hh);
     if (!base) return drawDoll(ctx, job, x, y, o);
-    const cv = frameFor(base, o.anim, o.t || 0);
+    const P = poseOf(o.anim, o.t || 0, o.f || 0);
+    const fr = poseFrame(base, P);
     const T = o.time !== undefined ? o.time : clock();
-    const m = motion(o.anim, o.t || 0, o.f || 0);
-    if (lk.float) m.dy -= 0.03 + Math.sin(T * 2.4) * 0.015;
+    let dy = P.dy;
+    if (lk.float) dy -= 0.03 + Math.sin(T * 2.4) * 0.015;
     const dir = o.dir || 1;
-    const A = anchors(analyze(srcKey(job, lk)), cv);
+    const A = anchors(analyze(srcKey(job, lk)), base);
     const alpha = (o.alpha === undefined ? 1 : o.alpha) * (lk.ghost ? 0.6 : 1);
+    const fx = -fr.anchorX;
+    const fy = -fr.height;
+    /* 덧그림(날개·기운·뿔…)도 몸과 같이 기울고 눌리게 */
+    const bend = () => ctx.transform(1, 0, -P.lean, P.sq, 0, 0);
     ctx.save();
-    ctx.translate(Math.round(x + m.dx * hh * dir), Math.round(y + m.dy * hh));
-    ctx.scale(dir * m.sx * lk.wide, m.sy);
-    ctx.rotate(m.rot);
+    ctx.translate(Math.round(x + P.dx * hh * dir), Math.round(y + dy * hh));
+    ctx.scale(dir * P.sx * lk.wide, 1);
     ctx.imageSmoothingEnabled = true;
     ctx.globalAlpha = alpha;
+    ctx.save();
+    bend();
     if (lk.aura) aura(ctx, lk.aura, A, T, false);
     if (lk.wings) wings(ctx, lk.wings, A, T);
-    if (lk.clone === "twin") {
-      const b = Math.sin(T * 2.6 + 1.5) * A.H * 0.012;
-      ctx.drawImage(tinted(cv, "#1a1430", 0.3), -A.ax - A.W * 0.3, -A.H * 0.94 + b, A.W * 0.94, A.H * 0.94);
-    } else if (lk.clone === "shadow") {
-      ctx.globalAlpha = alpha * 0.45;
-      ctx.drawImage(tinted(cv, "#140a24", 0.88), -A.ax - A.W * (0.22 + Math.sin(T * 1.6) * 0.05), -A.H);
-      ctx.globalAlpha = alpha;
-    }
     if (lk.rarity >= 3) {
       const gl = glow(base, F.sprites.RARITY_COLOR[lk.rarity]);
       ctx.globalAlpha = alpha * (0.45 + 0.12 * (lk.rarity - 3) + Math.sin(T * 3) * 0.2);
       ctx.drawImage(gl, -A.ax - gl.pad, -A.H - gl.pad);
       ctx.globalAlpha = alpha;
     }
-    ctx.drawImage(lk.ghost ? tinted(cv, "#a8dcff", 0.3) : cv, -A.ax, -A.H);
+    ctx.restore();
+    if (lk.clone === "twin") {
+      const b = Math.sin(T * 2.6 + 1.5) * A.H * 0.012;
+      ctx.drawImage(tinted(fr, "#1a1430", 0.3), fx - A.W * 0.3, fy * 0.94 + b, fr.width * 0.94, fr.height * 0.94);
+    } else if (lk.clone === "shadow") {
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.drawImage(tinted(fr, "#140a24", 0.88), fx - A.W * (0.22 + Math.sin(T * 1.6) * 0.05), fy);
+      ctx.globalAlpha = alpha;
+    }
+    /* 잔상: 달리기와 공격이 맞는 순간 */
+    if (P.ghost) {
+      const gh = tinted(fr, "#c8d4ff", 0.55);
+      [[0.3, 0.14], [0.15, 0.28]].forEach(([a, off]) => {
+        ctx.globalAlpha = alpha * a;
+        ctx.drawImage(gh, fx - off * hh, fy);
+      });
+      ctx.globalAlpha = alpha;
+    }
+    ctx.drawImage(lk.ghost ? tinted(fr, "#a8dcff", 0.3) : fr, fx, fy);
+    if (o.tint) {
+      ctx.globalAlpha = alpha * (o.tintA || 0.5);
+      ctx.drawImage(tinted(fr, o.tint, 1), fx, fy);
+      ctx.globalAlpha = alpha;
+    }
+    bend();
     if (lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
     if (lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
     if (lk.crown) crown(ctx, A);
     if (lk.halo) halo(ctx, A, T);
-    if (o.tint) {
-      ctx.globalAlpha = alpha * (o.tintA || 0.5);
-      ctx.drawImage(tinted(cv, o.tint, 1), -A.ax, -A.H);
-      ctx.globalAlpha = alpha;
-    }
     if (lk.aura) aura(ctx, lk.aura, A, T, true);
     ctx.restore();
-    return { w: cv.width, h: cv.height, hand: [x + dir * cv.width * 0.36, y - cv.height * 0.45] };
+    return { w: base.width, h: base.height, hand: [x + dir * base.width * 0.36, y - base.height * 0.45] };
   }
 
   /* 그림을 아직 못 읽었거나 없으면 예전 도트 인형으로 대신한다 */
@@ -1244,5 +1260,5 @@
     return out;
   }
 
-  F.heroArt = { preload, sprite, draw, url, image, motion, analyze, headOf, compose };
+  F.heroArt = { preload, sprite, draw, url, image, analyze, headOf, compose };
 })(typeof window !== "undefined" ? window : globalThis);
