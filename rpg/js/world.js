@@ -64,47 +64,58 @@
     return S.makeCanvas(Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h)));
   }
 
-  /* ── 던전 단계: 10층마다 바뀐다 ── */
+  /* ── 밤의 지역: 10층마다 바뀐다(참고: 마법사의 밤) ──
+     sky 하늘 세 단, moon 달, far·near 먼 산·가까운 산, row 지평선 실루엣 줄(posts 말뚝, pines 전나무, crosses 묘비, spires 첨탑),
+     castle 먼 성(0 없음, 1 성 하나, 2 무너진 탑들), ridge 산 모양, ground 땅(body 몸, top·top2 윗면 두 줄, speck 점), plants 작은 마법 풀,
+     tint 소품을 밤빛으로 덮는 색 */
   const THEMES = [
     {
-      name: "흙동굴", bg: ["#100907", "#1e130e", "#2c1d15"], wall: ["#24170f", "#2e1e15", "#3a281c"], pillar: ["#1a100b", "#2a1a12"],
-      top: ["#3a2416", "#6a4428", "#93653c", "#c08a56"], soil: ["#1e120c", "#33201a", "#4a3024", "#634232"], stone: ["#4a3a36", "#7a665c", "#a8948a"],
-      flower: [], blades: false, rope: "rope", props: ["stalagmite", "rock", "barrel", "stalagmite", "crate", "bones"], ambient: "dust", glint: "#ffb060"
+      name: "별빛 숲", sky: ["#101126", "#202047", "#35274d"], moon: ["#d4d1ff", "#c2c3ed", "#989ac9"], stars: ["#d4d4ff", "#a9b2ed"],
+      far: "#272743", near: "#1d2039", sil: "#191a31", row: "pines", castle: 1, ridge: "zig",
+      ground: { body: "#201a32", deep: "#181428", top: "#514064", top2: "#352843", speck: ["#7c5f82", "#554166"], line: "#0e0a18" },
+      plants: ["#437a80", "#75c6bd", "#7f83dc"], stone: ["#3a3456", "#5a5280", "#8a82b0"], crystals: ["#75c6bd", "#7f83dc", "#a58dff"],
+      rope: "vine", props: ["tree", "bush", "mushroom", "rock", "bush"], tint: "rgba(18,16,52,0.5)", ambient: "firefly", glint: "#a58dff"
     },
     {
-      name: "이끼 석굴", bg: ["#06100c", "#0d1d17", "#142b22"], wall: ["#12221b", "#182b23", "#1f362c"], pillar: ["#0b1712", "#13241c"],
-      top: ["#16402a", "#2a6a3c", "#45964e", "#82c86a"], soil: ["#141a1c", "#232c2e", "#334042", "#465658"], stone: ["#33403e", "#56706a", "#86a49c"],
-      flower: ["#9effc8", "#e6ff8a", "#7ad8ff"], crystals: ["#6affb8", "#9effe0", "#4ad8a0"], blades: true, rope: "vine", props: ["mushroom", "stalagmite", "mushroom", "rock", "crystal"], ambient: "firefly", glint: "#9effc8"
+      name: "달빛 언덕", sky: ["#0c1428", "#1a2a50", "#2c3e66"], moon: ["#eef2ff", "#dfe6ff", "#a8b4dc"], stars: ["#e0e8ff", "#a8bce8"],
+      far: "#243457", near: "#1a2642", sil: "#141d33", row: "posts", castle: 0, ridge: "round",
+      ground: { body: "#1b2034", deep: "#141828", top: "#4f6488", top2: "#2e3a56", speck: ["#7a90b8", "#3e4c6c"], line: "#0a0e1a" },
+      plants: ["#3f6e7a", "#8fd8e8", "#c8d4ff"], stone: ["#34405c", "#566488", "#8a98b8"], crystals: ["#8fd8e8", "#c8d4ff", "#7f9bff"],
+      rope: "rope", props: ["rock", "bush", "fence", "tree", "sign"], tint: "rgba(14,22,52,0.5)", ambient: "dust", glint: "#c8d4ff"
     },
     {
-      name: "지하 묘지", bg: ["#0a0812", "#151222", "#201c32"], wall: ["#191628", "#211d33", "#2a263f"], pillar: ["#110f1d", "#1c192c"],
-      top: ["#3a3650", "#58547a", "#7a76a0", "#a6a2c8"], soil: ["#14121e", "#221f32", "#302c46", "#3e3a58"], stone: ["#3a3650", "#5e5a80", "#8e8ab0"],
-      flower: [], blades: false, brick: true, rope: "chain", props: ["tomb", "candles", "bones", "tomb", "column"], ambient: "wisp", glint: "#b3a6ff"
+      name: "폐성 외곽", sky: ["#140b20", "#2a1636", "#4a2240"], moon: ["#ffe0d0", "#f4c8b8", "#c08a8a"], stars: ["#ffd8e8", "#c8a8d8"],
+      far: "#2e1c3a", near: "#211530", sil: "#170f22", row: "crosses", castle: 2, ridge: "zig",
+      ground: { body: "#22172a", deep: "#1a1020", top: "#5e3f5e", top2: "#3a2840", speck: ["#8a5a78", "#4e3550"], line: "#100812" },
+      plants: ["#5a3a5a", "#ff8ab8", "#b88aff"], stone: ["#3e3046", "#62506e", "#968aa6"], crystals: ["#ff8ab8", "#b88aff", "#ffb0d8"],
+      rope: "chain", props: ["tomb", "candles", "column", "deadtree", "tomb"], tint: "rgba(30,12,40,0.5)", ambient: "wisp", glint: "#ff8ab8"
     },
     {
-      name: "얼음 동굴", bg: ["#050d18", "#0c1b2e", "#142a44"], wall: ["#10243a", "#163048", "#1e3c58"], pillar: ["#0a1a2c", "#122640"],
-      top: ["#6e8cb4", "#a8c4e2", "#dceaf8", "#ffffff"], soil: ["#16243a", "#22365a", "#304a78", "#406098"], stone: ["#3a5070", "#6a84a8", "#a8c0dc"],
-      flower: [], crystals: ["#6ad8ff", "#a8f0ff", "#6ab0ff"], blades: false, rope: "ladder", props: ["icicle", "crystal", "rock", "icicle"], ambient: "snow", glint: "#bff0ff"
+      name: "서리 고원", sky: ["#08121f", "#142a46", "#1f3858"], moon: ["#f4faff", "#e4f2ff", "#a8c4e0"], stars: ["#ffffff", "#bfe0ff"],
+      far: "#2a4468", near: "#18283f", sil: "#111c32", row: "pines", castle: 0, ridge: "peaks", snow: "#9ab4d4",
+      ground: { body: "#1a2236", deep: "#131a2a", top: "#a8c8e8", top2: "#5a7aa0", speck: ["#d0e4f8", "#3a4c6c"], line: "#0a101c" },
+      plants: ["#3a6a8a", "#bff0ff", "#8ab8ff"], stone: ["#3a4c6a", "#6a84a8", "#a8c0dc"], crystals: ["#bff0ff", "#8ab8ff", "#e0f4ff"],
+      rope: "ladder", props: ["rock", "deadtree", "crystal", "rock"], tint: "rgba(14,28,56,0.45)", ambient: "snow", glint: "#bff0ff"
     },
     {
-      name: "심연", bg: ["#06030b", "#130822", "#260d34"], wall: ["#170a24", "#1f0e30", "#28123c"], pillar: ["#0f0618", "#1a0b28"],
-      top: ["#2a1038", "#4a1e5e", "#7a34a0", "#c26ae0"], soil: ["#0c0610", "#180c22", "#261434", "#361e48"], stone: ["#2a2036", "#4a3a5e", "#7a6a96"],
-      flower: ["#ff6ad8", "#8ae8ff"], crystals: ["#b46aff", "#ff6ad8", "#8a6aff"], blades: false, rope: "chain", props: ["crystal", "deadtree", "crystal", "rock"], ambient: "ember", glint: "#ff6ad8"
+      name: "심연의 밤", sky: ["#06030c", "#170a28", "#34103e"], moon: ["#ff9ab8", "#f07aa0", "#a8406a"], stars: ["#ffb8e0", "#b88aff"],
+      far: "#22102e", near: "#180a24", sil: "#10061a", row: "spires", castle: 2, ridge: "spikes",
+      ground: { body: "#150a1e", deep: "#0e0616", top: "#6a2e86", top2: "#3a1650", speck: ["#b05ad0", "#4a2060"], line: "#08030c" },
+      plants: ["#4a1e5e", "#ff6ad8", "#8ae8ff"], stone: ["#2e2040", "#4e3a6a", "#7e6a9e"], crystals: ["#ff6ad8", "#8ae8ff", "#b46aff"],
+      rope: "chain", props: ["crystal", "deadtree", "crystal", "rock"], tint: "rgba(24,6,40,0.5)", ambient: "ember", glint: "#ff6ad8"
     }
   ];
-  /* 마을은 바깥: 하늘과 언덕이 보인다 */
-  const TOWN_THEME = {
-    name: "운명의 마을", outdoor: true, sky: ["#4aa6ea", "#8fcdf6", "#d6f0ff"], sun: "#fff4c4", far: ["#86b4dc", "#a3c9e6"], mid: ["#4f9468", "#6aad7c"],
-    top: ["#1f5a2c", "#358a3c", "#58b44a", "#9edd6c"], soil: ["#2e1a12", "#4f3122", "#704630", "#946243"], stone: ["#5a5a6c", "#8e8ea2", "#c4c4d4"],
-    flower: ["#ffffff", "#ffd84a", "#ff8ab0", "#b9a6ff"], blades: true, rope: "ladder", props: [], ambient: "petal"
-  };
+  /* 마을도 밤: 등불과 창문이 밝다 */
+  const TOWN_THEME = Object.assign({}, THEMES[0], {
+    name: "운명의 마을", row: "posts", castle: 1, props: [], tint: "rgba(20,16,52,0.38)", ambient: "firefly", rope: "ladder"
+  });
 
   function floorThemeIndex(n) {
     return Math.floor((Math.max(1, n) - 1) / 10) % THEMES.length;
   }
   function floorName(n) {
     if (n <= 0) return TOWN_THEME.name;
-    return `지하 ${n}층 · ${THEMES[floorThemeIndex(n)].name}${n % 10 === 0 ? " · 보스" : ""}`;
+    return `${n}층 · ${THEMES[floorThemeIndex(n)].name}${n % 10 === 0 ? " · 보스" : ""}`;
   }
 
   /* ─────────── 소품 (Painter) ─────────── */
@@ -252,27 +263,21 @@
     });
   }
   /* 층의 양 끝 계단: 바위 아치 안으로 계단이 이어진다 */
-  function stairway(down, th, z) {
-    return painted(`stair${down ? "d" : "u"}${th.name}`, 96, 100, z, (P) => {
-      P.use(th.stone[0]); P.ellipse(48, 64, 46, 44, (x, y) => y < 99);
-      P.use(th.stone[1]); P.ellipse(48, 60, 40, 38, (x, y) => y < 99);
-      P.use("#05030a", { edge: 0 }); P.poly([[24, 99], [72, 99], [72, 54], [64, 38], [48, 32], [32, 38], [24, 54]]);
-      for (let i = 0; i < 5; i++) {
-        const y = down ? 66 + i * 7 : 92 - i * 9;
-        const x1 = down ? 26 + i * 3 : 26 + i * 6;
-        const x2 = down ? 70 - i * 3 : 70;
-        P.use(mixHex(th.stone[1], "#05030a", down ? 0.2 + i * 0.15 : 0.6 - i * 0.1), { edge: 0 }); P.poly([[x1, y], [x2, y], [x2, y + 3], [x1, y + 3]]);
-      }
-      P.use(th.stone[2], { edge: 0 }); P.capsule(30, 30, 66, 30, 0.8);
-    });
-  }
-  function caveMouth(z) {
-    return painted("cavemouth", 150, 120, z, (P) => {
-      P.use("#6a6a80"); P.ellipse(75, 74, 72, 46); P.ellipse(36, 80, 34, 36); P.ellipse(114, 80, 34, 36);
-      P.use("#55556a"); P.ellipse(52, 52, 20, 13); P.ellipse(100, 56, 22, 14);
-      P.use("#05030a", { edge: 0 }); P.ellipse(75, 98, 24, 26, (x, y) => y < 119);
-      P.use("#7a5236"); P.capsule(46, 78, 46, 116, 1.8); P.capsule(104, 78, 104, 116, 1.8);
-      P.use("#3a3a46"); P.poly([[42, 74], [50, 74], [49, 79], [43, 79]]); P.poly([[100, 74], [108, 74], [107, 79], [101, 79]]);
+  /* 층과 층 사이의 문: 돌기둥 두 개와 아치, 안쪽은 어둠 속에 은은한 빛(돌아가는 문은 푸른빛, 나아가는 문은 보랏빛) */
+  function gate(down, th, z) {
+    return painted(`gate${down ? "d" : "u"}${th.name}`, 76, 104, z, (P) => {
+      const glow = down ? "#b88aff" : "#8ae8ff";
+      P.use(th.stone[0]); P.poly([[4, 103], [22, 103], [20, 40], [6, 40]]); P.poly([[54, 103], [72, 103], [70, 40], [56, 40]]);
+      P.use(th.stone[0]); P.ellipse(38, 42, 36, 32, (x, y) => y < 44);
+      P.use("#06040e", { edge: 0 }); P.ellipse(38, 46, 20, 22, (x, y) => y < 46); P.poly([[18, 46], [58, 46], [58, 103], [18, 103]]);
+      P.use(mixHex(glow, "#06040e", 0.72), { edge: 0 }); P.ellipse(38, 74, 14, 26);
+      P.use(mixHex(glow, "#06040e", 0.45), { edge: 0 }); P.ellipse(38, 80, 8, 18);
+      P.use(th.stone[1], { edge: 0 }); P.poly([[8, 100], [18, 100], [17, 44], [9, 44]]); P.poly([[58, 100], [68, 100], [67, 44], [59, 44]]);
+      P.use(th.stone[2], { edge: 0 }); P.capsule(10, 98, 10, 46, 0.8); P.capsule(60, 98, 60, 46, 0.8);
+      /* 아치 머릿돌의 룬 */
+      P.use(th.stone[1], { edge: 0 }); P.poly([[31, 8], [45, 8], [43, 18], [33, 18]]);
+      P.dot(38, 12, glow).dot(37, 13, glow).dot(39, 13, glow).dot(38, 14, glow);
+      for (let i = 0; i < 4; i++) P.dot(26 + i * 8, 26 - Math.abs(i - 1.5) * 2, glow);
     });
   }
   function fateTablet(frame, z) {
@@ -344,17 +349,18 @@
       case "candles": return candles(z);
       case "column": return column(v, th, z);
       case "torch": return torchPost(z);
-      case "up": return stairway(false, th, z);
-      case "down": return stairway(true, th, z);
-      case "cave": return caveMouth(z);
+      case "up": return gate(false, th, z);
+      case "down": return gate(true, th, z);
+      case "cave": return gate(true, th, z);
       case "shop": case "inn": case "guild": return building(kind, z);
       default: return null;
     }
   }
 
   /* ─────────── 지형 칠하기 ─────────── */
-  /* 발판 하나: 위는 풀(눈·바위) 테두리, 아래는 흙. 떠 있는 발판은 아래가 둥글게 깎인 섬 모양 */
-  function paintTerrain(map, z) {
+  /* 참고(마법사의 밤)의 땅: 보랏빛 몸, 위로 밝은 줄 두 개, 드문드문 점, 작은 마법 풀.
+     떠 있는 발판은 같은 윗면에 아래가 들쭉날쭉 깎인 바위. 크기는 참고 그림의 한 칸을 E()로 바꾼다 */
+  function paintTerrain(map, z, lightsOut) {
     const W = Math.ceil(map.W * z);
     const H = Math.ceil(map.H * z);
     const cv = canvas(W, H);
@@ -362,12 +368,19 @@
     const img = g.createImageData(W, H);
     const buf = new Uint32Array(img.data.buffer);
     const th = map.theme;
-    const top = th.top.map((c) => u32(c));
-    const soil = th.soil.map((c) => u32(c));
-    const line = u32(mixHex(th.soil[0], "#000000", 0.45));
-    const topLine = u32(mixHex(th.top[0], "#000000", 0.35));
+    const gr = th.ground;
+    const E = (n) => Math.max(1, Math.round((n * z) / 2));
+    const body = u32(gr.body);
+    const deep = u32(gr.deep);
+    const top = u32(gr.top);
+    const top2 = u32(gr.top2);
+    const sp = gr.speck.map((c) => u32(c));
+    const line = u32(gr.line);
+    const pl3 = th.plants.map((c) => u32(c));
+    const N = (hex) => u32(mixHex(hex, "#16143a", 0.38));
     const set = (x, y, c) => { if (x >= 0 && y >= 0 && x < W && y < H) buf[y * W + x] = c; };
     const get = (x, y) => (x >= 0 && y >= 0 && x < W && y < H ? buf[y * W + x] : 0);
+    const rect = (x, y, w, h, c) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) set(xx, yy, c); };
 
     map.plats.forEach((pl, pi) => {
       const seed = map.seed * 31 + pi * 977;
@@ -375,137 +388,48 @@
       const x2 = Math.round(pl.x2 * z);
       const y0 = Math.round(pl.y * z);
       const span = Math.max(1, x2 - x1);
-      const thick = pl.ground ? H - y0 : Math.round((18 + hash(pi, 1, seed) * 8) * z);
-      /* 흙 */
-      for (let x = x1; x < x2; x++) {
-        const u = (x - x1) / span;
-        let depth = thick;
-        if (!pl.ground) {
-          const e = Math.abs(u * 2 - 1);
-          depth = Math.round(thick * (1 - Math.pow(e, 2.4) * 0.82) + (smooth(x / (6 * z), seed) - 0.5) * 5 * z);
-          depth = Math.max(3 * z, depth);
+      if (pl.ground) {
+        rect(x1, y0, span, H - y0, body);
+        /* 아래쪽은 한 단 어두운 띠 */
+        rect(x1, y0 + E(64), span, H - y0 - E(64), deep);
+        rect(x1, y0 + E(64), span, E(2), line);
+      } else {
+        /* 떠 있는 바위: 윗면은 평평, 아랫면은 가운데가 두껍고 들쭉날쭉 */
+        const thick = E(34 + hash(pi, 1, seed) * 14);
+        for (let x = x1; x < x2; x++) {
+          const u = Math.abs(((x - x1) / span) * 2 - 1);
+          const jag = Math.floor(hash(Math.floor(x / E(5)), 2, seed) * 3) * E(3);
+          const d = Math.max(E(8), Math.round(thick * (1 - Math.pow(u, 1.8) * 0.75)) - jag);
+          for (let k = 0; k < d; k++) set(x, y0 + k, k > d - E(6) ? deep : body);
+          set(x, y0 + d, line);
         }
-        for (let d = 0; d < depth; d++) {
-          const y = y0 + d;
-          const band = Math.floor((d + smooth(x / (14 * z), seed + 7) * 6 * z) / (9 * z));
-          let c = band === 0 ? soil[3] : band % 2 ? soil[2] : soil[1];
-          if (!pl.ground && d > depth - 4 * z) c = soil[1];
-          if (!pl.ground && d > depth - 2 * z) c = soil[0];
-          if (pl.ground && d > 60 * z) c = soil[0];
-          else if (pl.ground && d > 36 * z) c = (band + (hash(x >> 1, y >> 1, seed) < 0.5 ? 0 : 1)) % 2 ? soil[1] : soil[0];
-          if (th.brick && d > 5 * z) {
-            /* 묘지 벽돌: 가로 줄눈과 엇갈린 세로 줄눈 */
-            const bh = Math.round(8 * z);
-            const row = Math.floor(d / bh);
-            const bx = Math.round(16 * z);
-            const off = row % 2 ? Math.round(bx / 2) : 0;
-            const mortar = d % bh === 0 || (x + off) % bx === 0;
-            c = mortar ? soil[0] : (hash(Math.floor((x + off) / bx), row, seed) < 0.5 ? soil[2] : soil[1]);
-          }
-          const n = hash(x, y, seed);
-          if (n < 0.025) c = soil[Math.max(0, band === 0 ? 2 : 0)];
-          else if (n > 0.985) c = soil[3];
-          if (!pl.ground && d === depth - 1) c = line;
-          set(x, y, c);
-        }
-        if (!pl.ground) set(x, y0 + depth, line);
-      }
-      if (!pl.ground) for (let d = 0; d < thick; d++) {
-        if (get(x1, y0 + d)) set(x1 - 1, y0 + d, line);
-        if (get(x2 - 1, y0 + d)) set(x2, y0 + d, line);
-      }
-      /* 박힌 돌 */
-      const r = rng(seed + 5);
-      const stones = Math.floor(span / (38 * z));
-      for (let i = 0; i < stones; i++) {
-        const cx = x1 + r() * span;
-        const cy = y0 + (9 + r() * (pl.ground ? 40 : 6)) * z;
-        const rx = (2.6 + r() * 3.4) * z;
-        const ry = rx * (0.6 + r() * 0.25);
-        if (!pl.ground && Math.abs((cx - x1) / span * 2 - 1) > 0.7) continue;
-        for (let y = Math.floor(cy - ry - 1); y <= cy + ry + 1; y++) {
-          for (let x = Math.floor(cx - rx - 1); x <= cx + rx + 1; x++) {
-            const dx = (x + 0.5 - cx) / rx;
-            const dy = (y + 0.5 - cy) / ry;
-            const dd = dx * dx + dy * dy;
-            if (!get(x, y)) continue;
-            if (dd <= 1) {
-              const lit = -dx * 0.6 - dy * 0.8;
-              set(x, y, u32(lit > 0.45 ? th.stone[2] : lit > -0.25 ? th.stone[1] : th.stone[0]));
-            } else if (dd <= 1.45) set(x, y, line);
-          }
+        for (let k = 0; k < thick; k++) {
+          if (get(x1, y0 + k)) set(x1 - 1, y0 + k, line);
+          if (get(x2 - 1, y0 + k)) set(x2, y0 + k, line);
         }
       }
-      /* 위 테두리(풀) */
-      const over = Math.round(3 * z);
-      const lipBase = Math.round(5 * z);
-      for (let x = x1 - over; x < x2 + over; x++) {
-        const edge = x < x1 ? (x1 - x) / over : x >= x2 ? (x - x2 + 1) / over : 0;
-        const bump = Math.round(smooth(x / (5 * z), seed + 3) * 1.6 * z);
-        const yt = y0 - Math.round(1.2 * z) - bump + Math.round(edge * edge * 2 * z);
-        let lip = Math.round(lipBase * (1 - edge * 0.55) + smooth(x / (3 * z), seed + 9) * 2 * z);
-        const drip = hash(Math.floor(x / Math.max(1, Math.round(1.5 * z))), 3, seed) < 0.14 ? Math.round((1 + hash(x, 4, seed) * 4) * z) : 0;
-        lip += drip;
-        for (let y = yt; y < y0 + lip; y++) {
-          const d = y - yt;
-          const total = y0 + lip - yt;
-          let c;
-          if (d === 0) c = top[3];
-          else if (d < 1.4 * z) c = hash(x, y, seed + 2) < 0.7 ? top[3] : top[2];
-          else if (d < total * 0.55) c = top[2];
-          else if (y < y0 + lip - Math.max(1, Math.round(0.8 * z))) c = top[1];
-          else c = top[0];
-          if (hash(x, y, seed + 11) < 0.05 && d > 1) c = top[d < total * 0.5 ? 3 : 1];
-          set(x, y, c);
-        }
-        set(x, yt - 1, topLine);
-        set(x, y0 + lip, topLine);
-        /* 풀잎(이끼) */
-        if (th.blades && hash(x, 5, seed) < 0.22 && x > x1 && x < x2) {
-          const hgt = Math.round((1 + hash(x, 6, seed) * 3) * z);
-          for (let k = 1; k <= hgt; k++) set(x, yt - k, k === hgt ? top[3] : top[2]);
-          set(x, yt - hgt - 1, topLine);
-          set(x - 1, yt - Math.ceil(hgt / 2), topLine);
-          set(x + 1, yt - Math.ceil(hgt / 2), topLine);
-        }
+      /* 점: 참고처럼 31칸마다 한 쌍 */
+      for (let x = x1 + E(11); x < x2 - E(4); x += E(31)) {
+        const k = Math.round(x / z);
+        const ya = y0 + E(12 + (k % 13));
+        const yb = y0 + E(25 + (k % 17));
+        if (get(x, ya) === body || pl.ground) rect(x, ya, E(2), E(2), sp[0]);
+        if (get(x + E(13), yb) === body || pl.ground) rect(x + E(13), yb, E(3), E(1), sp[1]);
       }
-      for (let d = 0; d < lipBase + 2 * z; d++) {
-        set(x1 - over - 1, y0 - Math.round(z) + d, topLine);
-        set(x2 + over, y0 - Math.round(z) + d, topLine);
-      }
-      /* 꽃 */
-      if (th.flower.length) {
-        const nf = Math.floor(span / (26 * z));
-        for (let i = 0; i < nf; i++) {
-          const fx = Math.round(x1 + (0.05 + 0.9 * hash(i, 8, seed)) * span);
-          const fy = y0 - Math.round(3 * z);
-          const col = u32(th.flower[Math.floor(hash(i, 9, seed) * th.flower.length)]);
-          const s = Math.max(1, Math.round(z * 0.8));
-          for (let k = 0; k < Math.round(2 * z); k++) set(fx, fy + s + k, top[1]);
-          for (let yy = -s; yy <= s; yy++) for (let xx = -s; xx <= s; xx++) if (Math.abs(xx) + Math.abs(yy) <= s) set(fx + xx, fy + yy, col);
-          set(fx, fy, u32("#ffe66a"));
-        }
+      /* 윗면 두 줄 */
+      rect(x1, y0, span, E(4), top);
+      rect(x1, y0 + E(4), span, E(2), top2);
+      rect(x1, y0 - 1, span, 1, line);
+      if (!pl.ground) { rect(x1 - 1, y0 - 1, 1, E(6) + 1, line); rect(x2, y0 - 1, 1, E(6) + 1, line); }
+      /* 작은 마법 풀: 줄기 하나와 잎 두 장. 몇 개는 빛난다 */
+      let n = 0;
+      for (let x = x1 + E(18) + Math.round(hash(pi, 7, seed) * E(30)); x < x2 - E(10); x += E(67) + Math.round(hash(x, 8, seed) * E(30))) {
+        rect(x, y0 - E(7), E(2), E(7), pl3[0]);
+        rect(x - E(3), y0 - E(9), E(3), E(3), pl3[1]);
+        rect(x + E(2), y0 - E(11), E(3), E(3), pl3[2]);
+        if (lightsOut && n++ % 3 === 1) lightsOut.push({ x: (x + E(1)) / z, y: (y0 - E(10)) / z, col: th.plants[1 + (n % 2)], r: 16, flame: false, seed: x });
       }
     });
-
-    /* 동굴 천장: 들쭉날쭉한 바위와 종유석 */
-    if (map.ceiling) {
-      const lip = u32(th.soil[0]);
-      for (let x = 0; x < W; x++) {
-        let depth = (14 + smooth(x / (18 * z), map.seed + 21) * 16) * z;
-        const spike = smooth(x / (4 * z), map.seed + 22);
-        if (spike > 0.72) depth += (spike - 0.72) * 140 * z;
-        depth = Math.round(depth);
-        for (let y = 0; y < depth; y++) {
-          const band = Math.floor((y + smooth(x / (12 * z), map.seed) * 5 * z) / (8 * z));
-          let c = band % 2 ? soil[1] : soil[0];
-          if (y > depth - 3 * z) c = soil[2];
-          if (hash(x, y, map.seed + 5) < 0.03) c = soil[3];
-          set(x, y, y === depth - 1 ? line : c);
-        }
-        set(x, depth, lip);
-      }
-    }
 
     /* 밧줄·사슬·덩굴·사다리 */
     map.ropes.forEach((rp) => {
@@ -516,7 +440,7 @@
       if (style === "ladder") {
         const half = Math.round(6 * z);
         const rail = Math.max(2, Math.round(1.6 * z));
-        const wood = [u32("#5a3a24"), u32("#8a5e3a"), u32("#b8875a")];
+        const wood = [N("#5a3a24"), N("#8a5e3a"), N("#b8875a")];
         for (let y = yA; y < yB; y++) {
           for (let k = 0; k < rail; k++) {
             set(cx - half + k, y, k === 0 ? wood[0] : wood[k === 1 ? 2 : 1]);
@@ -529,7 +453,7 @@
       } else if (style === "chain") {
         /* 사슬: 세로 고리와 가로 고리가 번갈아 */
         const link = Math.round(6 * z);
-        const ch = [u32("#2a2a36"), u32("#6a6a80"), u32("#a8a8c0")];
+        const ch = [N("#2a2a36"), N("#6a6a80"), N("#a8a8c0")];
         for (let y = yA; y < yB; y++) {
           const k = (y - yA) % (link * 2);
           const vertical = k < link;
@@ -544,7 +468,7 @@
         }
       } else if (style === "vine") {
         const wR = Math.max(2, Math.round(1.2 * z));
-        const vine = [u32("#123a20"), u32("#2a6a3c"), u32("#58a84e"), u32("#8ad06a")];
+        const vine = [N("#123a20"), N("#2a6a3c"), N("#58a84e"), N("#8ad06a")];
         for (let y = yA; y < yB; y++) {
           const wob = Math.round(Math.sin((y - yA) / (5 * z)) * z);
           for (let x = cx - wR; x <= cx + wR; x++) set(x + wob, y, x === cx - wR || x === cx + wR ? vine[0] : x === cx - wR + 1 ? vine[2] : vine[1]);
@@ -558,7 +482,7 @@
         }
       } else {
         const wR = Math.max(2, Math.round(1.4 * z));
-        const rope = [u32("#5a3a22"), u32("#a0764a"), u32("#d6aa74")];
+        const rope = [N("#5a3a22"), N("#a0764a"), N("#d6aa74")];
         for (let y = yA; y < yB; y++) {
           for (let x = cx - wR; x <= cx + wR; x++) {
             const twist = (x - cx + y) % Math.round(4 * z);
@@ -579,7 +503,8 @@
   const LIGHTS = {
     lamp: { dy: 56, col: "#ffd36a", r: 40 }, torch: { dy: 40, col: "#ffa040", r: 60, flame: true },
     crystal: { dy: 30, col: null, r: 34 }, mushroom: { dy: 24, col: ["#ff8a9a", "#7ad8ff", "#c08aff"], r: 26 },
-    candles: { dy: 20, col: "#ffc860", r: 34, flame: true }, tablet: { dy: 40, col: "#8ae8ff", r: 50 }
+    candles: { dy: 20, col: "#ffc860", r: 34, flame: true }, tablet: { dy: 40, col: "#8ae8ff", r: 50 },
+    up: { dy: 34, col: "#8ae8ff", r: 44 }, down: { dy: 34, col: "#b88aff", r: 44 }, cave: { dy: 34, col: "#b88aff", r: 52 }
   };
 
   /* 정적인 그림 한 장: 소품(뒤) → 지형(앞). 나무 밑동·바위 뿌리는 지형 테두리에 자연스럽게 가린다 */
@@ -587,7 +512,8 @@
     const key = `${map.id}@${z}`;
     if (map._cv && map._cvKey === key) return map._cv;
     const out = canvas(map.W * z, map.H * z);
-    const g = out.getContext("2d");
+    const props = canvas(map.W * z, map.H * z);
+    const g = props.getContext("2d");
     const lights = [];
     map.deco.forEach((d) => {
       const img = propCanvas(d.kind, d.v || 0, map.theme, z);
@@ -602,10 +528,19 @@
         lights.push({ x: d.x, y: d.y - L.dy, col: Array.isArray(list) ? list[(d.v || 0) % 3] : list, r: L.r, flame: !!L.flame, seed: Math.round(d.x) });
       }
     });
-    g.drawImage(paintTerrain(map, z), 0, 0);
+    /* 소품을 밤빛으로 덮는다(빛나는 것은 따로 빛 번짐을 그린다) */
+    if (map.theme.tint) {
+      g.globalCompositeOperation = "source-atop";
+      g.fillStyle = map.theme.tint;
+      g.fillRect(0, 0, props.width, props.height);
+    }
+    const og = out.getContext("2d");
+    og.drawImage(props, 0, 0);
+    const plantLights = [];
+    og.drawImage(paintTerrain(map, z, plantLights), 0, 0);
     map._cv = out;
     map._cvKey = key;
-    map.lights = lights.concat(map.extraLights || []);
+    map.lights = lights.concat(plantLights, map.extraLights || []);
     return out;
   }
 
@@ -650,227 +585,190 @@
     ctx.restore();
   }
 
-  /* ─────────── 배경(시차 스크롤) ─────────── */
+  /* ─────────── 배경(참고: 마법사의 밤) ───────────
+     밤하늘 세 단 → 반짝이는 별 → 달과 달빛 → 먼 산(성 실루엣) → 가까운 산 → 지평선 실루엣 줄.
+     산과 실루엣 줄은 가로로 이어 붙는 띠로 한 번 그려 두고 시차를 두어 움직인다 */
+  const BAND = 640;
   function ridgeStrip(th, z, which) {
-    return cached(`ridge${th.name}${which}@${z}`, () => {
-      const W = Math.round(640 * z);
-      const H = Math.round((which ? 120 : 150) * z);
+    return cached(`nridge${th.name}${which}@${z}`, () => {
+      const W = Math.round(BAND * z);
+      const H = Math.round((which ? 120 : 170) * z);
       const cv = canvas(W, H);
       const g = cv.getContext("2d");
-      const img = g.createImageData(W, H);
-      const buf = new Uint32Array(img.data.buffer);
-      const cols = which ? th.mid : th.far;
-      const back = u32(cols[0]);
-      const front = u32(cols[1]);
-      const rim = u32(mixHex(cols[1], "#ffffff", 0.18));
-      const snow = u32("#f4f8ff");
-      const per = (x, f, s) => {
-        /* 가로로 이어 붙여도 끊기지 않게 주기 함수만 쓴다 */
-        const t = (x / W) * Math.PI * 2;
-        return Math.sin(t * f + s) * 0.5 + Math.sin(t * f * 2.3 + s * 1.7) * 0.25 + Math.sin(t * f * 5 + s * 3.1) * 0.12;
-      };
-      for (let x = 0; x < W; x++) {
-        let hb;
-        let hf;
-        switch (th.ridge) {
-          case "mesa": hb = 0.55 + Math.max(-0.15, Math.min(0.2, per(x, 3, 1) * 0.6)); hf = 0.38 + Math.round(per(x, 5, 2) * 3) / 12; break;
-          case "peaks": hb = 0.5 + Math.abs(per(x, 4, 0.5)) * 0.5; hf = 0.34 + Math.abs(per(x, 7, 2)) * 0.35; break;
-          case "spikes": hb = 0.45 + Math.pow(Math.abs(per(x, 9, 1)), 2) * 0.6; hf = 0.3 + Math.pow(Math.abs(per(x, 13, 4)), 3) * 0.7; break;
-          case "forest": hb = 0.55 + per(x, 24, 1) * 0.12 + (Math.sin((x / W) * Math.PI * 2 * 40) > 0.6 ? 0.08 : 0); hf = 0.42 + per(x, 31, 3) * 0.12; break;
-          default: hb = 0.5 + per(x, 2, 0.3) * 0.28; hf = 0.32 + per(x, 4, 1.4) * 0.18;
-        }
-        if (which) { hb *= 0.8; hf = 0.25 + per(x, 11, 2) * 0.1 + (th.ridge === "round" || th.ridge === "forest" ? Math.abs(Math.sin((x / W) * Math.PI * 2 * 18)) * 0.12 : 0); }
-        const yb = Math.round(H * (1 - hb));
-        const yf = Math.round(H * (1 - hf));
-        for (let y = Math.max(0, yb); y < H; y++) {
-          let c = back;
-          if (y >= yf) c = y === yf ? rim : front;
-          if (!which && th.ridge === "peaks" && y < yb + 6 * z && y < yf) c = snow;
-          buf[y * W + x] = c;
-        }
+      const r = rng(th.name.length * 131 + which * 17 + 5);
+      /* 꼭짓점: 높낮이를 번갈아, 끝은 처음과 같은 높이(이어 붙임) */
+      const pts = [];
+      let x = 0;
+      let up = true;
+      const lo = which ? 0.25 : 0.32;
+      const hi = which ? 0.68 : 0.92;
+      while (x < BAND) {
+        const t = up ? hi - r() * (hi - lo) * 0.35 : lo + r() * (hi - lo) * 0.3;
+        pts.push([x, t]);
+        x += (th.ridge === "spikes" ? 30 : th.ridge === "peaks" ? 64 : 52) + r() * 34;
+        up = !up;
       }
-      g.putImageData(img, 0, 0);
-      return cv;
-    });
-  }
-  function cloud(v, z) {
-    return painted("cloud" + v, 90, 34, z, (P) => {
-      P.use("#ffffff", { flat: true });
-      P.ellipse(22, 22, 18, 11); P.ellipse(46, 16, 22, 15); P.ellipse(68, 22, 18, 11); P.ellipse(45, 26, 34, 8);
-    });
-  }
-
-  /* 동굴 벽: 불규칙한 바위 덩어리(보로노이 칸)를 이어 붙일 수 있게 칠한 질감 */
-  function caveWall(th, z) {
-    return cached(`wall${th.name}@${z}`, () => {
-      const N = Math.round(256 * z);
-      const cell = 32 * z;
-      const cells = Math.round(N / cell);
-      const cv = canvas(N, N);
-      const g = cv.getContext("2d");
-      const img = g.createImageData(N, N);
-      const buf = new Uint32Array(img.data.buffer);
-      const cols = th.wall.map((c) => u32(c));
-      const crack = u32(mixHex(th.wall[0], "#000000", 0.4));
-      const pt = (i, j) => {
-        const ii = ((i % cells) + cells) % cells;
-        const jj = ((j % cells) + cells) % cells;
-        return [(i + 0.2 + hash(ii, jj, 7) * 0.6) * cell, (j + 0.2 + hash(ii, jj, 8) * 0.6) * cell, hash(ii, jj, 9)];
-      };
-      for (let y = 0; y < N; y++) {
-        for (let x = 0; x < N; x++) {
-          const ci = Math.floor(x / cell);
-          const cj = Math.floor(y / cell);
-          let d1 = 1e9;
-          let d2 = 1e9;
-          let v = 0;
-          for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
-            const [px, py, h] = pt(ci + a, cj + b);
-            const d = (px - x) * (px - x) + (py - y) * (py - y);
-            if (d < d1) { d2 = d1; d1 = d; v = h; } else if (d < d2) d2 = d;
-          }
-          const edge = Math.sqrt(d2) - Math.sqrt(d1);
-          let c = cols[v < 0.4 ? 0 : v < 0.8 ? 1 : 2];
-          if (edge < 1.2 * z) c = crack;
-          else if (edge < 2.6 * z && v > 0.4) c = cols[Math.min(2, (v < 0.8 ? 1 : 2))];
-          if (hash(x, y, 3) < 0.02) c = cols[0];
-          buf[y * N + x] = c;
+      pts.push([BAND, pts[0][1]]);
+      g.fillStyle = which ? th.near : th.far;
+      g.beginPath();
+      g.moveTo(0, H);
+      if (th.ridge === "round") {
+        g.lineTo(0, H * (1 - pts[0][1]));
+        for (let i = 1; i < pts.length; i++) {
+          const [xa, ya] = pts[i - 1];
+          const [xb, yb] = pts[i];
+          g.quadraticCurveTo(((xa + xb) / 2) * z, H * (1 - Math.max(ya, yb) * 1.05), xb * z, H * (1 - yb));
         }
-      }
-      g.putImageData(img, 0, 0);
-      return cv;
-    });
-  }
-  /* 가까운 돌기둥 줄: 천장에서 내려온 종유석과 바닥의 석순이 만난 기둥 */
-  function pillarStrip(th, z) {
-    return cached(`pillars${th.name}@${z}`, () => {
-      const W = Math.round(720 * z);
-      const H = Math.round(360 * z);
-      const cv = canvas(W, H);
-      const g = cv.getContext("2d");
-      const r = rng(th.name.length * 97 + 3);
-      let x = 40 * z;
-      while (x < W - 60 * z) {
-        const w = (26 + r() * 30) * z;
-        const gap = r() < 0.4 ? (40 + r() * 80) * z : 0;
-        const mid = H * (0.35 + r() * 0.3);
-        const drawPart = (y0, y1, wide0, wide1) => {
+      } else pts.forEach(([px, py]) => g.lineTo(px * z, H * (1 - py)));
+      g.lineTo(W, H);
+      g.closePath();
+      g.fill();
+      /* 눈 덮인 봉우리 */
+      if (th.snow && !which) {
+        g.fillStyle = th.snow;
+        for (let i = 0; i < pts.length - 1; i++) {
+          const [px, py] = pts[i];
+          if (py < 0.7) continue;
+          const [qx, qy] = pts[i + 1];
+          const [ox, oy] = pts[Math.max(0, i - 1)];
+          const k = 0.14;
           g.beginPath();
-          g.moveTo(x - wide0 / 2, y0);
-          g.lineTo(x + wide0 / 2, y0);
-          g.lineTo(x + wide1 / 2, y1);
-          g.lineTo(x - wide1 / 2, y1);
+          g.moveTo(px * z, H * (1 - py));
+          g.lineTo((px + (qx - px) * k) * z, H * (1 - (py + (qy - py) * k)));
+          g.lineTo((px + (qx - px) * k * 0.5) * z, H * (1 - (py + (qy - py) * k)) + 3 * z);
+          g.lineTo((px + (ox - px) * k * 0.5) * z, H * (1 - (py + (oy - py) * k)) + 3 * z);
+          g.lineTo((px + (ox - px) * k) * z, H * (1 - (py + (oy - py) * k)));
           g.closePath();
           g.fill();
-        };
-        g.fillStyle = th.pillar[0];
-        if (gap) {
-          drawPart(0, mid - gap / 2, w * 1.4, 2 * z);
-          drawPart(mid + gap / 2, H, 2 * z, w * 1.6);
-        } else {
-          drawPart(0, mid, w * 1.5, w * 0.7);
-          drawPart(mid, H, w * 0.7, w * 1.7);
         }
-        g.fillStyle = th.pillar[1];
-        g.fillRect(Math.round(x - w * 0.35), 0, Math.max(1, Math.round(z * 1.5)), H);
-        x += w + (90 + r() * 160) * z;
+      }
+      /* 먼 성 */
+      if (!which && th.castle) {
+        g.fillStyle = th.sil;
+        const R = (x, y, w, h) => g.fillRect(Math.round(x * z), Math.round(H - y * z), Math.round(w * z), Math.round(h * z));
+        const castle = (cx, s, ruined) => {
+          const towers = [[-26, 46, 8], [-14, 64, 10], [0, 84, 12], [16, 60, 10], [28, 40, 8]];
+          towers.forEach(([dx, hgt, w], i) => {
+            const hh = (ruined && i % 2 ? hgt * 0.55 : hgt) * s;
+            R(cx + dx * s - (w * s) / 2, hh, w * s, hh);
+            R(cx + dx * s - (w * s) / 2 - 2 * s, hh + 2 * s, w * s + 4 * s, 4 * s);
+            if (!ruined || i % 2 === 0) for (let k = 0; k < 3; k++) R(cx + dx * s - (w * s) / 2 - 2 * s + k * ((w + 2) * s) / 2, hh + 5 * s, 2 * s, 3 * s);
+          });
+          R(cx - 30 * s, 26 * s, 60 * s, 26 * s);
+        };
+        if (th.castle === 1) castle(BAND * 0.62, 0.9, false);
+        else { castle(BAND * 0.22, 0.7, true); castle(BAND * 0.7, 0.85, true); }
       }
       return cv;
     });
   }
-
-  function drawCave(ctx, map, z, camX, camY, VW, VH, t) {
-    const th = map.theme;
-    const grad = ctx.createLinearGradient(0, 0, 0, VH);
-    grad.addColorStop(0, th.bg[0]);
-    grad.addColorStop(0.5, th.bg[1]);
-    grad.addColorStop(1, th.bg[2]);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, VW, VH);
-    const wall = caveWall(th, z);
-    const ox = -(((camX * 0.15) % wall.width) + wall.width) % wall.width;
-    const oy = -(((camY * 0.15) % wall.height) + wall.height) % wall.height;
-    ctx.globalAlpha = 0.5;
-    for (let y = oy; y < VH; y += wall.height) for (let x = ox; x < VW; x += wall.width) ctx.drawImage(wall, Math.round(x), Math.round(y));
-    ctx.globalAlpha = 1;
-    /* 먼 벽 속 반짝이는 광물 */
-    const cell = 90 * z;
-    const gx0 = Math.floor((camX * 0.15) / cell) - 1;
-    const gy0 = Math.floor((camY * 0.15) / cell) - 1;
-    for (let j = gy0; j < gy0 + VH / cell + 2; j++) {
-      for (let i = gx0; i < gx0 + VW / cell + 2; i++) {
-        if (hash(i, j, 41) > 0.45) continue;
-        const px = i * cell + hash(i, j, 42) * cell - camX * 0.15;
-        const py = j * cell + hash(i, j, 43) * cell - camY * 0.15;
-        const a = 0.35 + 0.65 * Math.abs(Math.sin(t / 700 + i * 3.1 + j));
-        ctx.fillStyle = th.glint;
-        ctx.globalAlpha = a * 0.8;
-        ctx.fillRect(Math.round(px), Math.round(py), Math.max(1, Math.round(z)), Math.max(1, Math.round(z)));
+  /* 지평선 실루엣 줄: 말뚝(참고와 같은 모양), 전나무, 묘비, 첨탑 */
+  function rowStrip(th, z) {
+    return cached(`nrow${th.name}@${z}`, () => {
+      const W = Math.round(BAND * z);
+      const H = Math.round(48 * z);
+      const cv = canvas(W, H);
+      const g = cv.getContext("2d");
+      g.fillStyle = th.sil;
+      const R = (x, y, w, h) => g.fillRect(Math.round(x * z), Math.round(H - y * z), Math.max(1, Math.round(w * z)), Math.max(1, Math.round(h * z)));
+      for (let x = 0; x < BAND; x += 17) {
+        const h = 7 + ((x * 17) % 23) / 2;
+        switch (th.row) {
+          case "pines": {
+            if ((x / 17) % 3 === 2) break;
+            const hh = h * 2.2;
+            for (let k = 0; k < hh; k += 2) { const w = Math.max(1, (hh - k) * 0.42); R(x + 4 - w / 2, k + 2, w, 2); }
+            R(x + 3.5, 3, 1.5, 3);
+            break;
+          }
+          case "crosses":
+            R(x + 2, h, 3.5, h); R(x, h - 2, 7.5, 1.5);
+            if ((x / 17) % 2) R(x + 9, 5, 5, 5);
+            break;
+          case "spires": { const hh = h * 2; for (let k = 0; k < hh; k += 1.5) { const w = Math.max(0.6, (hh - k) * 0.22); R(x + 4 - w / 2, k + 1.5, w, 1.5); } break; }
+          default:
+            /* 참고의 말뚝: 기둥, 가로대, 꼭대기 침 */
+            R(x, h, 3.5, h); R(x - 2, h, 7.5, 1.5); R(x + 1.5, h + 2.5, 0.5, 3);
+        }
       }
-    }
-    ctx.globalAlpha = 1;
-    const dark = ctx.createLinearGradient(0, 0, 0, VH);
-    dark.addColorStop(0, "rgba(0,0,0,0.45)");
-    dark.addColorStop(0.5, "rgba(0,0,0,0.15)");
-    dark.addColorStop(1, "rgba(0,0,0,0.4)");
-    ctx.fillStyle = dark;
-    ctx.fillRect(0, 0, VW, VH);
-    const strip = pillarStrip(th, z);
-    const px0 = -(((camX * 0.4) % strip.width) + strip.width) % strip.width;
-    const top = Math.round(-camY * 0.4);
-    for (let x = px0; x < VW; x += strip.width) ctx.drawImage(strip, Math.round(x), top, strip.width, Math.max(strip.height, VH - top));
+      return cv;
+    });
   }
+  /* 픽셀 달: 둥근 네모와 그늘 몇 칸(참고처럼) */
+  function moonCanvas(th, z) {
+    return cached(`nmoon${th.name}@${z}`, () => {
+      const s = Math.max(1, Math.round(z / 2));
+      const N = 14;
+      const cv = canvas(N * 2 * s, N * 2 * s);
+      const g = cv.getContext("2d");
+      const px = (x, y, c) => { g.fillStyle = c; g.fillRect(x * 2 * s, y * 2 * s, 2 * s, 2 * s); };
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const dx = x - (N - 1) / 2;
+        const dy = y - (N - 1) / 2;
+        if (dx * dx + dy * dy > (N / 2) * (N / 2) - 1) continue;
+        px(x, y, th.moon[1]);
+      }
+      [[3, 4], [4, 4], [8, 7], [9, 7], [9, 8], [5, 9], [10, 3]].forEach(([x, y]) => px(x, y, th.moon[2]));
+      [[3, 2], [2, 3], [2, 4]].forEach(([x, y]) => px(x, y, th.moon[0]));
+      return cv;
+    });
+  }
+  const STARS = [];
+  for (let i = 0; i < 90; i++) STARS.push({ x: ((i * 83 + 23) % 640) / 640, y: ((i * 47 + 13) % 190) / 190, s: i % 7 === 0 ? 2 : 1, p: (i * 2.39) % 6.28 });
 
   /* 화면 좌표계에서 배경을 그린다. camX/camY는 화면 왼쪽 위의 월드 픽셀 좌표 */
   function drawBackground(ctx, map, z, camX, camY, VW, VH, t) {
     const th = map.theme;
-    if (!th.outdoor) { drawCave(ctx, map, z, camX, camY, VW, VH, t); return; }
     const grad = ctx.createLinearGradient(0, 0, 0, VH);
     grad.addColorStop(0, th.sky[0]);
-    grad.addColorStop(0.55, th.sky[1]);
+    grad.addColorStop(0.58, th.sky[1]);
     grad.addColorStop(1, th.sky[2]);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, VW, VH);
     const groundY = map.groundY * z - camY;
-    const orb = th.sun || th.moon;
-    if (orb) {
-      const ox = VW * 0.78 - camX * 0.02;
-      const oy = VH * 0.18 - camY * 0.02;
-      const r = (th.sun ? 26 : 20) * z;
-      const gl = ctx.createRadialGradient(ox, oy, r * 0.5, ox, oy, r * 3);
-      gl.addColorStop(0, orb + "88");
-      gl.addColorStop(1, orb + "00");
-      ctx.fillStyle = gl;
-      ctx.fillRect(ox - r * 3, oy - r * 3, r * 6, r * 6);
-      ctx.fillStyle = orb;
-      ctx.beginPath();
-      ctx.arc(Math.round(ox), Math.round(oy), r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (th.sun) {
-      for (let i = 0; i < 4; i++) {
-        const c = cloud(i % 2, z);
-        const span = VW + c.width * 2;
-        const x = ((i * 397 + t * 0.006 * (1 + i * 0.3) - camX * 0.05) % span + span) % span - c.width;
-        const y = VH * (0.08 + i * 0.07) - camY * 0.03;
-        ctx.globalAlpha = th.ridge === "mesa" ? 0.55 : 0.85;
-        ctx.drawImage(c, Math.round(x), Math.round(y));
-        ctx.globalAlpha = 1;
-      }
-    }
-    const layers = [[ridgeStrip(th, z, 0), 0.12, 0.35], [ridgeStrip(th, z, 1), 0.3, 0.62]];
-    layers.forEach(([strip, px, py], li) => {
-      const bottom = Math.round(VH * (0.82 - li * 0.06) * (1 - py) + (groundY - 8 * z) * py);
-      const x0 = -(((camX * px) % strip.width) + strip.width) % strip.width;
+    /* 별 */
+    const sw = VW + 40;
+    const skyH = Math.max(VH * 0.55, groundY - 120 * z);
+    STARS.forEach((st) => {
+      const x = ((st.x * sw - camX * 0.03) % sw + sw) % sw - 20;
+      const y = st.y * skyH - camY * 0.02;
+      const tw = 0.45 + 0.55 * Math.sin(t * 0.0017 + st.p);
+      const sz = Math.max(1, Math.round((st.s * z) / 2));
+      ctx.globalAlpha = Math.max(0, tw);
+      ctx.fillStyle = th.stars[st.s === 2 ? 0 : 1];
+      ctx.fillRect(Math.round(x), Math.round(y), sz, sz);
+      if (st.s === 2) { ctx.globalAlpha = tw * 0.45; ctx.fillRect(Math.round(x - sz), Math.round(y + sz / 2), sz * 3, Math.max(1, Math.round(sz / 2))); }
+    });
+    ctx.globalAlpha = 1;
+    /* 달 */
+    const mx = VW * 0.78 - camX * 0.02;
+    const my = Math.min(VH * 0.19, groundY - 150 * z) - camY * 0.02;
+    const R = 62 * (z / 2);
+    const gl = ctx.createRadialGradient(mx, my, 3, mx, my, R);
+    gl.addColorStop(0, th.moon[0]);
+    gl.addColorStop(0.14, mixHex(th.moon[0], th.sky[1], 0.25));
+    gl.addColorStop(1, th.moon[0] + "00");
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = gl;
+    ctx.fillRect(mx - R, my - R, R * 2, R * 2);
+    ctx.globalAlpha = 1;
+    const mc = moonCanvas(th, z);
+    ctx.drawImage(mc, Math.round(mx - mc.width / 2), Math.round(my - mc.height / 2));
+    /* 산 두 겹과 실루엣 줄 */
+    const layers = [[ridgeStrip(th, z, 0), 0.12, 0.35, th.far], [ridgeStrip(th, z, 1), 0.3, 0.62, th.near]];
+    layers.forEach(([strip, sx, sy, col], li) => {
+      const bottom = Math.round(VH * (0.84 - li * 0.06) * (1 - sy) + (groundY - 10 * z) * sy);
+      const x0 = -(((camX * sx) % strip.width) + strip.width) % strip.width;
       for (let x = x0; x < VW; x += strip.width) ctx.drawImage(strip, Math.round(x), bottom - strip.height);
-      ctx.fillStyle = (li ? th.mid : th.far)[1];
+      ctx.fillStyle = col;
       if (bottom < VH) ctx.fillRect(0, bottom, VW, VH - bottom);
     });
-    const haze = ctx.createLinearGradient(0, VH * 0.35, 0, VH);
-    haze.addColorStop(0, th.sky[2] + "00");
-    haze.addColorStop(1, th.sky[2] + "33");
-    ctx.fillStyle = haze;
-    ctx.fillRect(0, 0, VW, VH);
+    const row = rowStrip(th, z);
+    const rb = Math.round(groundY - 2 * z + (VH * 0.8 - groundY) * 0.15);
+    const rx0 = -(((camX * 0.55) % row.width) + row.width) % row.width;
+    for (let x = rx0; x < VW; x += row.width) ctx.drawImage(row, Math.round(x), rb - row.height);
+    ctx.fillStyle = th.sil;
+    if (rb < VH) ctx.fillRect(0, rb, VW, VH - rb);
   }
 
   /* ─────────── 지도 만들기 ─────────── */
@@ -902,8 +800,8 @@
     map.deco.sort((a, b) => (TALL.has(b.kind) ? 1 : 0) - (TALL.has(a.kind) ? 1 : 0));
   }
 
-  /* 지하 n층: 땅 위로 2~3단 바위 발판, 발판마다 아래로 내려가는 밧줄(사슬·덩굴·사다리).
-     왼쪽 끝은 올라온 계단, 오른쪽 끝은 내려가는 계단. 10층마다 보스가 계단을 봉인한다 */
+  /* n층: 땅 위로 2~3단 떠 있는 바위 발판, 발판마다 아래로 내려가는 밧줄(사슬·덩굴·사다리).
+     왼쪽 끝은 돌아가는 문, 오른쪽 끝은 다음 층으로 가는 문. 10층마다 보스가 문을 봉인한다 */
   function makeFloor(n) {
     const r = rng(9001 + n * 7919);
     const boss = n % 10 === 0;
@@ -936,14 +834,13 @@
       if (below) ropes.push({ x: Math.round(rx), y1: pl.y - 10, y2: below.y, ladder: theme.rope === "ladder" || r() < 0.18, top: pl });
     });
     const map = {
-      id: "floor" + n, kind: boss ? "boss" : "floor", floor: n, seed: n * 13 + 7, theme, name: floorName(n), ceiling: true,
+      id: "floor" + n, kind: boss ? "boss" : "floor", floor: n, seed: n * 13 + 7, theme, name: floorName(n),
       W, H, groundY: G, plats, ropes, deco: [],
       doors: [{ kind: "up", x: 46, y: G }, { kind: "down", x: W - 52, y: G, locked: boss }],
       spawns: [], boss: boss ? F.engine.pickMonster(n, true) : null, spawnX: 84
     };
     map.deco.push({ kind: "up", x: 46, y: G, sink: 2 }, { kind: "down", x: W - 52, y: G, sink: 2 });
-    for (let x = 104; x < W - 100; x += 230 + r() * 80) map.deco.push({ kind: "torch", x: Math.round(x), y: G });
-    map.deco.push({ kind: "torch", x: W - 112, y: G });
+    for (let x = 160; x < W - 140; x += 300 + r() * 120) map.deco.push({ kind: "lamp", x: Math.round(x), y: G });
     /* 이 층에 사는 몬스터 2~3종 */
     const tier = F.engine.floorTier(n);
     const pool = F.engine.MONSTERS.filter((m) => m.tier === tier && !m.boss);
@@ -997,6 +894,6 @@
 
   F.world = {
     MAP_H, LAYER_GAP, THEMES, TOWN_THEME, rng, hash, mixHex, floorName, floorThemeIndex, makeFloor, makeTown, renderMap, drawBackground,
-    drawFlame, drawSeal, surfaceBelow, propCanvas, building, fateTablet, lamp, tree, cloud, BUILDINGS
+    drawFlame, drawSeal, surfaceBelow, propCanvas, building, fateTablet, lamp, tree, gate, ridgeStrip, rowStrip, moonCanvas, BUILDINGS
   };
 })(typeof window !== "undefined" ? window : globalThis);

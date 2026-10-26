@@ -1,7 +1,7 @@
 /*
  * 삼천의 운명 — 게임 진행
  * 화면 하나(캔버스) 위에 장면(타이틀·운명 뽑기·횡스크롤 무대)을 그리고, 글자가 필요한 창은 DOM으로 띄운다.
- * 마을과 던전의 각 층은 옆에서 보는 무대이고, 전투는 그 자리에서 실시간으로 벌어진다.
+ * 마을과 던전의 각 층(밤의 숲·언덕·폐성…)은 옆에서 보는 무대이고, 전투는 그 자리에서 실시간으로 벌어진다.
  */
 (function (root) {
   "use strict";
@@ -308,30 +308,22 @@
     return HA.url(job);
   }
 
-  /* 별이 빛나는 밤하늘(타이틀·운명 뽑기 배경) */
-  const stars = [];
-  for (let i = 0; i < 90; i++) stars.push({ x: Math.random(), y: Math.random() * 0.75, p: Math.random() * 6.28, s: Math.random() < 0.15 ? 2 : 1 });
-  function drawSky(t) {
-    const bands = ["#0b0a1a", "#100e26", "#161334", "#1d1842", "#241d4e", "#2c2358"];
-    const bh = Math.ceil(VH / bands.length);
-    bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, i * bh, VW, bh + 1); });
-    stars.forEach((s) => {
-      const a = 0.4 + 0.6 * Math.abs(Math.sin(t * 0.0015 + s.p));
-      ctx.fillStyle = `rgba(255,255,255,${a})`;
-      ctx.fillRect(Math.round(s.x * VW), Math.round(s.y * VH), s.s, s.s);
-    });
+  /* 타이틀·운명 뽑기의 하늘: 마을과 같은 밤(참고: 마법사의 밤) */
+  const skyMap = { theme: null, groundY: 0 };
+  function drawSky(t, groundY) {
+    skyMap.theme = Wd.TOWN_THEME;
+    skyMap.groundY = (groundY === undefined ? VH * 0.8 : groundY) / (G.scene && G.scene.hires ? Z : 2);
+    Wd.drawBackground(ctx, skyMap, G.scene && G.scene.hires ? Z : 2, t * 0.02, 0, VW, VH, t);
   }
-  function drawHills(baseY) {
-    ctx.fillStyle = "#1a1636";
-    ctx.beginPath();
-    ctx.moveTo(0, baseY);
-    for (let x = 0; x <= VW; x += 8) ctx.lineTo(x, baseY - 26 - Math.round(Math.sin(x * 0.02) * 14 + Math.sin(x * 0.05) * 6));
-    ctx.lineTo(VW, VH); ctx.lineTo(0, VH); ctx.fill();
-    ctx.fillStyle = "#13102a";
-    ctx.beginPath();
-    ctx.moveTo(0, baseY);
-    for (let x = 0; x <= VW; x += 6) ctx.lineTo(x, baseY - 10 - Math.round(Math.sin(x * 0.035 + 2) * 8));
-    ctx.lineTo(VW, VH); ctx.lineTo(0, VH); ctx.fill();
+  /* 참고 그림의 땅: 보랏빛 몸 위로 밝은 줄 두 개 */
+  function groundBand(y) {
+    const g = Wd.TOWN_THEME.ground;
+    const e = (n) => Math.max(1, Math.round((n * Z) / 2));
+    ctx.fillStyle = g.body; ctx.fillRect(0, y, VW, VH - y);
+    ctx.fillStyle = g.top; ctx.fillRect(0, y, VW, e(4));
+    ctx.fillStyle = g.top2; ctx.fillRect(0, y + e(4), VW, e(2));
+    ctx.fillStyle = g.speck[0];
+    for (let x = 11; x < VW; x += e(31)) ctx.fillRect(x, y + e(12 + (x % 13)), e(2), e(2));
   }
 
   /* ─────────────────────── 타이틀 ─────────────────────── */
@@ -383,12 +375,9 @@
       });
     },
     draw(t) {
-      drawSky(t);
       const ground = Math.round(VH * 0.86);
-      drawHills(ground);
+      drawSky(t, ground);
       ctx.drawImage(titleStrip(), 0, ground - 4);
-      ctx.fillStyle = "rgba(10,8,30,0.45)";
-      ctx.fillRect(0, ground, VW, VH - ground);
       const hh = Math.round(Math.min(VH * 0.17, 110));
       this.parade.forEach((w) => {
         shadow(w.x, ground + 3, hh * 0.2, hh * 0.05);
@@ -509,7 +498,7 @@
       fade(() => {
         setScene(Stage, { floor: 0 });
         say([`<b>${esc(name)}</b>의 운명은 <b class="rar-t-${G.player.job.rarity}">${esc(G.player.job.name)}</b>.`,
-          `마을 오른쪽 동굴 아래가 던전이다. 건물 문 앞에서 ${touch ? "▲" : "↑"}를 누르면 들어간다. 상점에서는 물약과 장비를, 여관에서는 휴식을, 길드에서는 직업 도감과 조작 안내를 볼 수 있다.`]);
+          `마을 오른쪽 돌문 너머가 던전이다. 건물 문 앞에서 ${touch ? "▲" : "↑"}를 누르면 들어간다. 상점에서는 물약과 장비를, 여관에서는 휴식을, 길드에서는 직업 도감과 조작 안내를 볼 수 있다.`]);
       });
     },
     /* ── 캐릭터 시트: 뽑힌 직업이 대기·걷기·점프·착지·기본 공격·기술·궁극기를 차례로 보여 준다 ── */
@@ -633,10 +622,9 @@
       }
     },
     draw(t) {
-      drawSky(t);
       const gy = this.groundY();
-      ctx.fillStyle = "#120f28";
-      ctx.fillRect(0, gy + 10, VW, VH - gy);
+      drawSky(t, gy + 10);
+      groundBand(gy + 10);
       const tab = Wd.fateTablet(Math.floor(t / 300) % 3, 4);
       ctx.save();
       ctx.globalAlpha = 0.5;
@@ -726,14 +714,14 @@
     const lines = [
       `<b class="rar-t-${j.rarity}">${esc(j.name)}</b> (${rarName(j.rarity)})<br>"나는 ${esc(j.desc)}(이)야. ${J(G.player.job.name, "이/가")} 됐다니, 너도 운명을 받았구나."`,
       `<b class="rar-t-${j.rarity}">${esc(j.name)}</b><br>"내 기술은 <b>${esc(j.skills[1].name)}</b>! ${E.describeSkill(j.skills[1], { level: 1, job: j })}."`,
-      `<b class="rar-t-${j.rarity}">${esc(j.name)}</b><br>"던전은 10층마다 보스가 계단을 봉인하고 있대. 물약은 넉넉히 챙겨."`
+      `<b class="rar-t-${j.rarity}">${esc(j.name)}</b><br>"던전은 10층마다 보스가 다음 문을 봉인하고 있대. 물약은 넉넉히 챙겨."`
     ];
     say(lines[Math.floor(Math.random() * lines.length)] + `<br><small>(직업 도감에 기록됨)</small>`);
   }
 
   function tabletTalk() {
     const p = G.player;
-    say([`운명의 석판이 빛난다…<br>"<b>${esc(p.name)}</b>, 그대의 운명은 <b class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</b>."`, `지금까지 만난 직업 <b>${fmt(G.codex.size)}</b> / 3,000. 최고 기록 지하 <b>${p.best}</b>층.`]);
+    say([`운명의 석판이 빛난다…<br>"<b>${esc(p.name)}</b>, 그대의 운명은 <b class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</b>."`, `지금까지 만난 직업 <b>${fmt(G.codex.size)}</b> / 3,000. 최고 기록 <b>${p.best}</b>층.`]);
   }
 
   function innTalk(then) {
@@ -759,10 +747,10 @@
 
   function openHelp() {
     const rows = touch
-      ? [["◀ ▶", "이동"], ["▲ ▼", "밧줄 오르내리기 · 문·계단 들어가기"], ["점프", "점프 (▼ 누른 채면 발판 아래로)"], ["공격", "기본 공격 (누르고 있으면 연속)"], ["기술 버튼", "기술 5개 (Lv.1·1·4·7·10에 배움)"], ["HP · MP", "물약"]]
-      : [["← →", "이동"], ["↑ ↓", "밧줄 오르내리기 · 문·계단 들어가기"], ["Space · C", "점프 (↓와 함께 누르면 발판 아래로)"], ["Z · Ctrl", "기본 공격 (누르고 있으면 연속)"], ["A S D F G", "기술 5개 (Lv.1·1·4·7·10에 배움)"], ["Q · W", "회복 물약 · 마나 물약"], ["Esc · X", "메뉴"]];
+      ? [["◀ ▶", "이동"], ["▲ ▼", "밧줄 오르내리기 · 문 들어가기"], ["점프", "점프 (▼ 누른 채면 발판 아래로)"], ["공격", "기본 공격 (누르고 있으면 연속)"], ["기술 버튼", "기술 5개 (Lv.1·1·4·7·10에 배움)"], ["HP · MP", "물약"]]
+      : [["← →", "이동"], ["↑ ↓", "밧줄 오르내리기 · 문 들어가기"], ["Space · C", "점프 (↓와 함께 누르면 발판 아래로)"], ["Z · Ctrl", "기본 공격 (누르고 있으면 연속)"], ["A S D F G", "기술 5개 (Lv.1·1·4·7·10에 배움)"], ["Q · W", "회복 물약 · 마나 물약"], ["Esc · X", "메뉴"]];
     openWin(`<h2 class="win-h">조작 안내</h2><dl class="sheet help">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
-      <p class="win-msg">몬스터에 부딪히면 피해를 입는다. 10층마다 보스가 아래로 가는 계단을 봉인한다. 쓰러지면 그 운명은 끝난다.</p>
+      <p class="win-msg">몬스터에 부딪히면 피해를 입는다. 10층마다 보스가 다음 층으로 가는 문을 봉인한다. 쓰러지면 그 운명은 끝난다.</p>
       <div class="opts"><button class="opt" type="button" data-opt="close">닫기</button></div>`, { onPick: (v, b, w) => { if (v === "close") closeWin(w); } });
   }
 
@@ -794,7 +782,7 @@
         if (v === "codex") openCodex();
         if (v === "help") openHelp();
         if (v === "town") {
-          ask("마을로 돌아갈까? 다음에는 지하 " + p.floor + "층부터 다시 시작한다.", ["돌아간다", "그만둔다"], (i) => {
+          ask("마을로 돌아갈까? 다음에는 " + p.floor + "층부터 다시 시작한다.", ["돌아간다", "그만둔다"], (i) => {
             if (i !== 0) return;
             closeAll();
             fade(() => setScene(Stage, { floor: 0, x: 862, keep: true }));
@@ -1213,7 +1201,7 @@
       set("h-hpt", `${fmt(Math.max(0, p.hp))}/${fmt(d.maxHp)}`);
       set("h-mpt", `${fmt(p.mp)}/${fmt(d.maxMp)}`);
       set("h-xpt", `${((p.exp / E.expNeed(p.level)) * 100).toFixed(1)}%`);
-      set("h-where", this.floor ? `지하 ${this.floor}층` : "마을");
+      set("h-where", this.floor ? `${this.floor}층` : "마을");
       set("h-gold", `${fmt(p.gold)} G`);
       set("h-php", String(p.potions.hp));
       set("h-pmp", String(p.potions.mp));
@@ -1330,18 +1318,18 @@
       const h = this.hero;
       h.vx = 0;
       if (d.kind === "down") {
-        if (d.locked) { this.log("붉은 봉인이 계단을 막고 있다. 보스를 쓰러뜨려야 열린다.", "bad"); return; }
+        if (d.locked) { this.log("붉은 봉인이 문을 막고 있다. 보스를 쓰러뜨려야 열린다.", "bad"); return; }
         fade(() => setScene(Stage, { floor: this.floor + 1, keep: true }));
         return;
       }
       if (d.kind === "up") {
-        ask(`위층 계단이다. 마을로 돌아갈까?<br><small>다음에는 지하 ${this.floor}층부터 다시 시작한다.</small>`, ["돌아간다", "그만둔다"], (i) => {
+        ask(`돌아가는 문이다. 마을로 돌아갈까?<br><small>다음에는 ${this.floor}층부터 다시 시작한다.</small>`, ["돌아간다", "그만둔다"], (i) => {
           if (i === 0) fade(() => setScene(Stage, { floor: 0, x: 862, keep: true }));
         });
         return;
       }
       if (d.kind === "cave") {
-        ask(`던전 입구다. <b>지하 ${Math.max(1, p.floor)}층</b>부터 탐험할까?<br><small>최고 기록 ${p.best}층 · 10층마다 보스</small>`, ["들어간다", "그만둔다"], (i) => {
+        ask(`던전으로 가는 돌문이다. <b>${Math.max(1, p.floor)}층</b>부터 탐험할까?<br><small>최고 기록 ${p.best}층 · 10층마다 보스</small>`, ["들어간다", "그만둔다"], (i) => {
           if (i === 0) fade(() => setScene(Stage, { floor: Math.max(1, p.floor), keep: true }));
         });
         return;
@@ -1880,7 +1868,7 @@
         const door = this.map.doors.find((d) => d.kind === "down");
         if (door) { door.locked = false; Sp.pillar(px(door.x), px(door.y), "light", true); }
         this.mons.forEach((o) => { if (!o.dead && o.minion) this.kill(o); });
-        this.banner("보스 처치! 계단의 봉인이 풀렸다");
+        this.banner("보스 처치! 문의 봉인이 풀렸다");
         save();
       }
       this.refresh();
@@ -2290,8 +2278,11 @@
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       (m.lights || []).forEach((L) => {
+        const lx = px(L.x);
+        const r = L.r * Z;
+        if (lx < cx - r || lx > cx + VW + r) return;
         const fl = L.flame ? 0.85 + 0.15 * Math.sin(t / 70 + L.seed) : 0.9 + 0.1 * Math.sin(t / 600 + L.seed);
-        Sp.glow(ctx, px(L.x), px(L.y), L.r * Z * fl, L.col, 0.32);
+        Sp.glow(ctx, lx, px(L.y), r * fl, L.col, 0.32);
       });
       ctx.restore();
       (m.lights || []).forEach((L) => { if (L.flame && L.r > 40) Wd.drawFlame(ctx, px(L.x), px(L.y) + 4 * Z, Z, t, L.seed); });
@@ -2506,7 +2497,7 @@
     closeAll();
     openWin(`<h2 class="win-h over">쓰러졌다…</h2>
       <div class="over-body"><img src="${thumb(p.job)}" alt="">
-      <p><b>${esc(p.name)}</b><br><span class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</span> · Lv.${p.level}<br>최고 기록 지하 ${p.best}층 · 처치 ${fmt(p.kills)}<br>${esc(J(cause, "에게"))} 쓰러짐</p></div>
+      <p><b>${esc(p.name)}</b><br><span class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</span> · Lv.${p.level}<br>최고 기록 ${p.best}층 · 처치 ${fmt(p.kills)}<br>${esc(J(cause, "에게"))} 쓰러짐</p></div>
       <p class="win-msg">${bonus ? `깊이 내려간 보답으로 다음 운명의 재굴림 기회 +${bonus}` : "10층을 넘길 때마다 다음 운명의 재굴림 기회가 늘어납니다."}</p>
       <div class="opts"><button class="opt primary" type="button" data-opt="new">새로운 운명</button><button class="opt" type="button" data-opt="hall">명예의 전당</button><button class="opt" type="button" data-opt="title">타이틀로</button></div>`, {
       cls: "win-center", noBack: true,
