@@ -31,6 +31,83 @@
   };
   const pal = (el) => PAL[el] || PAL.arcane;
 
+  /* ── 그린 기술 그림: 참고 시트에서 오려 낸 마력탄·화염구·얼음 분출·번개·운석·폭격·룬 결정 ──
+     검은 바탕 그림이라 더하기(lighter)로 겹쳐 그린다. 원래의 보라·파란 빛을 속성 색으로 돌려 둔다.
+     시트의 크기는 키 105px 마법사 기준이라, 화면 배율 Z에서는 Z/2를 곱하면 같은 비율이 된다 */
+  const FX_HUE = 0.7;
+  const EL_TINT = {
+    fire: [0.035, 1.15, 1], ice: [0.55, 0.95, 1.05], bolt: [0.15, 1.05, 1.08], earth: [0.08, 0.7, 0.95], wind: [0.44, 0.85, 1.02],
+    light: [0.13, 0.62, 1.1], dark: [0.79, 1.1, 0.95], nature: [0.3, 0.95, 1], arcane: [0.7, 1, 1], phys: [0.6, 0.12, 1.08]
+  };
+  const fxImgs = {};
+  const fxTinted = new Map();
+  function fxImage(name) {
+    let img = fxImgs[name];
+    if (!img) {
+      img = new Image();
+      img.src = (F.FX_ART && F.FX_ART[name]) || `assets/fx/${name}.png`;
+      fxImgs[name] = img;
+    }
+    return img;
+  }
+  function hsvShift(d, dh, ks, kv) {
+    for (let p = 0; p < d.length; p += 4) {
+      const r = d[p] / 255;
+      const g = d[p + 1] / 255;
+      const b = d[p + 2] / 255;
+      const mx = Math.max(r, g, b);
+      if (mx < 0.02) continue;
+      const mn = Math.min(r, g, b);
+      const dd = mx - mn;
+      let h = 0;
+      if (dd) h = (mx === r ? ((g - b) / dd + 6) % 6 : mx === g ? (b - r) / dd + 2 : (r - g) / dd + 4) / 6;
+      h = (((h + dh) % 1) + 1) % 1;
+      const sv = Math.min(1, (mx ? dd / mx : 0) * ks);
+      const v = Math.min(1, mx * kv);
+      const i = Math.floor(h * 6);
+      const f = h * 6 - i;
+      const P = v * (1 - sv);
+      const Q = v * (1 - f * sv);
+      const T = v * (1 - (1 - f) * sv);
+      const k = [[v, T, P], [Q, v, P], [P, v, T], [P, Q, v], [T, P, v], [v, P, Q]][i % 6];
+      d[p] = k[0] * 255;
+      d[p + 1] = k[1] * 255;
+      d[p + 2] = k[2] * 255;
+    }
+  }
+  function fxSprite(name, el) {
+    const img = fxImage(name);
+    if (!img.complete || !img.naturalWidth) return null;
+    const key = name + ":" + el;
+    let cv = fxTinted.get(key);
+    if (cv) return cv;
+    cv = F.sprites.makeCanvas(img.naturalWidth, img.naturalHeight);
+    const g = cv.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const t = EL_TINT[el] || EL_TINT.arcane;
+    try {
+      const im = g.getImageData(0, 0, cv.width, cv.height);
+      hsvShift(im.data, t[0] - FX_HUE, t[1], t[2]);
+      g.putImageData(im, 0, 0);
+    } catch (e) { /* 픽셀을 못 읽으면 원래 색 그대로 */ }
+    fxTinted.set(key, cv);
+    return cv;
+  }
+  /* 그림을 (x, y)에 그린다. o: w(그릴 너비), ax·ay(기준점 비율), rot, sx·sy(추가 배율), a(투명도) */
+  function fxPut(ctx, spr, x, y, o) {
+    const w = o.w;
+    const h = (w * spr.height) / spr.width;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = Math.max(0, Math.min(1, o.a === undefined ? 1 : o.a));
+    ctx.translate(x, y);
+    if (o.rot) ctx.rotate(o.rot);
+    ctx.scale(o.sx || 1, o.sy || 1);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(spr, -w * (o.ax === undefined ? 0.5 : o.ax), -h * (o.ay === undefined ? 0.5 : o.ay), w, h);
+    ctx.restore();
+  }
+
   function hexA(hex, a) {
     const n = parseInt(hex.slice(1, 7), 16);
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a))})`;
@@ -128,6 +205,16 @@
           glow(ctx, e.x, e.y, 14 * Z, c[2], 0.55);
           ctx.globalCompositeOperation = "source-over";
           item(ctx, kind, e.x, e.y, e.age / 1000, c);
+          ctx.restore();
+          return;
+        }
+        const spr = (kind === "orb" || big) && fxSprite(big ? "fireball" : "orb", el);
+        if (spr) {
+          /* 그린 구체: 꼬리가 날아온 쪽을 향하게 돌린다 */
+          const ang = Math.atan2(to[1] - from[1], to[0] - from[0]);
+          const flip = Math.abs(ang) > Math.PI / 2;
+          glow(ctx, e.x, e.y, (big ? 30 : 16) * Z, c[2], 0.45);
+          fxPut(ctx, spr, e.x, e.y, { w: (big ? 62 : 36) * Z, ax: big ? 0.86 : 0.84, ay: big ? 0.6 : 0.5, rot: flip ? ang - Math.PI : ang, sx: flip ? -1 : 1 });
           ctx.restore();
           return;
         }
@@ -336,6 +423,25 @@
   /* ── 땅에서 솟는 결정(얼음·바위·빛창·가시) ── */
   function crystals(x, gy, el, width, big) {
     const c = pal(el);
+    const spr = fxSprite("ice", el);
+    if (spr) {
+      /* 그린 얼음 분출: 땅에서 솟아오르며(아래를 축으로 늘어남) 반짝이다가 사라진다 */
+      const w = Math.max(width * 1.5, (big ? 150 : 104) * (Z / 2));
+      const flip = Math.random() < 0.5 ? -1 : 1;
+      add({
+        life: big ? 760 : 600,
+        draw(ctx, t) {
+          const grow = 1 - Math.pow(1 - Math.min(1, t / 0.2), 3);
+          const a = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
+          glow(ctx, x, gy - 18 * Z, w * 0.55, c[2], 0.4 * a);
+          fxPut(ctx, spr, x, gy + 2 * Z, { w, ax: 0.5, ay: 1, sx: flip * (0.85 + 0.15 * grow), sy: 0.2 + 0.8 * grow, a });
+        }
+      });
+      X.sleep(120).then(() => {
+        for (let i = 0; i < (big ? 24 : 12); i++) spark(x + rand(-w / 2, w / 2) * 0.8, gy - rand(0, 60) * Z, { vx: rand(-40, 40) * Z / 2, vy: rand(-150, -40) * Z / 2, grav: 240 * Z / 2, life: rand(400, 800), col: pick(c.slice(0, 3)), glow: 0.7, size: rand(0.8, 1.6), shape: Math.random() < 0.4 ? "star" : "sq" });
+      });
+      return X.sleep(130);
+    }
     const n = big ? 9 : 6;
     const spikes = [];
     for (let i = 0; i < n; i++) {
@@ -423,8 +529,39 @@
   }
 
   /* ── 번개: 가지 친 지그재그 ── */
+  /* 그린 번개의 시작점과 끝점(그림 크기에 대한 비율) */
+  const BOLT_A = [0.02, 0.66];
+  const BOLT_B = [0.93, 0.08];
   function bolt(from, to, el) {
     const c = pal(el === "phys" ? "bolt" : el);
+    const spr = fxSprite("bolt", el === "phys" ? "bolt" : el);
+    if (spr) {
+      /* 그린 번개를 두 점 사이로 늘여 돌린다. 70ms마다 위아래를 뒤집어 번쩍임을 만든다 */
+      const vx = (BOLT_B[0] - BOLT_A[0]) * spr.width;
+      const vy = (BOLT_B[1] - BOLT_A[1]) * spr.height;
+      const len = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
+      const rot = Math.atan2(to[1] - from[1], to[0] - from[0]) - Math.atan2(vy, vx);
+      const scale = len / Math.hypot(vx, vy);
+      const thick = Math.max(0.7, Math.min(1.3, scale)) * (Z / 2) / scale;
+      add({
+        life: 360,
+        draw(ctx, t, e) {
+          const a = t < 0.65 ? 1 : (1 - t) / 0.35;
+          const fl = Math.floor(e.age / 70) % 2 ? -1 : 1;
+          glow(ctx, to[0], to[1], 28 * Z, c[1], 0.7 * a);
+          glow(ctx, from[0], from[1], 14 * Z, c[1], 0.5 * a);
+          ctx.save();
+          ctx.translate(from[0], from[1]);
+          ctx.rotate(rot);
+          ctx.scale(scale, scale);
+          /* 그림의 시작점을 원점에 두고, 굵기는 화면 배율에 맞춘다 */
+          fxPut(ctx, spr, 0, 0, { w: spr.width, ax: BOLT_A[0], ay: BOLT_A[1], sy: fl * thick, a: a * (0.85 + Math.random() * 0.15) });
+          ctx.restore();
+        }
+      });
+      sparkBurst(to[0], to[1], el === "phys" ? "bolt" : el, 14, 200 * Z / 2);
+      return X.sleep(90);
+    }
     const make = () => {
       const pts = [from.slice()];
       const n = 9;
@@ -522,6 +659,8 @@
           const py = gy - 46 * Z + Math.sin(a) * 10 * Z + Math.sin(e.age / 300 + k) * 4 * Z;
           const s = 7 * Z;
           glow(ctx, px, py, 16 * Z, c[2], 0.6 * g);
+          const rune = fxSprite("rune", el);
+          if (rune) { fxPut(ctx, rune, px, py, { w: 22 * Z, a: g }); continue; }
           ctx.fillStyle = hexA(c[1], 0.95 * g);
           ctx.beginPath(); ctx.moveTo(px, py - s * 1.6); ctx.lineTo(px + s * 0.6, py); ctx.lineTo(px, py + s * 1.6); ctx.lineTo(px - s * 0.6, py); ctx.fill();
           ctx.fillStyle = hexA(c[0], g);
@@ -553,6 +692,14 @@
         },
         draw(ctx, t, e) {
           if (e.x === undefined) return;
+          const spr = fxSprite("meteor", el);
+          if (spr) {
+            /* 그린 운석: 꼬리(그림의 왼쪽 위)가 날아온 쪽을 향하게 */
+            const rot = Math.atan2(gy - sy, tx - sx) - Math.atan2(0.77 * spr.height, 0.52 * spr.width);
+            glow(ctx, e.x, e.y, 30 * Z, c[2], 0.7);
+            fxPut(ctx, spr, e.x, e.y, { w: 42 * Z, ax: 0.62, ay: 0.82, rot });
+            return;
+          }
           ctx.save();
           ctx.globalCompositeOperation = "lighter";
           for (let i = trail.length - 1; i > 0; i--) {
@@ -575,6 +722,22 @@
       });
     }));
     return Promise.all(jobs);
+  }
+
+  /* ── 마법 폭격: 그린 운석 비 한 장을 화면 너비로 펼쳐 내리꽂는다 ── */
+  function barrage(x, gy, el, width) {
+    const spr = fxSprite("barrage", el);
+    if (!spr) return X.sleep(0);
+    const c = pal(el);
+    add({
+      life: 900,
+      draw(ctx, t) {
+        const a = t < 0.15 ? t / 0.15 : t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
+        glow(ctx, x, gy - 30 * Z, width * 0.5, c[2], 0.35 * a);
+        fxPut(ctx, spr, x, gy + 4 * Z - (1 - Math.min(1, t * 3)) * 50 * Z, { w: width, ax: 0.5, ay: 1, a });
+      }
+    });
+    return X.sleep(260);
   }
 
   /* ── 빛기둥: 하늘까지 솟는 기둥과 감도는 고리 ── */
@@ -829,7 +992,8 @@
   }
 
   F.spells = {
-    PAL, ITEMS, setZoom(z) { Z = z; textCache.clear(); }, shot, rain, bladeWave, impact, slash, crystals, flames, tornado, bolt, circle, meteors, pillar, aura, heal,
+    PAL, ITEMS, setZoom(z) { Z = z; textCache.clear(); }, shot, rain, bladeWave, impact, slash, crystals, flames, tornado, bolt, circle, meteors, barrage, pillar, aura, heal,
+    fxSprite, fxPut,
     shieldBubble, dust, levelUp, number, update, draw, drawNumbers, clear, orbAt, glow, spark, sparkBurst, add
   };
 })(typeof window !== "undefined" ? window : globalThis);

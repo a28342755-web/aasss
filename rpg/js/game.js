@@ -105,10 +105,10 @@
 
   /* ── 입력 ──
      방향키 이동, Space/C 점프, Z/Ctrl 공격, A S D F G 기술, Q W 물약, Enter 대화·결정, Esc/X 메뉴·취소 */
-  const held = { up: false, down: false, left: false, right: false, atk: false, jump: false };
+  const held = { up: false, down: false, left: false, right: false, atk: false, jump: false, run: false };
   const KEYMAP = {
     ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
-    Space: "jump", KeyC: "jump", KeyZ: "atk", ControlLeft: "atk", ControlRight: "atk",
+    Space: "jump", KeyC: "jump", KeyZ: "atk", ControlLeft: "atk", ControlRight: "atk", ShiftLeft: "run", ShiftRight: "run",
     KeyA: "s0", KeyS: "s1", KeyD: "s2", KeyF: "s3", KeyG: "s4", KeyQ: "hp", KeyW: "mp",
     Enter: "a", NumpadEnter: "a", Escape: "b", KeyX: "b", Backspace: "b"
   };
@@ -513,7 +513,7 @@
       });
     },
     /* ── 캐릭터 시트: 뽑힌 직업이 대기·걷기·점프·착지·기본 공격·기술·궁극기를 차례로 보여 준다 ── */
-    DEMO: [["대기", 1.3], ["걷기", 1.3], ["점프", 0.6], ["착지", 0.4], ["기본 공격", 1.1], ["기술", 1.6], ["궁극기", 3.2]],
+    DEMO: [["idle", "대기", 1.2], ["walk", "걷기", 1.2], ["run", "달리기", 0.7], ["jump", "점프", 0.8], ["land", "착지", 0.4], ["attack", "기본 공격", 1.1], ["skill", "기술", 1.6], ["ult", "궁극기", 3.2]],
     heroH() {
       return Math.round(Math.min(VH * 0.27, 180, VW * 0.4));
     },
@@ -523,7 +523,7 @@
       const dx = Math.round(VW * 0.7);
       const hh = this.heroH();
       const hx = reach.far ? Math.round(VW * 0.32) : Math.round(dx - hh * 0.8);
-      return { reach, gy, dx, hx, start: hx - 56 * Z };
+      return { reach, gy, dx, hx, start: hx - 96 * Z, mid: hx - 48 * Z };
     },
     /* 무대의 기술·궁극기 연출 코드를 가짜 무대(허수아비 하나)로 그대로 쓴다 */
     demoStage() {
@@ -545,13 +545,13 @@
       const sp = this.demoSpot();
       const hand = [sp.hx + 16 * Z, sp.gy - 24 * Z];
       const target = [sp.dx, sp.gy - 15 * Z];
-      if (step === 3) Sp.dust(sp.hx, sp.gy, 0, 6);
-      if (step === 4) {
+      if (step === "land") Sp.dust(sp.hx, sp.gy, 0, 6);
+      if (step === "attack") {
         const a = job.attack;
         if (!sp.reach.far) { Sp.slash(sp.hx + 22 * Z, sp.gy - 22 * Z, 1, a.el, false, false); X.sleep(120).then(() => { this.hitT = 0.15; }); }
         else Sp.shot(hand, target, a.el, sp.reach.shot).then(() => { this.hitT = 0.15; });
       }
-      if (step === 5) {
+      if (step === "skill") {
         const sk = this.demoSkill();
         const plan = E.skillPlan(lvP, sk, sp.reach.far);
         if (!plan.self) Stage.skillVisual.call(fake, sk, plan, [dummy]).then(() => { this.hitT = 0.2; });
@@ -563,7 +563,7 @@
           else Sp.aura(sp.hx, sp.gy, el);
         }
       }
-      if (step === 6) {
+      if (step === "ult") {
         const sk = job.skills[4];
         const plan = E.skillPlan(lvP, sk, sp.reach.far);
         this.demoFake = fake;
@@ -581,8 +581,8 @@
       if (!d || !this.shown || (G.roll && G.roll.rolling)) return;
       d.t += dt / 1000;
       if (d.t < 0) return;
-      if (!d.fired) { d.fired = true; this.demoFire(d.step); }
-      if (d.t >= this.DEMO[d.step][1]) { d.step = (d.step + 1) % this.DEMO.length; d.t = 0; d.fired = false; }
+      if (!d.fired) { d.fired = true; this.demoFire(this.DEMO[d.step][0]); }
+      if (d.t >= this.DEMO[d.step][2]) { d.step = (d.step + 1) % this.DEMO.length; d.t = 0; d.fired = false; }
       this.hitT = Math.max(0, (this.hitT || 0) - dt / 1000);
       if (this.demoFake && this.demoFake.flash) this.demoFake.flash.t -= dt / 1000;
     },
@@ -590,14 +590,15 @@
       const d = this.demo;
       const sp = this.demoSpot();
       if (!d || d.t < 0) return { x: sp.hx, y: sp.gy, anim: "idle", t: 0, f: 0 };
-      const k = d.t / this.DEMO[d.step][1];
+      const k = d.t / this.DEMO[d.step][2];
       const caster = sp.reach.caster;
-      switch (d.step) {
-        case 0: return { x: sp.start, y: sp.gy, anim: "idle", t: d.t, f: 0 };
-        case 1: return { x: sp.start + (sp.hx - sp.start) * Math.min(1, k * 1.1), y: sp.gy, anim: k < 0.92 ? "walk" : "idle", t: d.t, f: 0 };
-        case 2: return { x: sp.hx, y: sp.gy - Math.sin(Math.PI * k) * 60 * Z, anim: k < 0.5 ? "jump" : "fall", t: d.t, f: 0 };
-        case 3: return { x: sp.hx, y: sp.gy, anim: k < 0.6 ? "land" : "idle", t: d.t, f: 0 };
-        case 4: case 5: {
+      switch (this.DEMO[d.step][0]) {
+        case "idle": return { x: sp.start, y: sp.gy, anim: "idle", t: d.t, f: 0 };
+        case "walk": return { x: sp.start + (sp.mid - sp.start) * k, y: sp.gy, anim: "walk", t: d.t, f: 0 };
+        case "run": return { x: sp.mid + (sp.hx - sp.mid) * Math.min(1, k * 1.15), y: sp.gy, anim: k < 0.87 ? "run" : "idle", t: d.t, f: 0 };
+        case "jump": return { x: sp.hx, y: sp.gy - Math.sin(Math.PI * k) * 60 * Z, anim: k < 0.5 ? "jump" : "fall", t: d.t, f: 0 };
+        case "land": return { x: sp.hx, y: sp.gy, anim: k < 0.6 ? "land" : "idle", t: d.t, f: 0 };
+        case "attack": case "skill": {
           const s = d.t;
           if (caster) return { x: sp.hx, y: sp.gy, anim: s < 0.6 ? "cast" : "idle", t: s, f: s < 0.16 ? 0 : 1 };
           return { x: sp.hx, y: sp.gy, anim: s < 0.13 ? "windup" : s < 0.26 ? "strike" : s < 0.45 ? "follow" : "idle", t: s, f: 0 };
@@ -664,7 +665,8 @@
           /* 지금 보여 주는 동작 이름: 땅과 정보 창 사이 띠에 쓴다 */
           const d = this.demo;
           const job = this.shown;
-          const label = d.step === 4 ? `기본 공격 · ${job.attack.name}` : d.step === 5 ? `기술 · ${this.demoSkill().name}` : d.step === 6 ? `궁극기 · ${job.skills[4].name}` : this.DEMO[d.step][0];
+          const key = this.DEMO[d.step][0];
+          const label = key === "attack" ? `기본 공격 · ${job.attack.name}` : key === "skill" ? `기술 · ${this.demoSkill().name}` : key === "ult" ? `궁극기 · ${job.skills[4].name}` : this.DEMO[d.step][1];
           const winTop = VH * 0.46 - 6;
           const fs = Math.round(Math.max(12, Math.min(18, (winTop - gy) * 0.62)));
           ctx.save();
@@ -675,7 +677,7 @@
           ctx.strokeStyle = "#0b0918";
           const ly = Math.round((gy + 6 + winTop) / 2);
           ctx.strokeText(label, VW / 2, ly);
-          ctx.fillStyle = d.step === 6 ? "#ffd75e" : "#e8e4ff";
+          ctx.fillStyle = key === "ult" ? "#ffd75e" : "#e8e4ff";
           ctx.fillText(label, VW / 2, ly);
           ctx.restore();
         }
@@ -959,10 +961,16 @@
   /* ─────────────────────── 횡스크롤 무대(마을·던전 각 층) ─────────────────────── */
   /* 거리·속도는 기본 단위(주인공 키 ≈ 44), 화면에는 Z배로 그린다 */
   const GRAV = 900;
-  const JUMP_V = 262;
-  const WALK = 84;
   const CLIMB = 58;
   const MAX_FALL = 430;
+  /* 주인공의 움직임(참고: 마법사의 밤): 걷다가 방향키를 계속 누르거나 Shift를 누르면 달리고,
+     점프는 몬스터보다 가벼운 중력으로 조금 더 오래 떠 있다 */
+  const WALK = 64;
+  const RUN = 104;
+  const RUN_AFTER = 0.45;
+  const HERO_GRAV = 520;
+  const HERO_FALL = 360;
+  const JUMP_V = 206;
   const HERO_HALF = 7;
   const HERO_H = 40;
   const ATK_TIME = 0.42;
@@ -1073,7 +1081,7 @@
       const sx = a.x !== undefined ? a.x : this.map.spawnX;
       this.hero = {
         x: sx, y: this.map.groundY, vx: 0, vy: 0, dir: 1, ground: this.map.plats[0], rope: null, atk: null, atkCd: 0, inv: 1, stun: 0, knock: 0,
-        landT: 0, airT: 0, dropT: 0, dropPlat: null, walkT: 0, climbT: 0, idleT: 0, casting: false
+        landT: 0, airT: 0, dropT: 0, dropPlat: null, walkT: 0, climbT: 0, idleT: 0, casting: false, runT: 0, wantDir: 0, running: false
       };
       this.mons = this.map.spawns.map((sp) => this.makeMon(sp));
       this.drops = [];
@@ -1364,7 +1372,12 @@
       let want = 0;
       if (ctl && held.left) want -= 1;
       if (ctl && held.right) want += 1;
-      if (h.knock <= 0) h.vx = h.atk && h.ground ? 0 : want * WALK;
+      /* 같은 방향을 계속 누르면 달린다 */
+      if (want && want === h.wantDir) h.runT += dt;
+      else h.runT = 0;
+      h.wantDir = want;
+      h.running = !!want && (held.run || h.runT > RUN_AFTER);
+      if (h.knock <= 0) h.vx = h.atk && h.ground ? 0 : want * (h.running ? RUN : WALK);
       if (want && !h.atk && ctl) h.dir = want;
       if (ctl && !h.atk && (held.up || held.down)) {
         const r = this.ropeAt(h, held.up && !held.down);
@@ -1377,7 +1390,7 @@
           return;
         }
       }
-      if (!h.ground) { h.vy = Math.min(MAX_FALL, h.vy + GRAV * dt); h.airT += dt; }
+      if (!h.ground) { h.vy = Math.min(HERO_FALL, h.vy + HERO_GRAV * dt); h.airT += dt; }
       const py = h.y;
       h.x = clamp(h.x + h.vx * dt, 10, m.W - 10);
       h.y += h.vy * dt;
@@ -1396,7 +1409,7 @@
       }
       if (h.ground && h.vx) {
         h.walkT += dt;
-        if (Math.random() < dt * 3) Sp.dust(px(h.x - h.dir * 6), px(h.y), -h.dir, 1);
+        if (Math.random() < dt * (h.running ? 9 : 3)) Sp.dust(px(h.x - h.dir * 6), px(h.y), -h.dir, h.running ? 2 : 1);
       } else h.walkT = 0;
       if (h.y > m.H + 40) { h.x = m.spawnX; h.y = m.groundY; h.vy = 0; h.ground = m.plats[0]; }
     },
@@ -1414,7 +1427,7 @@
       } else if (h.rope) { anim = "climb"; t = h.climbT; }
       else if (!h.ground) anim = h.vy < 0 ? "jump" : "fall";
       else if (h.landT > 0) anim = "land";
-      else if (h.vx) { anim = "walk"; t = h.walkT; }
+      else if (h.vx) { anim = h.running ? "run" : "walk"; t = h.walkT; }
       return { anim, f, t };
     },
 
@@ -1724,6 +1737,8 @@
           case "notes": burst = Sp.rain("note", xs, gy, el); break;
           case "coins": burst = Sp.rain("coin", xs, gy, "light"); break;
           default:
+            /* 마법 궁극기의 둘째 단계: 그린 운석 비를 화면 가득 깔고, 그 위에 속성 연출 */
+            Sp.barrage((xs[0] + xs[xs.length - 1]) / 2, gy, el, Math.min(VW * 0.95, 520 * Z));
             if (el === "bolt") { xs.forEach((x, i) => X.sleep(i * 70).then(() => Sp.bolt([x + 20 * Z, gy - 300 * Z], [x, gy - 10 * Z], "bolt"))); burst = X.sleep(380); }
             else if (el === "wind") { xs.forEach((x) => Sp.tornado(x, gy, "wind", true)); burst = X.sleep(320); }
             else if (el === "light") { xs.forEach((x, i) => X.sleep(i * 80).then(() => Sp.pillar(x, gy, "light", false))); burst = X.sleep(400); }

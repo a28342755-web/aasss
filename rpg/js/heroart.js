@@ -552,10 +552,19 @@
     const m = { rot: 0, sx: 1, sy: 1, dx: 0, dy: 0 };
     switch (anim) {
       case "walk": {
-        const ph = t * 9.5;
-        m.dy = -Math.abs(Math.sin(ph)) * 0.035;
-        m.rot = Math.sin(ph) * 0.045;
-        m.sy = 1 + Math.cos(ph * 2) * 0.012;
+        /* 다리가 모이는 순간 몸이 가장 높다(다리 프레임과 같은 박자) */
+        const ph = t * WALK_RATE;
+        m.dy = -Math.abs(Math.cos(ph)) * 0.03;
+        m.rot = Math.sin(ph) * 0.03;
+        m.sy = 1 + Math.cos(ph * 2) * 0.01;
+        break;
+      }
+      case "run": {
+        const ph = t * RUN_RATE;
+        m.dy = -Math.abs(Math.cos(ph)) * 0.05;
+        m.rot = -0.08 + Math.sin(ph) * 0.03;
+        m.sy = 1 + Math.cos(ph * 2) * 0.018;
+        m.dx = 0.02;
         break;
       }
       case "jump": m.sy = 1.07; m.sx = 0.94; m.rot = -0.08; break;
@@ -578,6 +587,142 @@
       }
     }
     return m;
+  }
+
+  /* ── 다리 움직임 ──
+     그림 한 장에서 두 다리를 찾아 엉덩이를 축으로 번갈아 흔든 프레임(걷기·달리기 8장, 점프·낙하·매달리기)을
+     만든다. 발목 높이에서 떨어진 두 덩어리(두 발)를 찾고, 그 사이 틈을 따라 올라가 다리가 갈라지는 곳(가랑이·옷단)을
+     찾는다. 긴 치마·로브처럼 다리가 안 보이는 그림은 옷단을 살짝 흔든다 */
+  const WALK_RATE = 9.5;
+  const RUN_RATE = 13.5;
+  const legCache = new WeakMap();
+  function legsOf(cv) {
+    if (legCache.has(cv)) return legCache.get(cv);
+    let res = null;
+    try {
+      const w = cv.width;
+      const h = cv.height;
+      const g0 = cv.getContext("2d");
+      const im = g0.getImageData(0, 0, w, h);
+      const d = im.data;
+      const op = (x, y) => x >= 0 && x < w && y >= 0 && y < h && d[(y * w + x) * 4 + 3] > 90;
+      const ax = cv.anchorX === undefined ? w * 0.46 : cv.anchorX;
+      const xa = Math.max(0, Math.round(ax - w * 0.32));
+      const xb = Math.min(w - 1, Math.round(ax + w * 0.32));
+      let bottom = -1;
+      for (let y = h - 1; y >= 0 && bottom < 0; y--) for (let x = xa; x <= xb; x++) if (op(x, y)) { bottom = y; break; }
+      if (bottom > h * 0.5) {
+        const band = Math.round(bottom - h * 0.05);
+        const runs = [];
+        let cur = null;
+        for (let x = xa; x <= xb; x++) {
+          let on = false;
+          for (let y = band; y <= bottom && !on; y++) on = op(x, y);
+          if (on) { if (cur && x - cur.x1 <= 2) cur.x1 = x; else runs.push((cur = { x0: x, x1: x })); }
+        }
+        const feet = runs.filter((r) => r.x1 - r.x0 + 1 >= w * 0.035).sort((a, b) => Math.abs((a.x0 + a.x1) / 2 - ax) - Math.abs((b.x0 + b.x1) / 2 - ax)).slice(0, 2).sort((a, b) => a.x0 - b.x0);
+        let fork = -1;
+        const splitAt = new Int32Array(h).fill(-1);
+        if (feet.length === 2 && feet[1].x0 - feet[0].x1 >= 1) {
+          /* 두 발 사이 틈을 따라 위로: 틈이 막히는 곳이 다리가 갈라지는 곳 */
+          let sx = Math.round((feet[0].x1 + feet[1].x0) / 2);
+          for (let y = bottom; y > band; y--) splitAt[y] = sx;
+          for (let y = band; y >= Math.round(bottom - h * 0.32); y--) {
+            let best = -1;
+            for (let k = 0; k <= 2 && best < 0; k++) { if (!op(sx + k, y)) best = sx + k; else if (!op(sx - k, y)) best = sx - k; }
+            if (best < 0) { fork = y + 1; break; }
+            sx = best;
+            splitAt[y] = sx;
+          }
+        }
+        if (fork > 0 && bottom - fork >= h * 0.06) {
+          const pad = Math.round(w * 0.05);
+          const x0 = Math.max(0, feet[0].x0 - pad);
+          const x1 = Math.min(w - 1, feet[1].x1 + pad);
+          const body = canvas(w, h);
+          const legL = canvas(w, h);
+          const legR = canvas(w, h);
+          const ib = new ImageData(new Uint8ClampedArray(d), w, h);
+          const il = new ImageData(w, h);
+          const ir = new ImageData(w, h);
+          for (let y = fork; y <= bottom; y++) {
+            const sp = splitAt[y] < 0 ? Math.round((feet[0].x1 + feet[1].x0) / 2) : splitAt[y];
+            for (let x = x0; x <= x1; x++) {
+              const p = (y * w + x) * 4;
+              const dst = x < sp ? il : ir;
+              for (let c = 0; c < 4; c++) dst.data[p + c] = d[p + c];
+              ib.data[p + 3] = 0;
+            }
+          }
+          body.getContext("2d").putImageData(ib, 0, 0);
+          legL.getContext("2d").putImageData(il, 0, 0);
+          legR.getContext("2d").putImageData(ir, 0, 0);
+          res = { kind: "legs", fork, bottom, body, legL, legR };
+        } else res = { kind: "hem", top: Math.round(bottom - h * 0.2), bottom };
+      }
+    } catch (e) { res = null; }
+    legCache.set(cv, res);
+    return res;
+  }
+  /* 다리 하나를 갈라지는 곳(fork)을 축으로 기울이고(k: 발이 옮겨 가는 비율) 들어 올린다(lift: 무릎을 굽혀 줄어드는 비율) */
+  function drawLeg(g, leg, fork, k, lift) {
+    const sy = 1 - lift;
+    g.setTransform(1, 0, k, sy, -k * fork, fork * (1 - sy));
+    g.drawImage(leg, 0, 0);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  const frameCache = new WeakMap();
+  function legFrame(cv, mode, i) {
+    const L = legsOf(cv);
+    if (!L) return cv;
+    let m = frameCache.get(cv);
+    if (!m) frameCache.set(cv, (m = new Map()));
+    const key = mode + i;
+    let out = m.get(key);
+    if (out) return out;
+    out = canvas(cv.width, cv.height);
+    out.anchorX = cv.anchorX;
+    const g = out.getContext("2d");
+    g.imageSmoothingEnabled = true;
+    const ph = (i / 8) * TAU;
+    if (L.kind === "legs") {
+      let kL = 0;
+      let kR = 0;
+      let lL = 0;
+      let lR = 0;
+      const swing = mode === "run" ? 0.75 : 0.5;
+      const up = mode === "run" ? 0.3 : 0.16;
+      if (mode === "walk" || mode === "run") {
+        kL = swing * Math.sin(ph);
+        kR = -kL;
+        lL = Math.max(0, Math.cos(ph)) * up;
+        lR = Math.max(0, -Math.cos(ph)) * up;
+      } else if (mode === "jump") { kL = 0.3; kR = -0.32; lL = 0.3; lR = 0.12; }
+      else if (mode === "fall") { kL = -0.14; kR = 0.22; lL = 0.06; }
+      else if (mode === "climb") { lL = i % 2 ? 0.32 : 0.04; lR = i % 2 ? 0.04 : 0.32; }
+      g.drawImage(L.body, 0, 0);
+      drawLeg(g, L.legL, L.fork, kL, lL);
+      drawLeg(g, L.legR, L.fork, kR, lR);
+    } else {
+      /* 옷단 흔들기 */
+      const k = (mode === "run" ? 0.14 : mode === "walk" ? 0.08 : mode === "jump" ? -0.1 : 0) * (mode === "jump" ? 1 : Math.sin(ph));
+      g.drawImage(cv, 0, 0, cv.width, L.top, 0, 0, cv.width, L.top);
+      g.setTransform(1, 0, k, 1, -k * L.top, 0);
+      g.drawImage(cv, 0, L.top, cv.width, cv.height - L.top, 0, L.top, cv.width, cv.height - L.top);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    m.set(key, out);
+    return out;
+  }
+  function frameFor(cv, anim, t) {
+    switch (anim) {
+      case "walk": return legFrame(cv, "walk", Math.floor(((t * WALK_RATE) / TAU) * 8) % 8);
+      case "run": return legFrame(cv, "run", Math.floor(((t * RUN_RATE) / TAU) * 8) % 8);
+      case "jump": return legFrame(cv, "jump", 0);
+      case "fall": return legFrame(cv, "fall", 0);
+      case "climb": return legFrame(cv, "climb", Math.floor(t * 6) % 2);
+      default: return cv;
+    }
   }
 
   /* ── 덧그림. 좌표는 그림의 발밑이 (0,0)인 로컬 좌표(오른쪽을 봄) ── */
@@ -985,8 +1130,9 @@
   function draw(ctx, job, x, y, o) {
     const lk = H.lookOf(job);
     const hh = o.h * lk.size;
-    const cv = sprite(job, hh);
-    if (!cv) return drawDoll(ctx, job, x, y, o);
+    const base = sprite(job, hh);
+    if (!base) return drawDoll(ctx, job, x, y, o);
+    const cv = frameFor(base, o.anim, o.t || 0);
     const T = o.time !== undefined ? o.time : clock();
     const m = motion(o.anim, o.t || 0, o.f || 0);
     if (lk.float) m.dy -= 0.03 + Math.sin(T * 2.4) * 0.015;
@@ -1010,7 +1156,7 @@
       ctx.globalAlpha = alpha;
     }
     if (lk.rarity >= 3) {
-      const gl = glow(cv, F.sprites.RARITY_COLOR[lk.rarity]);
+      const gl = glow(base, F.sprites.RARITY_COLOR[lk.rarity]);
       ctx.globalAlpha = alpha * (0.45 + 0.12 * (lk.rarity - 3) + Math.sin(T * 3) * 0.2);
       ctx.drawImage(gl, -A.ax - gl.pad, -A.H - gl.pad);
       ctx.globalAlpha = alpha;
