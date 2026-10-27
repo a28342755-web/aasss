@@ -1784,6 +1784,139 @@
     return out;
   }
 
+  /* ── 직업 카드의 프로필: 그 직업 캐릭터의 상반신 ──
+     얼굴 크기를 맞춰 확대하고, 속성 빛 배경·계열마다 다른 무늬·등급 테두리를 두른다.
+     같은 계열이라도 직업마다 캐릭터·색·바라보는 쪽·배경 반짝임이 달라 프로필이 모두 다르다 */
+  const PF_BG = {
+    phys: ["#3a3f5c", "#8c93b8"], fire: ["#4a1612", "#e0602a"], ice: ["#12304a", "#7cd8f0"], bolt: ["#3a3010", "#f0d040"],
+    earth: ["#3a2614", "#c08848"], wind: ["#123a2a", "#7ee0a0"], light: ["#4a3a14", "#ffe48a"], dark: ["#1e0e30", "#a050d8"],
+    nature: ["#16341a", "#7ccc58"], arcane: ["#24143e", "#c080f0"]
+  };
+  const profiles = new Map();
+  function pfHash(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function pfBackground(g, job, S) {
+    const [deep, lit] = PF_BG[job.el] || PF_BG.phys;
+    const fam = F.FAMILY_LIST[job.fam];
+    const grd = g.createLinearGradient(0, 0, 0, S);
+    grd.addColorStop(0, lit);
+    grd.addColorStop(0.55, deep);
+    grd.addColorStop(1, "#0a0816");
+    g.fillStyle = grd;
+    g.fillRect(0, 0, S, S);
+    const glow = g.createRadialGradient(S * 0.5, S * 0.38, S * 0.05, S * 0.5, S * 0.38, S * 0.6);
+    glow.addColorStop(0, "rgba(255,255,255,0.42)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = glow;
+    g.fillRect(0, 0, S, S);
+    /* 계열마다 무늬: 빛살 · 사선 · 격자 · 물결 */
+    g.save();
+    g.globalAlpha = 0.16;
+    g.strokeStyle = "#ffffff";
+    g.fillStyle = "#ffffff";
+    g.lineWidth = S / 120;
+    const kind = fam.idx % 4;
+    if (kind === 0) {
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2;
+        g.beginPath();
+        g.moveTo(S * 0.5, S * 0.38);
+        g.lineTo(S * 0.5 + Math.cos(a) * S, S * 0.38 + Math.sin(a) * S);
+        g.lineTo(S * 0.5 + Math.cos(a + 0.12) * S, S * 0.38 + Math.sin(a + 0.12) * S);
+        g.fill();
+      }
+    } else if (kind === 1) {
+      for (let x = -S; x < S * 2; x += S / 10) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + S, S); g.stroke(); }
+    } else if (kind === 2) {
+      for (let x = S / 16; x < S; x += S / 8) for (let y = S / 16; y < S; y += S / 8) g.fillRect(x, y, S / 60, S / 60);
+    } else {
+      for (let y = S * 0.1; y < S; y += S / 9) {
+        g.beginPath();
+        for (let x = 0; x <= S; x += S / 24) g.lineTo(x, y + Math.sin(x / S * Math.PI * 4) * S / 40);
+        g.stroke();
+      }
+    }
+    g.restore();
+    /* 직업마다 다른 자리에 반짝이는 빛 알갱이 */
+    let h = pfHash(job.name);
+    const rnd = () => { h = (Math.imul(h ^ (h >>> 15), 2246822507) + 0x9e3779b9) >>> 0; return h / 4294967296; };
+    for (let k = 0; k < 9 + job.rarity * 3; k++) {
+      const x = rnd() * S;
+      const y = rnd() * S * 0.8;
+      const r = (0.6 + rnd() * 1.4) * S / 120;
+      g.globalAlpha = 0.35 + rnd() * 0.5;
+      g.fillStyle = k % 3 ? lit : "#ffffff";
+      g.fillRect(x - r, y - r * 3, r * 2, r * 6);
+      g.fillRect(x - r * 3, y - r, r * 6, r * 2);
+    }
+    g.globalAlpha = 1;
+  }
+  function pfFrame(g, job, S) {
+    const col = F.sprites.RARITY_COLOR[job.rarity];
+    const b = Math.round(S / 40);
+    const shade = g.createLinearGradient(0, S * 0.62, 0, S);
+    shade.addColorStop(0, "rgba(8,6,20,0)");
+    shade.addColorStop(1, "rgba(8,6,20,0.75)");
+    g.fillStyle = shade;
+    g.fillRect(0, S * 0.62, S, S * 0.38);
+    g.lineWidth = b;
+    g.strokeStyle = "#0c0a1c";
+    g.strokeRect(b * 1.5, b * 1.5, S - b * 3, S - b * 3);
+    g.strokeStyle = col;
+    g.strokeRect(b / 2, b / 2, S - b, S - b);
+    /* 별: 등급만큼(일반 1 … 신화 6) */
+    for (let k = 0; k <= job.rarity; k++) {
+      const cx = b * 4 + k * b * 3.4;
+      const cy = S - b * 4;
+      const r = b * 1.4;
+      g.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const rr = i % 2 ? r * 0.45 : r;
+        g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+      g.closePath();
+      g.fillStyle = col;
+      g.strokeStyle = "#0c0a1c";
+      g.lineWidth = b / 2;
+      g.fill();
+      g.stroke();
+    }
+    if (job.rarity >= 3) {
+      g.fillStyle = col;
+      [[b, b], [S - b * 4, b], [b, S - b * 4], [S - b * 4, S - b * 4]].forEach(([x, y]) => g.fillRect(x, y, b * 3, b * 3));
+    }
+  }
+  function profile(job) {
+    if (profiles.has(job.id)) return profiles.get(job.id);
+    const lk = H.lookOf(job);
+    if (!analyze(srcKey(job, lk)) || !sprite(job, 10)) return url(job);
+    const S = 240;
+    /* 얼굴 폭이 액자의 26%쯤 되게 키운다(그림마다 머리 크기가 달라서) */
+    const probeH = S * 1.6;
+    const probe = sprite(job, probeH * lk.size);
+    const A0 = anchors(analyze(srcKey(job, lk)), probe);
+    const h = Math.max(S * 1.15, Math.min(S * 2.4, probeH * ((S * 0.26) / Math.max(1, A0.fw))));
+    const base = sprite(job, h * lk.size);
+    if (!base) return url(job);
+    const A = anchors(analyze(srcKey(job, lk)), base);
+    const dir = pfHash(job.name) & 1 ? 1 : -1;
+    const cv = canvas(S, S);
+    const g = cv.getContext("2d");
+    pfBackground(g, job, S);
+    const x = S * 0.5 - A.fx * dir * lk.wide;
+    const y = S * 0.46 - A.fy + (lk.float ? 0.03 * h * lk.size : 0);
+    drawStill(g, job, x, y, { dir, h });
+    pfFrame(g, job, S);
+    const out = cv.toDataURL("image/png");
+    if (profiles.size > 300) profiles.clear();
+    profiles.set(job.id, out);
+    return out;
+  }
+
   /* 장면에 들어설 때 미리: 부위 나누기와 대기·걷기 프레임 */
   function warm(job, h) {
     const lk = H.lookOf(job);
@@ -1793,5 +1926,5 @@
     for (let i = 0; i < 6; i++) frameOf(pr.R, poseOf("walk", (i + 0.5) / WALK_FPS, 0), true);
   }
 
-  F.heroArt = { warm, preload, sprite, draw, drawStill, url, image, analyze, headOf, compose, rigOf, frameOf };
+  F.heroArt = { warm, preload, sprite, draw, drawStill, url, profile, image, analyze, headOf, compose, rigOf, frameOf };
 })(typeof window !== "undefined" ? window : globalThis);

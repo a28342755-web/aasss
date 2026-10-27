@@ -685,7 +685,7 @@
     }).join("");
     return `<div class="card">
       <div class="card-top">
-        <div class="card-art"><img src="${portraitURL(fam.id)}" alt="${esc(fam.name)} 계열 초상화" onerror="this.style.visibility='hidden'"><img class="card-doll" src="${thumb(job)}" alt=""></div>
+        <div class="card-art"><img src="${HA.profile(job)}" alt="${esc(job.name)} 프로필"><img class="card-fam" src="${portraitURL(fam.id)}" alt="${esc(fam.name)} 계열" title="${esc(fam.name)} 계열" onerror="this.style.visibility='hidden'"></div>
         <ul class="card-lines">
           <li><b>본업</b> ${esc(job.base)} · ${esc(job.desc)}</li>
           <li><b>기원</b> ${job.mod ? `${esc(job.mod)} · ${esc(job.modDesc)}` : "수식어 없는 정통 직업 (능력치 +5%)"}</li>
@@ -1568,9 +1568,12 @@
       const e = this.b.enemy;
       const tpl = (S.MON_LOOK[e.base] || ["slime"])[0];
       /* 포켓몬처럼 몬스터도 주인공만큼 크게(보스는 더 크게) */
-      const img = S.monsterBig(e.name, e.boss ? (Z >= 2 ? 8 : 6) : (Z >= 2 ? 6 : 4));
+      const img = F.monArt && F.monArt.has(e.name) ? F.monArt.render(e.name, Math.round((e.boss ? 116 : 92) * Z)) : S.monsterBig(e.name, e.boss ? (Z >= 2 ? 8 : 6) : (Z >= 2 ? 6 : 4));
       const bd = bounds(img);
-      this.foe = { img, bd, tpl, fly: FLYERS.has(tpl) && !e.boss, shooter: SHOOTERS.has(tpl), mon: e, blink: 0, dark: 1, alpha: 0, dead: false };
+      const art = F.monArt && F.monArt.info(e.base);
+      const fly = art ? art.fly : FLYERS.has(tpl);
+      const shooter = art ? art.shooter : SHOOTERS.has(tpl);
+      this.foe = { img, bd, tpl, fly: fly && !e.boss, shooter, mon: e, blink: 0, dark: 1, alpha: 0, dead: false };
       this.hero = { blink: 0, hurt: 0, alpha: 0, down: false };
       this.disp = { fhp: e.hp, php: p.hp, pmp: p.mp, xp: p.exp / E.expNeed(p.level), lv: p.level };
       this.goal = { fhp: e.hp, php: p.hp, pmp: p.mp };
@@ -2413,7 +2416,7 @@
     store.del("save");
     closeAll();
     openWin(`<h2 class="win-h over">쓰러졌다…</h2>
-      <div class="over-body"><img src="${thumb(p.job)}" alt="">
+      <div class="over-body"><img class="over-pf" src="${HA.profile(p.job)}" alt="">
       <p><b>${esc(p.name)}</b> ${diffTag(p.diff)}<br><span class="rar-t-${p.job.rarity}">${rarName(p.job.rarity)} ${esc(p.job.name)}</span> · Lv.${p.level}<br>최고 기록 ${p.best}층 · 처치 ${fmt(p.kills)}<br>${esc(J(cause, "에게"))} 쓰러짐</p></div>
       <p class="win-msg">${bonus ? `깊이 내려간 보답으로 다음 운명의 재굴림 기회 +${bonus}` : "10층을 넘길 때마다 다음 운명의 재굴림 기회가 늘어납니다."}</p>
       <div class="opts"><button class="opt primary" type="button" data-opt="new">새로운 운명</button><button class="opt" type="button" data-opt="hall">명예의 전당</button><button class="opt" type="button" data-opt="title">타이틀로</button></div>`, {

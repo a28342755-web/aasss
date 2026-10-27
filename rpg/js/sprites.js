@@ -1536,6 +1536,8 @@
   }
   /* factor: 2, 3, 4, 6 */
   function monsterBig(name, factor) {
+    /* 일러스트(monart.js)가 있는 몬스터는 그 그림을 쓴다 */
+    if (F.monArt && F.monArt.has(name)) return F.monArt.render(name, 26 * factor);
     const key = `mb${name}|${factor}`;
     if (cache.has(key)) return cache.get(key);
     const base = monsterPlain(name);
