@@ -442,13 +442,30 @@
   takes("al_alch ar_painter c_astro e_storm m_rune m_wizard t_engineer tr_jester tr_magician e_earth me_doctor su_summoner", "fmn");
   takes("a_hunter r_thief s_ninja d_curse al_mad s_shadow d_necro d_reaper", "fmnx");
   takes("hu_slayer k_dark k_lancer mi_soldier w_gladiator h_inquisitor", "mnh");
+  /* 직업이 드러나는 모자·머리 장식을 쓴 머리는 어울리는 몸(그림 id 앞부분)에만 붙인다.
+     목록에 없는 머리(맨머리·머리띠·고글 정도)는 어느 몸에나 붙는다. 빈 목록은 수식어(수인)로만 쓴다 */
+  const MAGIC = ["e", "m", "c", "d", "sp", "su", "al", "my", "n"];
+  const HEAD_FOR = {
+    m_witch: MAGIC, n_flower: MAGIC, c_astro: MAGIC, e_storm: MAGIC, m_wizard: MAGIC, e_earth: MAGIC, m_rune: MAGIC, hu_monster: ["hu", "d", "a"],
+    h_nun: ["h", "my", "me"], e_ice: ["e", "h", "my"], h_priest: ["h", "my"],
+    bu_builder: ["bu", "cr", "ga"], ga_miner: ["ga", "bu", "cr", "t"], cu_chef: ["cu"], fa_farmer: ["fa", "ga", "sv"], ga_fisher: ["ga", "se", "fa"],
+    fa_bee: ["fa"], me_doctor: ["me", "h"], sc_scholar: ["sc", "m"], ar_painter: ["ar", "tr", "b"], t_engineer: ["t", "al", "g"],
+    ci_guard: ["ci", "mi"], mi_general: ["mi", "ci", "k"], co_merchant: ["co", "tr"], tr_magician: ["tr", "co"], r_trickster: ["r", "co", "s", "tr"],
+    g_slinger: ["g", "hu", "se"], se_pirate: ["se", "g"], b_bard: ["b", "ar", "tr"], sp_shaman: ["sp", "n"], tr_jester: ["tr", "b"],
+    my_fortune: ["my", "c", "sp"], o_samurai: ["o", "ma"], o_taoist: ["o", "sp", "ma"], hu_hunter: ["hu", "ga", "fa"], a_elf: ["a", "n", "hu"],
+    sv_maid: ["sv", "cu", "me"], bl_fox: [], se_sailor: ["se"]
+  };
+  const headFits = (head, body) => !HEAD_FOR[head] || HEAD_FOR[head].includes(body.split("_")[0]);
   const HEADS_BY = {};
   Object.entries(HEAD_TAG).forEach(([id, t]) => { (HEADS_BY[t] = HEADS_BY[t] || []).push(id); });
   /* 이름에 성별이 드러나는 직업 */
   const FEMALE = /(녀|희|어머니|아가씨)$/;
   const MALE = /(사나이|신부|교황|승|왕|장군|영감)$/;
 
+  /* 모자 챙·뒤 배경·길게 늘어진 머리채가 넓게 퍼진 그림은 원래 머리를 깔끔하게 떼어 낼 수 없어 머리를 바꾸지 않는다 */
+  const KEEP_HEAD = ["e_fire", "t_engineer", "s_kunoichi", "k_rose"];
   function pickHead(job, body, mod, combat) {
+    if (KEEP_HEAD.includes(body)) return null;
     const beast = mod === "수인" ? (BODY_TAKES[body] === "fn" ? ["bl_fox"] : ["bl_wolf", "n_beast"]) : mod === "용인" || mod === "리자드맨" ? ["bl_dragon"] : null;
     if (beast) return beast.includes(body) ? null : beast[fnv(job.name + "^") % beast.length];
     const kinds = BODY_TAKES[body];
@@ -458,7 +475,7 @@
     else if (MALE.test(job.base)) allow = "m";
     if (!combat) allow = allow.replace(/[xh]/g, "");
     const pool = [];
-    allow.split("").forEach((k) => (HEADS_BY[k] || []).forEach((id) => { if (id !== body) pool.push(id); }));
+    allow.split("").forEach((k) => (HEADS_BY[k] || []).forEach((id) => { if (id !== body && headFits(id, body)) pool.push(id); }));
     if (!pool.length) return null;
     /* 열에 하나 남짓은 원래 머리 그대로 */
     const r = fnv(job.name + "^");
@@ -505,6 +522,8 @@
     if (!lk.aura && mod && mod.el && mod.el !== "phys" && mod.tier >= 1) lk.aura = mod.el;
     /* 머리카락 색: 그림마다 첫 기본 직업은 원래 색, 나머지는 이름으로 고른다(원래 색도 섞인다) */
     if (!lk.hair && (mod || i > 0)) lk.hair = HAIR_LIST[fnv(job.name + "@") % HAIR_LIST.length];
+    /* 다른 그림의 머리를 단 직업은 그 머리의 머리카락 색 그대로(얼굴 둘레를 다시 칠하면 베일·두건까지 물든다) */
+    if (lk.head) delete lk.hair;
     lk.size *= 1 + ((fnv(job.name + "#") % 7) - 3) * 0.012;
     lk.rarity = job.rarity;
     job._look = lk;

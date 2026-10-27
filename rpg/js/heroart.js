@@ -82,7 +82,6 @@
     const h = src.height || src.naturalHeight;
     const data = pixels(src, w, h);
     infos[key] = data ? measure(data, w, h, src.face || faceAt(key)) : false;
-    if (infos[key] && src.hairMask) src.hairMask.forEach((v, i) => { if (v) infos[key].kind[i] = 4; });
     return infos[key];
   }
   /* 직접 잰 얼굴 위치(heroes.HEAD_AT)를 얼굴 정보로 */
@@ -218,8 +217,8 @@
     const cut = Math.min(h - 1, Math.round(chin + fw * 0.1));
     const R = new Uint8Array(w * h);
     for (let y = 0; y <= cut; y++) {
-      /* 모자 챙 높이는 넓게, 얼굴 높이는 머리카락까지, 턱 아래 띠에서는 목 둘레만(어깨는 빼고) */
-      const lim = y > chin - fw * 0.1 ? fw * 0.55 : y < f.top - fw * 0.15 ? fw * 2.4 : fw * 1.8;
+      /* 모자 챙 높이는 넓게, 얼굴 높이는 머리카락까지, 턱 아래 띠에서는 목 둘레만(어깨는 빼고, 아래로 갈수록 좁게) */
+      const lim = y > chin - fw * 0.1 ? fw * (0.5 - 0.6 * (y - chin + fw * 0.1) / fw) : y < f.top - fw * 0.15 ? fw * 2.4 : fw * 1.8;
       for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] > 60 && Math.abs(x - f.x) <= lim) R[y * w + x] = 1;
     }
     const k = Math.max(2, Math.round(fw * 0.1));
@@ -288,58 +287,208 @@
       }
       if (touch && comp.length <= small) comp.forEach((j) => { D2[j] = 1; });
     }
+    /* 그림이 이어지는데 자른 가장자리(긴 머리카락, 목, 옷깃)는 몇 픽셀에 걸쳐 흐리게: 칼로 자른 듯한 곧은 선이 안 보이게 */
+    const F = Math.max(2, Math.round(fw * 0.08));
+    const fade = new Uint8Array(w * h);
+    let ring = [];
+    for (let i = 0; i < w * h; i++) {
+      if (!D[i]) continue;
+      const x = i % w;
+      const cutAt = (n, ok) => ok && n >= 0 && n < w * h && !D[n] && data[n * 4 + 3] > 60;
+      if (cutAt(i - 1, x > 0) || cutAt(i + 1, x < w - 1) || cutAt(i - w, true) || cutAt(i + w, true)) { fade[i] = 1; ring.push(i); }
+    }
+    for (let d = 2; d <= F; d++) {
+      const next = [];
+      ring.forEach((i) => {
+        const x = i % w;
+        [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => {
+          if (n >= 0 && n < w * h && D[n] && !fade[n]) { fade[n] = d; next.push(n); }
+        });
+      });
+      ring = next;
+    }
+    /* gone: 몸 쪽에서 지운 자리(새 머리를 단 뒤 구멍이 남으면 메울 곳).
+       under: 그 가운데 턱 아래(목·옷깃)와, 눈높이 아래에서 얼굴 둘레 밖에 있으면서 위쪽 머리(모자 챙)보다 몸에 더 붙은 조각
+       (어깨에 걸친 망토·목도리·부채·꼬리·화살통)은 새 머리 밑에 다시 깐다 */
+    const gone = new Uint8Array(w * h);
+    const back = new Uint8Array(w * h);
+    const eyeRow = Math.ceil(f.y) * w;
+    for (let i = 0; i < w * h; i++) {
+      if (!D2[i] || data[i * 4 + 3] <= 60) continue;
+      const ux = (i % w - f.x) / fw;
+      const uy = (Math.floor(i / w) - f.y) / fw;
+      if (uy * fw > chin - f.y) back[i] = 2;
+      else if (uy > 0 && ux * ux + (uy / 0.75) ** 2 > 1) back[i] = 1;
+    }
+    for (let i = 0; i < w * h; i++) {
+      if (back[i] !== 1) continue;
+      const comp = [i];
+      back[i] = 3;
+      let toBody = 0;
+      let toHead = 0;
+      for (let q = 0; q < comp.length; q++) {
+        const j = comp[q];
+        const x = j % w;
+        [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, j - w, j + w].forEach((n) => {
+          if (n < 0 || n >= w * h || data[n * 4 + 3] <= 60) return;
+          if (back[n] === 1) { back[n] = 3; comp.push(n); } else if (!D2[n] || back[n] === 2) toBody++;
+          else if (!back[n] && n < eyeRow) toHead++;
+        });
+      }
+      const v = toBody > toHead ? 2 : 4;
+      comp.forEach((j) => { back[j] = v; });
+    }
+    const underCv = canvas(w, h);
+    const g3 = underCv.getContext("2d");
+    const u = g3.createImageData(w, h);
     for (let i = 0, p = 0; i < w * h; i++, p += 4) {
       for (let c = 0; c < 4; c++) { a.data[p + c] = data[p + c]; b.data[p + c] = data[p + c]; }
       if (!D[i]) a.data[p + 3] = 0;
-      if (D2[i] || (near[i] && data[p + 3] <= 60)) b.data[p + 3] = 0;
-    }
-    g1.putImageData(a, 0, 0);
-    g2.putImageData(b, 0, 0);
-    /* 머리카락 색: 얼굴 양옆(모자·머릿수건을 써도 보이는 곳)의 평균 */
-    const sc = [0, 0, 0, 0];
-    for (let y = Math.round(f.y - fw * 0.25); y <= chin; y++) {
-      for (let x = Math.round(f.x - fw * 0.85); x <= Math.round(f.x + fw * 0.85); x++) {
-        if (x < 0 || y < 0 || x >= w || y >= h || Math.abs(x - f.x) < fw * 0.5) continue;
-        const i = y * w + x;
-        const p = i * 4;
-        if (data[p + 3] > 150 && inf.kind[i] !== 1 && Math.max(data[p], data[p + 1], data[p + 2]) > 40) { sc[0] += data[p]; sc[1] += data[p + 1]; sc[2] += data[p + 2]; sc[3]++; }
+      else if (fade[i]) a.data[p + 3] = Math.round((data[p + 3] * fade[i]) / (F + 1));
+      if (D2[i] || (near[i] && data[p + 3] <= 60)) {
+        if (data[p + 3] > 60) gone[i] = 1;
+        b.data[p + 3] = 0;
+        if (back[i] === 2) for (let c = 0; c < 4; c++) u.data[p + c] = data[p + c];
       }
     }
-    const side = [0, 0, 0];
-    if (sc[3]) toHsv(sc[0] / sc[3], sc[1] / sc[3], sc[2] / sc[3], side);
-    else { const hx = parseInt(inf.hair.slice(1), 16); toHsv(hx >> 16, (hx >> 8) & 255, hx & 255, side); }
-    /* 머리를 지운 뒤에도 몸에 남는 긴 머리카락: 지운 자리 바로 바깥에서 머리카락 색과 같은 픽셀을 따라간다.
-       새 머리를 달면 이 부분을 새 머리카락 색으로 칠한다(지우면 몸에 구멍이 난다) */
-    const c = [0, 0, 0];
-    const hairHsv = side;
-    let long = null;
-    if (hairHsv[1] > 0.15 && hairHsv[2] > 0.3) {
-      const like = (i) => {
-        const p = i * 4;
-        if (data[p + 3] <= 60 || D2[i]) return false;
-        toHsv(data[p], data[p + 1], data[p + 2], c);
-        const dh = Math.abs(c[0] - hairHsv[0]);
-        return Math.min(dh, 1 - dh) < 0.05 && Math.abs(c[1] - hairHsv[1]) < 0.3 && Math.abs(c[2] - hairHsv[2]) < 0.35;
-      };
-      long = new Uint8Array(w * h);
-      const ring = dilate(D2, w, h, 3);
-      const st = [];
-      for (let i = 0; i < w * h; i++) if (ring[i] && like(i)) { long[i] = 1; st.push(i); }
-      while (st.length) {
-        const i = st.pop();
-        const x = i % w;
+    /* 지우고 나서 몸통과 떨어져 떠 있는 조각(모자 챙 끝, 머리 장식, 잘린 지팡이 끝)은 턱보다 위에 있고 지운 자리에 닿으면 마저 지운다 */
+    const keep = new Uint8Array(w * h);
+    for (let i = 0, p = 0; i < w * h; i++, p += 4) keep[i] = (b.data[p + 3] > 60 || u.data[p + 3] > 60) ? 1 : 0;
+    const lab = new Int32Array(w * h).fill(-1);
+    const comps = [];
+    for (let i = 0; i < w * h; i++) {
+      if (!keep[i] || lab[i] >= 0) continue;
+      const comp = [i];
+      lab[i] = comps.length;
+      let sy = 0;
+      let touch = false;
+      for (let q = 0; q < comp.length; q++) {
+        const j = comp[q];
+        const x = j % w;
+        sy += (j - x) / w;
         for (let oy = -1; oy <= 1; oy++) {
           for (let ox = -1; ox <= 1; ox++) {
-            const n = i + oy * w + ox;
-            if (x + ox < 0 || x + ox >= w || n < 0 || n >= w * h || long[n] || !like(n)) continue;
-            long[n] = 1;
-            st.push(n);
+            const n = j + oy * w + ox;
+            if (x + ox < 0 || x + ox >= w || n < 0 || n >= w * h) continue;
+            if (D2[n] && !keep[n]) touch = true;
+            if (!keep[n] || lab[n] >= 0) continue;
+            lab[n] = comps.length;
+            comp.push(n);
           }
         }
       }
+      comps.push({ px: comp, cy: sy / comp.length, touch });
     }
-    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, w, h, face: f, long, hairHsv, side, mask: D };
+    const main = comps.reduce((m, c) => (!m || c.px.length > m.px.length ? c : m), null);
+    comps.forEach((c) => {
+      if (c === main || !c.touch || c.cy >= chin) return;
+      c.px.forEach((j) => { b.data[j * 4 + 3] = 0; u.data[j * 4 + 3] = 0; });
+    });
+    /* 지운 자리와 맞닿은 몸 쪽 가장자리는 몇 픽셀에 걸쳐 흐리게: 새 머리가 못 덮은 곳에 자로 그은 듯한 선이 남지 않게 */
+    const F2 = Math.max(2, Math.round(fw * 0.12));
+    const seen2 = new Uint8Array(w * h);
+    let edge = [];
+    const shown = (n) => b.data[n * 4 + 3] > 0 || u.data[n * 4 + 3] > 0;
+    for (let i = 0; i < w * h; i++) {
+      if (data[i * 4 + 3] <= 60 || shown(i)) continue;
+      const x = i % w;
+      [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => {
+        if (n >= 0 && n < w * h && !seen2[n] && shown(n)) { seen2[n] = 1; edge.push(n); }
+      });
+    }
+    for (let d = 1; d <= F2 && edge.length; d++) {
+      const next = [];
+      edge.forEach((i) => {
+        const k = d / (F2 + 1);
+        b.data[i * 4 + 3] = Math.round(b.data[i * 4 + 3] * k);
+        u.data[i * 4 + 3] = Math.round(u.data[i * 4 + 3] * k);
+        const x = i % w;
+        [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => {
+          if (n >= 0 && n < w * h && !seen2[n] && shown(n)) { seen2[n] = 1; next.push(n); }
+        });
+      });
+      edge = next;
+    }
+    g1.putImageData(a, 0, 0);
+    g2.putImageData(b, 0, 0);
+    g3.putImageData(u, 0, 0);
+    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, under: underCv, w, h, face: f, mask: D, gone };
     return heads[id];
+  }
+  /* 새 머리가 지운 자리를 다 덮지 못해 목·옷깃 둘레에 생긴 구멍을 둘레 색으로 메운다.
+     메우는 곳: 지운 자리 가운데 둘러싸여 바깥과 이어지지 않은 빈칸, 또는 좁은 틈(닫기 연산으로 막히는 곳) */
+  function fillGaps(cv, bh, L, T) {
+    const W = cv.width;
+    const Hh = cv.height;
+    const g = cv.getContext("2d");
+    const im = g.getImageData(0, 0, W, Hh);
+    const d = im.data;
+    const n = W * Hh;
+    const O = new Uint8Array(n);
+    for (let i = 0; i < n; i++) O[i] = d[i * 4 + 3] >= 100 ? 1 : 0;
+    const cand = new Uint8Array(n);
+    let any = false;
+    /* 목·옷깃 높이만(얼굴 옆 빈틈을 한 가지 색으로 메우면 납작한 네모가 된다) */
+    for (let y = Math.max(0, Math.floor(bh.chin - bh.fw * 0.3)); y < bh.h; y++) {
+      for (let x = 0; x < bh.w; x++) {
+        if (!bh.gone[y * bh.w + x]) continue;
+        const j = (y - T) * W + (x - L);
+        if (!O[j]) { cand[j] = 1; any = true; }
+      }
+    }
+    if (!any) return;
+    const r = Math.max(2, Math.round(bh.fw * 0.12));
+    const closed = erode(dilate(O, W, Hh, r), W, Hh, r);
+    /* 바깥에서 빈칸을 따라 들어갈 수 있는 곳 */
+    const out = new Uint8Array(n);
+    const st = [];
+    for (let x = 0; x < W; x++) [x, (Hh - 1) * W + x].forEach((i) => { if (!O[i] && !out[i]) { out[i] = 1; st.push(i); } });
+    for (let y = 0; y < Hh; y++) [y * W, y * W + W - 1].forEach((i) => { if (!O[i] && !out[i]) { out[i] = 1; st.push(i); } });
+    while (st.length) {
+      const i = st.pop();
+      const x = i % W;
+      if (x > 0 && !O[i - 1] && !out[i - 1]) { out[i - 1] = 1; st.push(i - 1); }
+      if (x < W - 1 && !O[i + 1] && !out[i + 1]) { out[i + 1] = 1; st.push(i + 1); }
+      if (i >= W && !O[i - W] && !out[i - W]) { out[i - W] = 1; st.push(i - W); }
+      if (i + W < n && !O[i + W] && !out[i + W]) { out[i + W] = 1; st.push(i + W); }
+    }
+    let todo = [];
+    for (let i = 0; i < n; i++) if (cand[i] && (closed[i] || !out[i])) todo.push(i);
+    if (!todo.length) return;
+    /* 둘레에서 안쪽으로 한 겹씩: 이미 칠한 이웃 색의 평균 */
+    for (let pass = 0; pass < 80 && todo.length; pass++) {
+      const next = [];
+      const put = [];
+      todo.forEach((i) => {
+        const x = i % W;
+        let rr = 0;
+        let gg = 0;
+        let bb = 0;
+        let k = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const j = i + oy * W + ox;
+            if ((!ox && !oy) || x + ox < 0 || x + ox >= W || j < 0 || j >= n || !O[j]) continue;
+            rr += d[j * 4];
+            gg += d[j * 4 + 1];
+            bb += d[j * 4 + 2];
+            k++;
+          }
+        }
+        if (k >= 2) put.push([i, rr / k, gg / k, bb / k]);
+        else next.push(i);
+      });
+      if (!put.length) break;
+      put.forEach(([i, rr, gg, bb]) => {
+        d[i * 4] = rr;
+        d[i * 4 + 1] = gg;
+        d[i * 4 + 2] = bb;
+        d[i * 4 + 3] = 255;
+        O[i] = 1;
+      });
+      todo = next;
+    }
+    g.putImageData(im, 0, 0);
   }
   /* 몸 그림에 다른 그림의 머리를 단 새 그림. anchorX는 발밑 x(원래 그림의 0.46 지점) */
   const composed = {};
@@ -358,49 +507,18 @@
     const Rr = Math.ceil(Math.max(bh.w, dx + (hh.x1 + 1) * s));
     const W = Rr - L;
     const Hh = bh.h - T;
-    /* 몸: 남은 긴 머리카락을 새 머리카락 색으로 */
-    let body = bh.erased;
-    if (bh.long) {
-      body = canvas(bh.w, bh.h);
-      const gb = body.getContext("2d");
-      gb.drawImage(bh.erased, 0, 0);
-      const im = gb.getImageData(0, 0, bh.w, bh.h);
-      const c = [0, 0, 0];
-      const vk = Math.max(0.35, Math.min(2.2, (hh.side[2] + 0.05) / (bh.hairHsv[2] + 0.05)));
-      for (let i = 0; i < bh.w * bh.h; i++) {
-        if (!bh.long[i]) continue;
-        const p = i * 4;
-        toHsv(im.data[p], im.data[p + 1], im.data[p + 2], c);
-        toRgb(hh.side[0], Math.min(1, hh.side[1] * (0.5 + c[1])), Math.min(1, c[2] * vk), c);
-        im.data[p] = c[0];
-        im.data[p + 1] = c[1];
-        im.data[p + 2] = c[2];
-      }
-      gb.putImageData(im, 0, 0);
-    }
     const cv = canvas(W, Hh);
     const g = cv.getContext("2d");
     g.imageSmoothingEnabled = true;
     g.imageSmoothingQuality = "high";
-    g.drawImage(body, -L, -T);
+    g.drawImage(bh.erased, -L, -T);
     g.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
+    g.globalCompositeOperation = "destination-over";
+    g.drawImage(bh.under, -L, -T);
+    g.globalCompositeOperation = "source-over";
+    fillGaps(cv, bh, L, T);
     cv.anchorX = bh.w * 0.46 - L;
     cv.place = { bodyId, headId, L, T, dx, dy, s };
-    /* 칠한 긴 머리카락 자리를 기억해 두면, 직업별 머리카락 색을 입힐 때 같이 칠해진다 */
-    if (bh.long) {
-      const hl = canvas(W, Hh);
-      const gh = hl.getContext("2d");
-      gh.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
-      const cover = gh.getImageData(0, 0, W, Hh).data;
-      cv.hairMask = new Uint8Array(W * Hh);
-      for (let i = 0; i < bh.w * bh.h; i++) {
-        if (!bh.long[i]) continue;
-        const x = (i % bh.w) - L;
-        const y = Math.floor(i / bh.w) - T;
-        const j = y * W + x;
-        if (cover[j * 4 + 3] < 40) cv.hairMask[j] = 1;
-      }
-    }
     const hf = hh.face;
     cv.face = { x: dx + hf.x * s - L, y: dy + hf.y * s - T, w: hf.w * s, top: dy + hf.top * s - T, chin: dy + hf.chin * s - T };
     composed[key] = cv;
@@ -1890,6 +2008,40 @@
       [[b, b], [S - b * 4, b], [b, S - b * 4], [S - b * 4, S - b * 4]].forEach(([x, y]) => g.fillRect(x, y, b * 3, b * 3));
     }
   }
+  /* 그림에서 얼굴과 이어진 머리의 가장 높은 곳(발밑 기준 y). 턱 위, 얼굴 둘레만 따라가서 옆에 세운 지팡이는 빼고 */
+  function headTop(cv, A) {
+    const W = cv.width;
+    const Hh = cv.height;
+    const d = cv.getContext("2d").getImageData(0, 0, W, Hh).data;
+    const cx = A.ax + A.fx;
+    const cy = Hh + A.fy;
+    const x0 = Math.max(0, Math.floor(cx - A.fw * 1.3));
+    const x1 = Math.min(W - 1, Math.ceil(cx + A.fw * 1.3));
+    const y1 = Math.min(Hh - 1, Math.round(cy + A.fw * 0.3));
+    const seen = new Uint8Array(W * Hh);
+    const st = [];
+    for (let y = Math.round(cy - A.fw * 0.2); y <= Math.round(cy + A.fw * 0.2); y++) {
+      for (let x = Math.round(cx - A.fw * 0.2); x <= Math.round(cx + A.fw * 0.2); x++) {
+        const i = y * W + x;
+        if (y >= 0 && y < Hh && x >= 0 && x < W && d[i * 4 + 3] > 100 && !seen[i]) { seen[i] = 1; st.push(i); }
+      }
+    }
+    let top = cy;
+    while (st.length) {
+      const i = st.pop();
+      const x = i % W;
+      const y = (i - x) / W;
+      if (y < top) top = y;
+      [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].forEach(([X, Y]) => {
+        if (X < x0 || X > x1 || Y < 0 || Y > y1) return;
+        const j = Y * W + X;
+        if (seen[j] || d[j * 4 + 3] <= 100) return;
+        seen[j] = 1;
+        st.push(j);
+      });
+    }
+    return top - Hh;
+  }
   function profile(job) {
     if (profiles.has(job.id)) return profiles.get(job.id);
     const lk = H.lookOf(job);
@@ -1902,14 +2054,24 @@
     const h = Math.max(S * 1.15, Math.min(S * 2.4, probeH * ((S * 0.26) / Math.max(1, A0.fw))));
     const base = sprite(job, h * lk.size);
     if (!base) return url(job);
-    const A = anchors(analyze(srcKey(job, lk)), base);
+    let A = anchors(analyze(srcKey(job, lk)), base);
+    /* 머리 꼭대기(머리카락·모자·투구)까지 액자 안에 들어오게: 먼저 얼굴을 내리고, 그래도 넘치면 작게 */
+    const M = S * 0.07;
+    let up = A.fy - headTop(base, A);
+    let fy = Math.max(S * 0.46, Math.min(S * 0.56, M + up));
+    let hh = h;
+    if (fy - up < M) {
+      hh = h * ((fy - M) / up);
+      const small = sprite(job, hh * lk.size);
+      if (small) { A = anchors(analyze(srcKey(job, lk)), small); up = A.fy - headTop(small, A); fy = Math.max(S * 0.46, Math.min(S * 0.56, M + up)); } else hh = h;
+    }
     const dir = pfHash(job.name) & 1 ? 1 : -1;
     const cv = canvas(S, S);
     const g = cv.getContext("2d");
     pfBackground(g, job, S);
     const x = S * 0.5 - A.fx * dir * lk.wide;
-    const y = S * 0.46 - A.fy + (lk.float ? 0.03 * h * lk.size : 0);
-    drawStill(g, job, x, y, { dir, h });
+    const y = fy - A.fy + (lk.float ? 0.03 * hh * lk.size : 0);
+    drawStill(g, job, x, y, { dir, h: hh });
     pfFrame(g, job, S);
     const out = cv.toDataURL("image/png");
     if (profiles.size > 300) profiles.clear();
