@@ -165,6 +165,8 @@ button { cursor: pointer; }
 .roll-head .roll-rar { display: inline-block; padding: 1px 10px; border: 2px solid currentColor; font-size: 13px; font-weight: 700; background: rgba(0, 0, 0, 0.5); }
 .roll-name { margin: 6px 0 2px; font-size: 28px; font-weight: 700; line-height: 1.2; }
 .roll-fam { font-size: 12px; color: var(--muted); }
+.roll-trait { display: block; margin-top: 3px; font-size: 12.5px; color: #ffe7a8; }
+.roll-trait b { padding: 0 6px; margin-left: 3px; color: #2c3438; background: #ffe7a8; border-radius: 3px; text-shadow: none; }
 .roll-head.rar-0 { color: var(--r0); } .roll-head.rar-1 { color: var(--r1); } .roll-head.rar-2 { color: var(--r2); }
 .roll-head.rar-3 { color: var(--r3); } .roll-head.rar-4 { color: var(--r4); } .roll-head.rar-5 { color: var(--r5); }
 .roll-head.spinning .roll-name { opacity: 0.85; }
@@ -188,6 +190,14 @@ button { cursor: pointer; }
 .name-row input { min-width: 0; height: 34px; padding: 4px 8px; border: 2px solid #4a4380; background: #0c0a1c; color: var(--ink); user-select: text; -webkit-user-select: text; }
 
 /* 직업 카드 */
+/* 상태창·조작 안내의 칸 */
+.sheet { margin: 0 0 6px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.sheet div { padding: 4px 6px; background: #0f0c22; border: 1px solid #2c2756; }
+.sheet dt { font-size: 10.5px; color: var(--muted); }
+.sheet dd { margin: 0; font-size: 13px; }
+.sheet.help { grid-template-columns: 1fr; }
+.sheet.help div { display: flex; align-items: baseline; gap: 10px; }
+.sheet.help dt { flex: none; font-size: 12px; color: var(--accent); }
 .card { display: flex; flex-direction: column; gap: 6px; }
 .card h3 { margin: 6px 0 2px; font-size: 12px; color: var(--accent); font-weight: 700; letter-spacing: 0.05em; }
 .card-top { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
@@ -209,6 +219,15 @@ button { cursor: pointer; }
 .skills b { font-size: 13.5px; }
 .sk-tag { display: block; font-size: 11px; color: var(--cursor); }
 .skills p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+/* 직업 특색: 고유 특성과 무기 */
+.traits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.traits li { padding: 5px 8px; background: #1c1630; border-left: 3px solid #e0b040; }
+.traits li:last-child { border-left-color: #7a8ab0; }
+.traits b { font-size: 14px; color: #ffe7a8; }
+.traits li:last-child b { color: #d8e2ff; }
+.traits p { margin: 2px 0 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.tr-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 10.5px; line-height: 16px; vertical-align: 1px; color: #2c2410; background: #e0b040; border-radius: 3px; }
+.tr-tag.wp { color: #182040; background: #9aa8d0; }
 
 /* ── HUD ── */
 .hud-plate {
@@ -318,6 +337,14 @@ button { cursor: pointer; }
 .pkb-job .r5 { color: #d0285a; }
 .pkb-st { display: flex; flex-wrap: wrap; gap: 3px; }
 .pkb-st:not(:empty) { margin-top: 2px; }
+/* 특성 이름표: 특성이 드러날 때 주인공 이름표 위에 잠깐 뜬다 */
+.pk-trait {
+  position: absolute; right: 10px; bottom: calc(100% + 8px); padding: 3px 10px 4px; white-space: nowrap;
+  font-size: 14px; font-weight: 700; color: #fff; background: #3c4448; border: 2px solid #f4f4ea; border-radius: 6px;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); opacity: 0; transform: translateY(4px); transition: opacity 0.18s steps(3), transform 0.18s steps(3);
+}
+.pk-trait small { margin-right: 6px; font-size: 10.5px; font-weight: 400; color: #ffd86a; }
+.pk-trait.show { opacity: 1; transform: none; }
 .pkb-st i { font-style: normal; font-size: 10px; line-height: 14px; padding: 0 4px; color: #fff; border-radius: 3px; text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3); }
 .pkb-bar { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
 .pkb-bar span { flex: none; min-width: 22px; padding: 0 3px; font-size: 9px; line-height: 12px; font-weight: 700; text-align: center; color: #fff8d8; background: #e09a1a; border-radius: 3px; }

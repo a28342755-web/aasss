@@ -48,6 +48,79 @@
     return !m.only || m.only.includes(diffOf(diff).key);
   }
 
+  /* ── 직업 고유 특성 (data-traits.js) ──
+     기본 직업 이름 → 정해 둔 특성, 이름 낱말 규칙, 대표 기술 유형 순으로 고른다. 등급이 높을수록 수치가 크다 */
+  function pickTrait(job) {
+    if (D.TRAIT_EXACT[job.base]) return D.TRAIT_EXACT[job.base];
+    for (const [id, re] of D.TRAIT_RULES) if (re.test(job.base)) return id;
+    const sig = job.skills.find((s) => s.tag === "sig") || job.skills[1];
+    let t = D.TRAIT_BY_TYPE[sig.type] || "momentum";
+    if (sig.type === "stun" && job.el === "ice") t = "chill";
+    if (sig.type === "stun" && job.el === "bolt") t = "shock";
+    if (typeof t === "object") t = t[job.atkStat] || t.any || "momentum";
+    return t;
+  }
+
+  function allyName(job) {
+    const hit = D.ALLY_NAMES.find(([re]) => re.test(job.base));
+    return hit ? hit[1] : "동료";
+  }
+
+  const pct0 = (x) => String(Math.round(x * 100));
+
+  function traitOf(job) {
+    if (job._trait) return job._trait;
+    const id = pickTrait(job);
+    const t = D.TRAITS[id];
+    const k = 1 + job.rarity * 0.1;
+    const v = (t.v || 0) * k;
+    const c = Math.min(0.75, (t.c || 0) * k);
+    const v2 = v * (t.v2 || 0);
+    const ally = id === "ally" ? allyName(job) : null;
+    const desc = t.desc.replace("{v}", pct0(v)).replace("{c}", pct0(c)).replace("{v2}", pct0(v2)).replace("{ally}", ally ? J(ally, "이/가") : "");
+    job._trait = { id, name: t.name, v, c, v2, ally, desc };
+    return job._trait;
+  }
+
+  /* ── 무기별 기본 공격 ──
+     무기는 직업 그림이 정한다(heroes.js). 그림 쪽이 아직 없으면(도구) 검으로 친다 */
+  function weaponOf(job) {
+    if (job._wstyle) return job._wstyle;
+    const H = F.heroes;
+    const key = H ? H.weaponOf(job).key : "sword";
+    const w = Object.assign({ key, name: H ? H.WEAPONS[key].name : "검", mult: 1, hits: 1, mp: 0.04 }, D.WEAPON_STYLES[key]);
+    if (H) job._wstyle = w;
+    return w;
+  }
+
+  /* 기본 공격(이름·능력치·속성): 이름은 쥔 무기에 맞춘다 */
+  function attackOf(job) {
+    if (job._atk) return job._atk;
+    const H = F.heroes;
+    if (!H) return job.attack;
+    const w = weaponOf(job);
+    const fits = (D.ATTACK_FITS[F.FAMILY_LIST[job.fam].id] || "").split(",").includes(w.key);
+    const name = fits ? job.attack.name : (w.key === "throw" && D.THROW_ATTACK[H.styleOf(job).shot]) || D.WEAPON_ATTACK[w.key] || job.attack.name;
+    job._atk = Object.assign({}, job.attack, { name });
+    return job._atk;
+  }
+
+  function describeAttack(job) {
+    const w = weaponOf(job);
+    const parts = [w.hits > 1 ? `위력 ${pct0(w.mult)}%로 ${w.hits}회 공격` : `위력 ${pct0(w.mult)}% 공격`];
+    if (w.pen) parts.push(`방어 ${pct0(w.pen)}% 무시`);
+    if (w.crit) parts.push(`치명타 +${pct0(w.crit)}%p`);
+    if (w.stun) parts.push(`${pct0(w.stun)}% 확률로 기절`);
+    if (w.bleed) parts.push("3턴 출혈");
+    if (w.drain) parts.push(`준 피해의 ${pct0(w.drain)}% 흡수`);
+    if (w.heal) parts.push(`HP ${pct0(w.heal)}% 회복`);
+    if (w.debuff) parts.push(`${pct0(w.debuff)}% 확률로 적 약화`);
+    if (w.curse) parts.push(`${pct0(w.curse)}% 확률로 저주`);
+    if (w.extra) parts.push(`${pct0(w.extra)}% 확률로 하나 더 던짐`);
+    parts.push(w.mp ? `MP ${pct0(w.mp)}% 회복` : "MP 회복 없음");
+    return parts.join(", ");
+  }
+
   /* ── 능력치 ── */
   function statsAt(job, level) {
     const s = {};
@@ -55,22 +128,38 @@
     return s;
   }
 
+  /* 장인 정신 특성은 강화 단계를 더 크게 쳐 준다 */
+  function gearLv(p, lv) {
+    const tr = traitOf(p.job);
+    return tr.id === "craftsman" ? lv * (1 + tr.v) : lv;
+  }
+
   function derive(p) {
     const pa = p.job.passive;
+    const tr = traitOf(p.job);
     const L = p.level;
     const s = statsAt(p.job, L);
+    const armor = gearLv(p, p.armorLv);
+    const nimble = tr.id === "nimble" ? tr.v : 0;
     return {
       s,
-      maxHp: Math.round((60 + L * 13 + s.vit * 3 + s.str) * (1 + 0.04 * p.armorLv) * (1 + (pa.hp || 0))),
+      maxHp: Math.round((60 + L * 13 + s.vit * 3 + s.str) * (1 + 0.04 * armor) * (1 + (pa.hp || 0) + (tr.id === "sturdy" ? tr.v : 0))),
       maxMp: Math.round((30 + s.wis * 3 + s.int * 2.5 + L * 3) * (1 + (pa.mp || 0))),
-      def: (s.vit * 0.4 + s.str * 0.15 + L + p.armorLv * 3) * (1 + (pa.def || 0)),
+      def: (s.vit * 0.4 + s.str * 0.15 + L + armor * 3) * (1 + (pa.def || 0)),
       crit: Math.min(0.6, 0.05 + s.luk * 0.007 + s.dex * 0.002 + (pa.crit || 0)),
-      eva: Math.min(0.35, 0.03 + s.dex * 0.003 + s.luk * 0.002 + (pa.eva || 0))
+      eva: Math.min(0.35 + nimble, 0.03 + s.dex * 0.003 + s.luk * 0.002 + (pa.eva || 0) + nimble)
     };
   }
 
   function power(p, d, stat) {
-    return (d.s[stat] * 2.2 + p.level * 1.6 + 6) * (1 + 0.06 * p.weaponLv) + p.weaponLv * 3;
+    const w = gearLv(p, p.weaponLv);
+    return (d.s[stat] * 2.2 + p.level * 1.6 + 6) * (1 + 0.06 * w) + w * 3;
+  }
+
+  /* 물약 효과 배율: 계열 특성 + 요리 솜씨 */
+  function potionPower(p) {
+    const tr = traitOf(p.job);
+    return 1 + (p.job.passive.pot || 0) + (tr.id === "cook" ? tr.v : 0);
   }
 
   function expNeed(level) {
@@ -181,6 +270,9 @@
     return MONSTERS.find((m) => m.name === name) || null;
   }
 
+  /* 직업마다 고유 특성과 무기 효과가 붙은 만큼 몬스터도 HP·공격이 6% 더 세다(시뮬레이션으로 맞춘 값) */
+  const MON_EDGE = 1.06;
+
   /* 일반 몬스터는 한 층에 여럿이라 보상을 줄이고, 보스는 크게 준다. 중간 보스는 그 사이.
      boss는 보스·중간 보스 모두 참(도망 불가·물약 보상), mid는 중간 보스만 참 */
   function makeEnemy(floor, mon, diff) {
@@ -189,10 +281,10 @@
     const k = m.boss ? { hp: 3.1, atk: 1.32, exp: 4, gold: 3 } : m.mid ? { hp: 2, atk: 1.18, exp: 1.6, gold: 1.2 } : { hp: 1, atk: 1, exp: 0.3, gold: 0.22 };
     const lv = floor;
     const prefix = floor > 100 ? "심연의 " : floor > 50 ? "광폭한 " : "";
-    const maxHp = Math.round((40 + lv * 16 + lv * lv * 0.35) * m.hp * k.hp * dv.hp);
+    const maxHp = Math.round((40 + lv * 16 + lv * lv * 0.35) * m.hp * k.hp * dv.hp * MON_EDGE);
     return {
       name: prefix + m.name, lv, boss: m.boss || m.mid, mid: m.mid, maxHp, hp: maxHp,
-      atk: Math.round((7 + lv * 2.6 + lv * lv * 0.03) * m.atk * k.atk * dv.atk),
+      atk: Math.round((7 + lv * 2.6 + lv * lv * 0.03) * m.atk * k.atk * dv.atk * MON_EDGE),
       def: Math.round((2 + lv * 1.4) * m.def * dv.def),
       el: m.el, weak: m.weak, resist: m.resist, traits: m.traits.slice(),
       exp: Math.round((10 + lv * 5) * k.exp * dv.exp),
@@ -229,29 +321,86 @@
     const floor = o.floor || p.floor;
     const d = derive(p);
     const e = makeEnemy(floor, o.monster, p.diff);
+    const tr = traitOf(p.job);
     const b = {
       floor, enemy: e, turn: 1, log: [], logCount: 0, fx: [], seq: 0, phase: 0, result: null, reward: null,
       cds: p.job.skills.map(() => 0),
-      ps: { guard: false, barrier: 0 },
-      weakKnown: !!p.job.passive.weak
+      ps: { guard: false, barrier: 0, momentum: 0 },
+      weakKnown: !!p.job.passive.weak,
+      tr, once: {}, struck: false
     };
     if (p.job.passive.barrier) b.ps.barrier = Math.round(d.maxHp * p.job.passive.barrier);
     log(b, "sys", e.mid ? `강적 ${J(e.name, "이/가")} 앞을 가로막았다!` : e.boss ? `보스 ${J(e.name, "이/가")} 앞을 가로막았다!` : `앗! 야생의 ${J(e.name, "이/가")} 튀어나왔다!`);
     if (b.ps.barrier) log(b, "buff", `${J(p.name, "은/는")} 보호막에 둘러싸였다!`);
+    traitOpening(p, b, d);
     return b;
   }
 
+  /* 특성이 드러나는 한마디: 주인공 머리 위에 특성 이름이 뜨고 문장이 나온다 */
+  function traitLog(p, b, text) {
+    fx(b, "player", "trait", 0, { name: b.tr.name });
+    log(b, "trait", `${p.name}의 ${b.tr.name}! ${text}`);
+  }
+
+  /* 전투 시작 때 드러나는 특성 */
+  function traitOpening(p, b, d) {
+    const tr = b.tr;
+    const e = b.enemy;
+    const ps = b.ps;
+    switch (tr.id) {
+      case "blessing": {
+        const amount = Math.round(d.maxHp * tr.v);
+        ps.barrier += amount;
+        traitLog(p, b, "빛의 보호막이 몸을 감쌌다!");
+        fx(b, "player", "shield", amount, { src: "player" });
+        break;
+      }
+      case "rally":
+        ps.atkUp = { t: 3, v: tr.v };
+        traitLog(p, b, "사기가 올라 공격이 올라갔다!");
+        fx(b, "player", "buff", 0, { el: "fire" });
+        break;
+      case "intimidate":
+        e.st.cow = { t: 3, v: tr.v };
+        traitLog(p, b, `${e.name}의 공격이 떨어졌다!`);
+        fx(b, "enemy", "status", 0, { st: "debuff" });
+        break;
+      case "ally":
+        ps.summon = { t: 3, dmg: Math.round(power(p, d, p.job.atkStat) * tr.v * (1 + (p.job.passive.summon || 0))), name: tr.ally };
+        traitLog(p, b, `${J(tr.ally, "이/가")} 함께 싸우러 왔다!`);
+        fx(b, "player", "buff", 0, { el: "nature", summon: true });
+        break;
+      case "insight":
+        b.weakKnown = true;
+        traitLog(p, b, e.weak ? `${e.name}의 약점은 ${D.ELEMENTS[e.weak]} 속성이다!` : `${e.name}의 빈틈을 찾아냈다!`);
+        break;
+      case "giant":
+        if (e.boss) traitLog(p, b, "큰 사냥감을 만나 힘이 끓어오른다!");
+        break;
+      default:
+        break;
+    }
+  }
+
+  /* opt.kind: attack(기본 공격) · skill(기술) · extra(추가타·받아치기 등) */
   function damageEnemy(p, b, d, opt) {
     const e = b.enemy;
     const ps = b.ps;
     const pa = p.job.passive;
+    const tr = b.tr || traitOf(p.job);
     const hits = opt.hits || 1;
     let total = 0;
     let crits = 0;
+    let landed = 0;
     let weakHit = false;
     let resisted = false;
+    const res = { total: 0, crits: 0, hits, landed: 0, weakHit: false, resisted: false };
     for (let h = 0; h < hits && e.hp > 0; h++) {
-      let dmg = power(p, d, opt.stat) * opt.mult * (0.9 + R() * 0.2);
+      let roll = 0.9 + R() * 0.2;
+      if (tr.id === "gamble") {
+        if (R() < tr.c) { roll = 2.5; res.jackpot = true; } else roll = 0.7 + R() * 0.6;
+      }
+      let dmg = power(p, d, opt.stat) * opt.mult * roll;
       dmg *= 1 + (pa.dmg || 0);
       if (ps.atkUp) dmg *= 1 + ps.atkUp.v;
       if (ps.rage) dmg *= 1 + ps.rage.v;
@@ -259,29 +408,183 @@
       if (b.turn === 1 && pa.first) dmg *= 1 + pa.first;
       if (e.boss && pa.boss) dmg *= 1 + pa.boss;
       if (e.st.curse) dmg *= 1.25;
+      // 고유 특성
+      if (tr.id === "frenzy" && p.hp < d.maxHp) { dmg *= 1 + tr.v * (1 - Math.max(0, p.hp) / d.maxHp); if (p.hp < d.maxHp * 0.5) res.frenzy = true; }
+      if (tr.id === "executioner" && e.hp <= e.maxHp * 0.35) { dmg *= 1 + tr.v; res.exec = true; }
+      if (tr.id === "giant") { if (e.boss) dmg *= 1 + tr.v2; else if (e.hp > p.hp) dmg *= 1 + tr.v; }
+      if (tr.id === "charge" && b.turn === 1) dmg *= 1 + tr.v;
+      if (tr.id === "momentum" && ps.momentum) dmg *= 1 + tr.v * ps.momentum;
+      if (tr.id === "spellPower" && opt.kind === "skill") dmg *= 1 + tr.v;
+      if (ps.ready && opt.kind !== "extra") dmg *= 1.3;
+      let critNow = R() < d.crit + (opt.critBonus || 0) + (tr.id === "deadeye" ? tr.v : 0);
+      if (tr.id === "ambush" && !b.struck) { dmg *= 1 + tr.v; critNow = true; res.ambush = true; }
+      b.struck = true;
       if (opt.el && opt.el === e.weak) { dmg *= 1.5 + (pa.weak || 0); weakHit = true; }
       else if (opt.el && opt.el === e.resist) { dmg *= 0.6; resisted = true; }
-      if (R() < d.crit + (opt.critBonus || 0)) { dmg *= 1.75; crits++; }
-      const pen = Math.min(0.9, (pa.pen || 0) + (opt.pen || 0));
-      const def = e.def * (e.st.debuff ? 0.7 : 1) * (1 - pen);
+      if (tr.id === "insight") dmg *= 1 + (opt.el && opt.el === e.weak ? tr.v2 : tr.v);
+      if (critNow) { dmg *= tr.id === "deadeye" ? 2.1 : 1.75; crits++; }
+      const pen = Math.min(0.9, (pa.pen || 0) + (opt.pen || 0) + (tr.id === "pierce" ? tr.v : 0));
+      const def = e.def * (e.st.debuff ? 0.7 : 1) * (1 - (e.st.shred || 0)) * (1 - pen);
       dmg = Math.max(1, Math.round((dmg * 100) / (100 + def * 1.2)));
       e.hp -= dmg;
       total += dmg;
+      landed++;
     }
+    if (opt.kind !== "extra") ps.ready = false;
     if (weakHit) b.weakKnown = true;
     if (total > 0) fx(b, "enemy", crits ? "crit" : "hit", total, { el: opt.el, src: opt.src || "player", hits, weak: weakHit });
     if (pa.steal && total > 0) {
       const heal = Math.max(1, Math.round(total * pa.steal));
       p.hp = Math.min(d.maxHp, p.hp + heal);
     }
-    return { total, crits, hits, weakHit, resisted };
+    return Object.assign(res, { total, crits, landed, weakHit, resisted });
   }
 
-  /* 맞힌 뒤의 한마디: 급소·약점·저항 */
-  function hitNotes(b, res) {
-    if (res.crits) log(b, "hit", res.crits > 1 ? `급소에 ${res.crits}번 맞았다!` : "급소에 맞았다!");
+  /* 맞힌 뒤의 한마디: 급소·약점·저항, 그때 드러난 특성 */
+  function hitNotes(p, b, res) {
+    const tr = b.tr;
+    if (res.ambush) traitLog(p, b, "빈틈을 찔러 급소에 꽂혔다!");
+    else if (res.crits) log(b, "hit", tr.id === "deadeye" ? (res.crits > 1 ? `정확히 급소를 ${res.crits}번 꿰뚫었다!` : "정확히 급소를 꿰뚫었다!") : res.crits > 1 ? `급소에 ${res.crits}번 맞았다!` : "급소에 맞았다!");
     if (res.weakHit) log(b, "hit", "효과가 굉장했다!");
     else if (res.resisted) log(b, "hit", "효과가 별로인 듯하다…");
+    if (res.jackpot) traitLog(p, b, "대박이 터졌다!");
+    if (res.frenzy && !b.once.frenzy) { b.once.frenzy = 1; traitLog(p, b, "상처가 깊을수록 힘이 솟는다!"); }
+    if (res.exec && !b.once.exec) { b.once.exec = 1; traitLog(p, b, "숨통을 끊으러 달려든다!"); }
+  }
+
+  /* 상태 이상을 거는 특성·무기가 쓰는 공통 처리 */
+  function stunEnemy(b, chance, label, st) {
+    const e = b.enemy;
+    if (e.hp <= 0 || e.st.stun || R() >= chance * (e.boss ? 0.5 : 1)) return false;
+    e.st.stun = 1;
+    e.st.stunLabel = label;
+    fx(b, "enemy", "status", 0, { st });
+    return true;
+  }
+
+  function dotEnemy(p, b, d, kind, pw, turns) {
+    const had = !!b.enemy.st[kind];
+    applyDot(b, kind, pw * (1 + (p.job.passive.dot || 0)), turns);
+    if (!had) fx(b, "enemy", "status", 0, { st: kind });
+    return !had;
+  }
+
+  /* 피해를 준 뒤 발동하는 특성(기본 공격과 공격 기술) */
+  function afterStrike(p, b, d, kind, res, stat, el) {
+    const tr = b.tr;
+    const e = b.enemy;
+    const ps = b.ps;
+    if (!res.total) return;
+    const pw = power(p, d, stat);
+    if (tr.id === "momentum" && ps.momentum < 5) {
+      ps.momentum++;
+      if (ps.momentum === 3) traitLog(p, b, "기세가 오른다!");
+      if (ps.momentum === 5) traitLog(p, b, "기세가 절정에 달했다!");
+    }
+    if (tr.id === "leech") {
+      const before = p.hp;
+      p.hp = Math.min(d.maxHp, p.hp + Math.max(1, Math.round(res.total * tr.v)));
+      if (p.hp > before) {
+        fx(b, "player", "heal", p.hp - before, { src: "drain" });
+        if (!b.once.leech) { b.once.leech = 1; traitLog(p, b, `${e.name}의 생명력을 빨아들였다!`); }
+      }
+    }
+    if (tr.id === "plunder" && R() < tr.c) {
+      const got = Math.round((1 + b.floor * 0.25) * (1 + (p.job.passive.gold || 0) * 0.5));
+      p.gold += got;
+      fx(b, "player", "gold", got);
+      traitLog(p, b, `${got}G를 슬쩍했다!`);
+    }
+    if (e.hp <= 0) return;
+    switch (tr.id) {
+      case "charge":
+        if (b.turn === 1 && !b.once.charge) {
+          b.once.charge = 1;
+          traitLog(p, b, "기세 좋게 몰아쳤다!");
+          if (stunEnemy(b, tr.c, "움찔해", "stun")) log(b, "status", `${J(e.name, "은/는")} 움찔했다!`);
+        }
+        break;
+      case "armorBreak": {
+        const before = e.st.shred || 0;
+        if (before >= 0.5) break;
+        e.st.shred = Math.min(0.5, before + tr.v);
+        fx(b, "enemy", "status", 0, { st: "debuff" });
+        if (!before) traitLog(p, b, `${e.name}의 방어가 떨어졌다!`);
+        else log(b, "status", `${e.name}의 방어가 더 떨어졌다!`);
+        break;
+      }
+      case "bleedEdge":
+        if (dotEnemy(p, b, d, "bleed", pw * tr.v, 3)) traitLog(p, b, `${J(e.name, "은/는")} 피를 흘리기 시작했다!`);
+        break;
+      case "venom":
+        if (R() < tr.c && dotEnemy(p, b, d, "poison", pw * tr.v, 4)) traitLog(p, b, `${J(e.name, "은/는")} 독에 걸렸다!`);
+        break;
+      case "scorch":
+        if (R() < tr.c && dotEnemy(p, b, d, "burn", pw * tr.v, 3)) traitLog(p, b, `${J(e.name, "은/는")} 화상을 입었다!`);
+        break;
+      case "hex":
+        if (R() < tr.c && dotEnemy(p, b, d, "curse", pw * tr.v, 3)) traitLog(p, b, `${J(e.name, "은/는")} 저주에 걸렸다!`);
+        break;
+      case "chill":
+        if (stunEnemy(b, tr.c, "얼어붙어", "freeze")) traitLog(p, b, `${J(e.name, "은/는")} 얼어붙었다!`);
+        break;
+      case "stagger":
+        if (stunEnemy(b, tr.c, "기절해", "stun")) traitLog(p, b, `${J(e.name, "은/는")} 기절했다!`);
+        break;
+      case "charmer":
+        if (!e.st.charm && R() < tr.c * (e.boss ? 0.5 : 1)) {
+          e.st.charm = 2;
+          fx(b, "enemy", "status", 0, { st: "charm" });
+          traitLog(p, b, `${J(e.name, "은/는")} 혼란에 빠졌다!`);
+        }
+        break;
+      case "shock":
+        if (R() < tr.c) {
+          traitLog(p, b, "번개가 한 번 더 내리쳤다!");
+          fx(b, "enemy", "zap", 0);
+          hitNotes(p, b, damageEnemy(p, b, d, { stat, el: "bolt", mult: tr.v, kind: "extra", src: "zap" }));
+        }
+        break;
+      case "combo":
+        if (kind === "attack" && R() < tr.c) {
+          traitLog(p, b, "한 번 더 몰아친다!");
+          fx(b, "player", "act", 0, { action: "extra", el });
+          hitNotes(p, b, damageEnemy(p, b, d, { stat, el, mult: 0.7, kind: "extra" }));
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  /* 무기마다 다른 기본 공격의 덤: 기절·출혈·흡수·약화·저주·하나 더 */
+  function weaponAfter(p, b, d, w, res, a) {
+    const e = b.enemy;
+    const pw = power(p, d, a.stat);
+    if (w.drain && res.total) {
+      const before = p.hp;
+      p.hp = Math.min(d.maxHp, p.hp + Math.max(1, Math.round(res.total * w.drain)));
+      if (p.hp > before) fx(b, "player", "heal", p.hp - before, { src: "drain" });
+    }
+    if (w.heal) {
+      const before = p.hp;
+      p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * w.heal));
+      if (p.hp > before) fx(b, "player", "heal", p.hp - before, { src: "song" });
+    }
+    if (e.hp <= 0) return;
+    if (w.stun && stunEnemy(b, w.stun, "기절해", "stun")) log(b, "status", `${J(e.name, "은/는")} 기절했다!`);
+    if (w.bleed && dotEnemy(p, b, d, "bleed", pw * w.bleed, 3)) log(b, "status", `${J(e.name, "은/는")} 피를 흘리기 시작했다!`);
+    if (w.debuff && !e.st.debuff && R() < w.debuff) {
+      e.st.debuff = 2 + (p.job.passive.dur || 0);
+      fx(b, "enemy", "status", 0, { st: "debuff" });
+      log(b, "status", `${e.name}의 공격과 방어가 떨어졌다!`);
+    }
+    if (w.curse && !e.st.curse && R() < w.curse && dotEnemy(p, b, d, "curse", pw * 0.08, 3)) log(b, "status", `${J(e.name, "은/는")} 저주에 걸렸다!`);
+    if (w.extra && R() < w.extra) {
+      log(b, "hit", `${J(p.name, "은/는")} 하나 더 던졌다!`);
+      fx(b, "player", "act", 0, { action: "extra", el: a.el });
+      hitNotes(p, b, damageEnemy(p, b, d, { stat: a.stat, el: a.el, mult: 0.5, kind: "extra" }));
+    }
   }
 
   function healPlayer(p, b, d, amount, okText) {
@@ -379,12 +682,13 @@
     if (skill.type === "crit") opt.critBonus = t.critBonus;
     if (skill.type === "execute" && e.hp / e.maxHp <= 0.35) opt.mult *= 2.2;
     if (skill.type === "gamble") opt.mult = (0.1 + R() * 3.1) * skill.pow;
+    opt.kind = "skill";
     const res = damageEnemy(p, b, d, opt);
     if (skill.type === "gamble") log(b, "skill", `주사위 눈은… 위력 ${Math.round(opt.mult * 100)}%!`);
     if (skill.type === "execute" && opt.mult > spec.mult) log(b, "skill", "처형의 일격이 꽂혔다!");
-    if (opt.hits > 1 && res.total > 0) log(b, "hit", `${res.hits}번 맞혔다!`);
-    hitNotes(b, res);
-    if (e.hp <= 0) return true;
+    if (opt.hits > 1 && res.total > 0) log(b, "hit", `${res.landed}번 맞혔다!`);
+    hitNotes(p, b, res);
+    if (e.hp <= 0) { afterStrike(p, b, d, "skill", res, skill.stat, skill.el); return true; }
 
     const dotMul = 1 + (pa.dot || 0);
     switch (skill.type) {
@@ -447,6 +751,7 @@
       default:
         break;
     }
+    afterStrike(p, b, d, "skill", res, skill.stat, skill.el);
     extraHit(p, b, d, skill.stat, skill.el);
     return true;
   }
@@ -456,7 +761,20 @@
     if (!pa.double || b.enemy.hp <= 0 || R() >= pa.double) return;
     log(b, "hit", "추가 공격!");
     fx(b, "player", "act", 0, { action: "extra", el });
-    hitNotes(b, damageEnemy(p, b, d, { stat, el, mult: 0.5 }));
+    hitNotes(p, b, damageEnemy(p, b, d, { stat, el, mult: 0.5, kind: "extra" }));
+  }
+
+  /* 기술을 쓴 뒤의 특성: 영감(MP가 들지 않음) */
+  function afterSkill(p, b, d, idx, spent) {
+    const tr = b.tr;
+    if (tr.id === "inspire" && spent > 0 && R() < tr.c) {
+      const before = p.mp;
+      p.mp = Math.min(d.maxMp, p.mp + spent);
+      if (p.mp > before) {
+        fx(b, "player", "mana", p.mp - before);
+        traitLog(p, b, "영감이 떠올라 MP를 쓰지 않았다!");
+      }
+    }
   }
 
   function skillAvailable(p, b, idx) {
@@ -473,19 +791,28 @@
     return { ok: true, cost: spec.cost };
   }
 
+  /* 공격하지 않는 행동(기술 중 비공격·방어·물약)은 '기세'를 끊는다 */
+  const SELF_SKILLS = new Set(["heal", "regen", "buff", "rage", "shield", "counter", "summon"]);
+
   function playerPhase(p, b, d, action) {
     const e = b.enemy;
     const ps = b.ps;
+    const tr = b.tr;
+    if (action.kind !== "attack" && !(action.kind === "skill" && !SELF_SKILLS.has((p.job.skills[action.idx] || {}).type))) ps.momentum = 0;
     switch (action.kind) {
       case "attack": {
-        const a = p.job.attack;
+        const a = attackOf(p.job);
+        const w = weaponOf(p.job);
         log(b, "hit", `${p.name}의 ${a.name}!`);
-        fx(b, "player", "act", 0, { action: "attack", el: a.el, name: a.name });
-        const res = damageEnemy(p, b, d, { stat: a.stat, el: a.el, mult: 1 });
+        fx(b, "player", "act", 0, { action: "attack", el: a.el, name: a.name, weapon: w.key });
+        const res = damageEnemy(p, b, d, { stat: a.stat, el: a.el, mult: w.mult, hits: w.hits, pen: w.pen, critBonus: w.crit, kind: "attack" });
         const before = p.mp;
-        p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * 0.04));
+        p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * w.mp * (tr.id === "manaFlow" ? 2 : 1)));
         if (p.mp > before) fx(b, "player", "mana", p.mp - before, { quiet: true });
-        hitNotes(b, res);
+        if (w.hits > 1 && res.landed > 1) log(b, "hit", `${res.landed}번 맞혔다!`);
+        hitNotes(p, b, res);
+        weaponAfter(p, b, d, w, res, a);
+        afterStrike(p, b, d, "attack", res, a.stat, a.el);
         extraHit(p, b, d, a.stat, a.el);
         return;
       }
@@ -495,19 +822,35 @@
         fx(b, "player", "act", 0, { action: "guard" });
         fx(b, "player", "buff", 0, { el: "phys", guard: true });
         const before = p.mp;
-        p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * 0.12));
+        p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * (tr.id === "meditate" || tr.id === "manaFlow" ? 0.24 : 0.12)));
         if (p.mp > before) fx(b, "player", "mana", p.mp - before);
+        if (tr.id === "bulwark") {
+          const amount = Math.round(d.maxHp * tr.v);
+          ps.barrier = (ps.barrier || 0) + amount;
+          traitLog(p, b, "단단한 보호막을 둘렀다!");
+          fx(b, "player", "shield", amount, { src: "player" });
+        }
+        if (tr.id === "meditate") {
+          const hpBefore = p.hp;
+          p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * tr.v));
+          traitLog(p, b, "마음을 가라앉혀 기운을 되찾았다!");
+          if (p.hp > hpBefore) fx(b, "player", "heal", p.hp - hpBefore, { src: "player" });
+        }
         return;
       }
-      case "skill":
+      case "skill": {
         if (!skillAvailable(p, b, action.idx).ok) {
           log(b, "warn", "지금은 그 기술을 쓸 수 없다!");
           return;
         }
+        const mp0 = p.mp;
         useSkill(p, b, d, action.idx);
+        afterSkill(p, b, d, action.idx, Math.max(0, mp0 - p.mp));
         return;
+      }
       case "potion": {
-        const pot = 1 + (p.job.passive.pot || 0);
+        const pot = potionPower(p);
+        const cook = tr.id === "cook";
         if (action.item === "mp") {
           if (p.potions.mp <= 0) { log(b, "warn", "마나 물약이 없다!"); return; }
           p.potions.mp--;
@@ -517,6 +860,11 @@
           p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * 0.5 * pot));
           fx(b, "player", "mana", p.mp - before);
           log(b, "heal", `${p.name}의 MP가 회복되었다!`);
+          if (cook) {
+            const hpBefore = p.hp;
+            p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * 0.1 * pot));
+            if (p.hp > hpBefore) { fx(b, "player", "heal", p.hp - hpBefore, { src: "player" }); traitLog(p, b, "HP도 함께 차올랐다!"); }
+          }
         } else {
           if (p.potions.hp <= 0) { log(b, "warn", "회복 물약이 없다!"); return; }
           p.potions.hp--;
@@ -525,6 +873,11 @@
           delete ps.burn;
           delete ps.poison;
           healPlayer(p, b, d, d.maxHp * 0.4 * pot);
+          if (cook) {
+            const mpBefore = p.mp;
+            p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * 0.1 * pot));
+            if (p.mp > mpBefore) { fx(b, "player", "mana", p.mp - mpBefore); traitLog(p, b, "MP도 함께 차올랐다!"); }
+          }
         }
         return;
       }
@@ -547,16 +900,30 @@
   function hurtPlayer(p, b, d, raw) {
     const ps = b.ps;
     const pa = p.job.passive;
+    const tr = b.tr;
+    const e = b.enemy;
+    if (tr.id === "trick" && R() < tr.c) {
+      const self = Math.max(1, Math.round(raw * 0.3));
+      e.hp -= self;
+      fx(b, "enemy", "hit", self, { src: "self" });
+      traitLog(p, b, `${J(e.name, "은/는")} 헛손질하고 제 몸을 쳤다!`);
+      return 0;
+    }
     const evaChance = Math.min(0.85, d.eva + (ps.evade ? 0.5 : 0));
     if (R() < evaChance) {
       fx(b, "player", "miss", 0, { src: "enemy" });
-      log(b, "miss", `그러나 ${p.name}에게는 맞지 않았다!`);
+      if (tr.id === "nimble") {
+        ps.ready = true;
+        log(b, "miss", `그러나 ${J(p.name, "은/는")} 날렵하게 피했다!`);
+      } else log(b, "miss", `그러나 ${p.name}에게는 맞지 않았다!`);
       return 0;
     }
     const def = d.def * (ps.rage ? 0.7 : 1);
     let dmg = (raw * 100) / (100 + def * 1.3);
-    dmg *= 1 - Math.min(0.6, pa.resist || 0);
+    dmg *= 1 - Math.min(0.6, (pa.resist || 0) + (tr.id === "ironSkin" ? tr.v : tr.id === "bulwark" ? 0.08 : 0));
     if (ps.guard) dmg *= 0.5;
+    const foresaw = tr.id === "foresight" && R() < tr.c;
+    if (foresaw) dmg *= 0.5;
     const reflect = Math.max(1, Math.round(dmg * 0.8));
     if (ps.counter) dmg *= 0.5;
     dmg = Math.max(1, Math.round(dmg));
@@ -566,15 +933,45 @@
       ps.barrier -= absorbed;
       dmg -= absorbed;
     }
+    const stood = tr.id === "lastStand" && !ps.stood && p.hp > 1 && dmg >= p.hp;
+    if (stood) { dmg = p.hp - 1; ps.stood = true; }
     p.hp -= dmg;
     fx(b, "player", "hit", dmg, { src: "enemy", absorbed });
     if (absorbed) log(b, "buff", dmg ? "보호막이 피해 일부를 막아냈다!" : "보호막이 피해를 모두 막아냈다!");
-    if (ps.counter && b.enemy.hp > 0) {
-      b.enemy.hp -= reflect;
+    if (foresaw) traitLog(p, b, "공격을 미리 읽어 피해를 줄였다!");
+    if (stood) traitLog(p, b, "쓰러지지 않고 버텨냈다!");
+    if (ps.counter && e.hp > 0 && p.hp > 0) {
+      e.hp -= reflect;
       fx(b, "enemy", "hit", reflect, { src: "counter" });
-      log(b, "hit", `반격! ${J(b.enemy.name, "에게")} 피해를 되돌려 주었다!`);
+      log(b, "hit", `반격! ${J(e.name, "에게")} 피해를 되돌려 주었다!`);
+    }
+    if (tr.id === "thorns" && e.hp > 0 && p.hp > 0 && dmg + absorbed > 0) {
+      const back = Math.max(1, Math.round((dmg + absorbed) * tr.v));
+      e.hp -= back;
+      fx(b, "enemy", "hit", back, { src: "thorns" });
+      if (!b.once.thorns) { b.once.thorns = 1; traitLog(p, b, `${J(e.name, "은/는")} 가시에 찔렸다!`); }
+      else log(b, "hit", `${J(e.name, "은/는")} 가시에 찔렸다!`);
+    }
+    if (tr.id === "riposte" && e.hp > 0 && p.hp > 0 && R() < tr.c) {
+      traitLog(p, b, "곧바로 받아쳤다!");
+      fx(b, "player", "act", 0, { action: "extra", el: p.job.attack.el });
+      hitNotes(p, b, damageEnemy(p, b, d, { stat: p.job.attack.stat, el: p.job.attack.el, mult: 0.6, kind: "extra" }));
+    }
+    if (tr.id === "firstAid" && !ps.aided && p.hp > 0 && p.hp < d.maxHp * 0.35) {
+      ps.aided = true;
+      const before = p.hp;
+      p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * tr.v));
+      fx(b, "player", "heal", p.hp - before, { src: "player" });
+      traitLog(p, b, "재빨리 상처를 돌봤다!");
     }
     return dmg;
+  }
+
+  /* 정화 특성: 몬스터가 거는 해로운 상태를 막는다 */
+  function purified(p, b) {
+    if (b.tr.id !== "purify") return false;
+    traitLog(p, b, "해로운 기운을 떨쳐냈다!");
+    return true;
   }
 
   /* 몬스터의 기본 기술 이름: 특성이 없으면 속성으로 고른다 */
@@ -599,7 +996,7 @@
         return;
       }
     }
-    let atk = e.atk * (e.st.debuff ? 0.7 : 1);
+    let atk = e.atk * (e.st.debuff ? 0.7 : 1) * (e.st.cow ? 1 - e.st.cow.v : 1);
     if (e.traits.includes("enrage") && !e.enraged && e.hp < e.maxHp * 0.5) {
       e.enraged = true;
       fx(b, "enemy", "status", 0, { st: "enrage" });
@@ -624,13 +1021,13 @@
         return;
       case "multi": {
         let n = hurtPlayer(p, b, d, atk * 0.65) > 0 ? 1 : 0;
-        if (p.hp > 0) n += hurtPlayer(p, b, d, atk * 0.65) > 0 ? 1 : 0;
+        if (p.hp > 0 && e.hp > 0) n += hurtPlayer(p, b, d, atk * 0.65) > 0 ? 1 : 0;
         if (n === 2) log(b, "enemy", "2번 맞았다!");
         return;
       }
       case "poison": case "burn": {
         const dealt = hurtPlayer(p, b, d, atk * 0.8);
-        if (dealt > 0) {
+        if (dealt > 0 && p.hp > 0 && !purified(p, b)) {
           ps[trait] = { t: 3, dmg: Math.max(1, Math.round(atk * 0.22)) };
           fx(b, "player", "status", 0, { st: trait });
           log(b, "status", `${J(p.name, "은/는")} ${trait === "poison" ? "독에 걸렸다!" : "화상을 입었다!"}`);
@@ -651,7 +1048,7 @@
       }
       case "stun": {
         const dealt = hurtPlayer(p, b, d, atk * 0.8);
-        if (dealt > 0 && R() < 0.45) {
+        if (dealt > 0 && p.hp > 0 && R() < 0.45 && !purified(p, b)) {
           ps.stun = 1;
           fx(b, "player", "status", 0, { st: "stun" });
           log(b, "status", `${J(p.name, "은/는")} 몸이 저려 다음 차례에 움직일 수 없다!`);
@@ -669,6 +1066,7 @@
       }
       case "weaken": {
         hurtPlayer(p, b, d, atk * 0.8);
+        if (p.hp <= 0 || purified(p, b)) return;
         ps.weaken = 3;
         fx(b, "player", "status", 0, { st: "weaken" });
         log(b, "status", `${p.name}의 공격이 떨어졌다!`);
@@ -731,17 +1129,21 @@
     let regen = 0;
     if (pa.regen) regen += d.maxHp * pa.regen;
     if (ps.regen) { regen += ps.regen.v; tickDown(ps, "regen"); }
+    const vigor = b.tr.id === "vigor" ? d.maxHp * b.tr.v : 0;
+    regen += vigor;
     if (regen > 0 && p.hp < d.maxHp) {
       const before = p.hp;
       p.hp = Math.min(d.maxHp, p.hp + Math.round(regen));
       if (p.hp > before) {
         fx(b, "player", "heal", p.hp - before, { src: "regen" });
-        log(b, "heal", `${J(p.name, "은/는")} HP를 조금 회복했다!`);
+        if (vigor && !b.once.vigor) { b.once.vigor = 1; traitLog(p, b, "몸에 활력이 돌아 HP를 회복했다!"); }
+        else log(b, "heal", `${J(p.name, "은/는")} HP를 조금 회복했다!`);
       }
     }
-    if (pa.mregen) p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * pa.mregen));
+    const mregen = (pa.mregen || 0) + (b.tr.id === "meditate" ? 0.02 : 0);
+    if (mregen) p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * mregen));
     ["atkUp", "rage", "counter", "evade", "weaken"].forEach((k) => tickDown(ps, k));
-    ["charm", "debuff"].forEach((k) => tickDown(b.enemy.st, k));
+    ["charm", "debuff", "cow"].forEach((k) => tickDown(b.enemy.st, k));
     b.cds = b.cds.map((c) => Math.max(0, c - 1));
     b.turn++;
   }
@@ -768,11 +1170,13 @@
     const e = b.enemy;
     const pa = p.job.passive;
     const fam = F.FAMILY_LIST[p.job.fam];
+    const tr = b.tr || traitOf(p.job);
     e.hp = 0;
     b.result = "win";
     b.phase++;
     const exp = Math.round(e.exp * (1 + (pa.exp || 0)));
-    const gold = Math.round(e.gold * (1 + (pa.gold || 0)) * (0.85 + R() * 0.3));
+    const lucky = tr.id === "fortune";
+    const gold = Math.round(e.gold * (1 + (pa.gold || 0) + (lucky ? tr.v : 0)) * (0.85 + R() * 0.3));
     const rw = { exp, gold, levels: [], unlocked: [], drops: [], post: 0, from: { level: p.level, exp: p.exp } };
     fx(b, "enemy", "faint", 0);
     log(b, "win", `${J(e.name, "은/는")} 쓰러졌다!`);
@@ -780,8 +1184,8 @@
     p.gold += gold;
     p.kills++;
     log(b, "exp", `${J(p.name, "은/는")} ${exp} 경험치를 얻었다!`);
-    log(b, "gold", `${gold}G를 손에 넣었다!`);
-    if (R() < 0.15 + (pa.drop || 0) || e.boss) {
+    log(b, "gold", lucky ? `행운이 따라 ${gold}G를 손에 넣었다!` : `${gold}G를 손에 넣었다!`);
+    if (R() < 0.15 + (pa.drop || 0) + (lucky ? 0.04 : 0) || e.boss) {
       p.potions.hp++;
       rw.drops.push("회복 물약");
       log(b, "gold", fam.loot ? `${J(fam.loot, "을/를")} 회복 물약으로 바꿨다!` : "회복 물약을 손에 넣었다!");
@@ -790,6 +1194,12 @@
       p.potions.mp++;
       rw.drops.push("마나 물약");
       log(b, "gold", "마나 물약을 손에 넣었다!");
+    }
+    if (tr.id === "forage" && R() < tr.c) {
+      const mp = p.potions.hp >= 5 && p.potions.mp < p.potions.hp;
+      p.potions[mp ? "mp" : "hp"]++;
+      rw.drops.push(mp ? "마나 물약" : "회복 물약");
+      traitLog(p, b, mp ? "재료를 모아 마나 물약을 하나 만들었다!" : "재료를 모아 회복 물약을 하나 만들었다!");
     }
     while (p.exp >= expNeed(p.level)) {
       p.exp -= expNeed(p.level);
@@ -812,6 +1222,13 @@
       p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * pa.post));
       rw.post = p.hp - before;
       if (rw.post) log(b, "heal", `${J(p.name, "은/는")} 숨을 고르며 HP를 회복했다!`);
+    }
+    if (tr.id === "harvest" && (p.hp < d.maxHp || p.mp < d.maxMp)) {
+      const before = p.hp;
+      p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * tr.v));
+      p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * tr.v2));
+      rw.post += p.hp - before;
+      traitLog(p, b, "거둔 것으로 HP와 MP를 회복했다!");
     }
     b.reward = rw;
   }
@@ -883,19 +1300,22 @@
   /* 전투 밖에서 물약 마시기 */
   function drink(p, item) {
     const d = derive(p);
-    const pot = 1 + (p.job.passive.pot || 0);
+    const pot = potionPower(p);
+    const cook = traitOf(p.job).id === "cook";
+    const hp0 = p.hp;
+    const mp0 = p.mp;
     if (item === "mp") {
       if (p.potions.mp <= 0) return { ok: false, msg: "마나 물약이 없다." };
       p.potions.mp--;
-      const before = p.mp;
       p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * 0.5 * pot));
-      return { ok: true, msg: `마나 물약을 마셨다. MP ${p.mp - before} 회복.` };
+      if (cook) p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * 0.1 * pot));
+      return { ok: true, msg: `마나 물약을 마셨다. MP ${p.mp - mp0}${p.hp > hp0 ? `·HP ${p.hp - hp0}` : ""} 회복.` };
     }
     if (p.potions.hp <= 0) return { ok: false, msg: "회복 물약이 없다." };
     p.potions.hp--;
-    const before = p.hp;
     p.hp = Math.min(d.maxHp, p.hp + Math.round(d.maxHp * 0.4 * pot));
-    return { ok: true, msg: `회복 물약을 마셨다. HP ${p.hp - before} 회복.` };
+    if (cook) p.mp = Math.min(d.maxMp, p.mp + Math.round(d.maxMp * 0.1 * pot));
+    return { ok: true, msg: `회복 물약을 마셨다. HP ${p.hp - hp0}${p.mp > mp0 ? `·MP ${p.mp - mp0}` : ""} 회복.` };
   }
 
   function fleeChance(p, b) {
@@ -931,7 +1351,7 @@
   }
 
   F.engine = {
-    josa, J, statsAt, derive, power, expNeed, newPlayer, skillSpec, describeSkill, passiveLines,
+    josa, J, statsAt, derive, power, potionPower, expNeed, newPlayer, skillSpec, describeSkill, describeAttack, passiveLines, traitOf, weaponOf, attackOf,
     DIFFS, DIFF_KEYS, diffOf, floorTier, floorBoss, floorFights, fightKind, isBossFight, makeEnemy, pickMonster, monsterByName, enterFloor, startBattle, act, skillAvailable, prices, buy, rest, drink, fleeChance, changeJob, randomJob, MONSTERS
   };
 })(typeof window !== "undefined" ? window : globalThis);

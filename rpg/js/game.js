@@ -466,7 +466,8 @@
       const j = this.shown;
       const fam = famOf(j);
       $("hud").innerHTML = `<div class="roll-head rar-${j.rarity}"><span class="roll-rar">${rarName(j.rarity)}</span><h2 class="roll-name">${esc(j.name)}</h2>
-        <span class="roll-fam">${jobNo(j.id)} · ${esc(fam.name)} 계열${fam.combat ? "" : "(생활)"} · ${D.ELEMENTS[j.el]}</span></div>`;
+        <span class="roll-fam">${jobNo(j.id)} · ${esc(fam.name)} 계열${fam.combat ? "" : "(생활)"} · ${D.ELEMENTS[j.el]} · ${esc(E.weaponOf(j).name)}</span>
+        <span class="roll-trait">고유 특성 <b>${esc(E.traitOf(j).name)}</b></span></div>`;
     },
     panel() {
       const r = G.roll;
@@ -549,7 +550,7 @@
       const { fake, dummy, job } = this.demoStage();
       const sp = this.demoSpot();
       if (step === "attack") {
-        const a = job.attack;
+        const a = E.attackOf(job);
         weaponFx(fake, a.el, [dummy], sp.reach.weapon.far ? sp.reach.weapon.range : sp.reach.weapon.reach).then(() => { this.hitT = 0.15; });
       }
       if (step === "skill") {
@@ -645,7 +646,7 @@
           const d = this.demo;
           const job = this.shown;
           const key = this.DEMO[d.step][0];
-          const label = key === "attack" ? `기본 공격 · ${job.attack.name}` : key === "skill" ? `기술 · ${this.demoSkill().name}` : key === "ult" ? `궁극기 · ${job.skills[4].name}` : this.DEMO[d.step][1];
+          const label = key === "attack" ? `기본 공격 · ${E.attackOf(job).name}` : key === "skill" ? `기술 · ${this.demoSkill().name}` : key === "ult" ? `궁극기 · ${job.skills[4].name}` : this.DEMO[d.step][1];
           const winTop = VH * 0.46 - 6;
           const fs = Math.round(Math.max(12, Math.min(18, (winTop - gy) * 0.62)));
           ctx.save();
@@ -672,6 +673,8 @@
     const ctxP = player || { level, job };
     const stats = D.STATS.map((k) => `<div class="st${k === job.atkStat ? " top" : ""}"><span>${D.STAT_NAMES[k]}</span><i><b style="width:${Math.round((s[k] / max) * 100)}%"></b></i><em>${s[k]}</em></div>`).join("");
     const passives = E.passiveLines(job.passive).map((t) => `<li>${esc(t)}</li>`).join("");
+    const tr = E.traitOf(job);
+    const wp = E.weaponOf(job);
     const TAG = { family: "계열", sig: "대표", mod: "기원", true: "각성", ult: "궁극기" };
     const NODMG = new Set(["heal", "regen", "buff", "rage", "shield", "counter", "summon"]);
     const skills = job.skills.map((sk) => {
@@ -689,9 +692,13 @@
           <li><b>계열</b> ${esc(fam.name)} · ${esc(fam.desc)}</li>
         </ul>
       </div>
+      <h3>직업 특색</h3><ul class="traits">
+        <li><span class="tr-tag">고유 특성</span><b>${esc(tr.name)}</b><p>${esc(tr.desc)}</p></li>
+        <li><span class="tr-tag wp">무기</span><b>${esc(wp.name)}</b><p>기본 공격 ${esc(E.attackOf(job).name)}: ${esc(E.describeAttack(job))}</p></li>
+      </ul>
       <h3>능력치 Lv.${level}</h3><div class="stats">${stats}</div>
-      <h3>특성</h3><ul class="passives">${passives}</ul>
-      <h3>기술</h3><ul class="skills"><li><b>${esc(job.attack.name)}</b><span class="sk-tag">기본 공격 · ${D.ELEMENTS[job.attack.el]}</span><p>위력 100% 공격, MP 조금 회복</p></li>${skills}</ul>
+      <h3>계열·기원 효과</h3><ul class="passives">${passives}</ul>
+      <h3>기술</h3><ul class="skills"><li><b>${esc(E.attackOf(job).name)}</b><span class="sk-tag">기본 공격 · ${esc(wp.name)} · ${D.ELEMENTS[job.attack.el]}</span><p>${esc(E.describeAttack(job))}</p></li>${skills}</ul>
     </div>`;
   }
 
@@ -705,7 +712,8 @@
     const lines = [
       `<b class="rar-t-${j.rarity}">${esc(j.name)}</b> (${rarName(j.rarity)})<br>"나는 ${esc(j.desc)}(이)야. ${J(G.player.job.name, "이/가")} 됐다니, 너도 운명을 받았구나."`,
       `<b class="rar-t-${j.rarity}">${esc(j.name)}</b><br>"내 기술은 <b>${esc(j.skills[1].name)}</b>! ${E.describeSkill(j.skills[1], { level: 1, job: j })}."`,
-      `<b class="rar-t-${j.rarity}">${esc(j.name)}</b><br>"던전은 10층마다 보스가 다음 문을 봉인하고 있대. 물약은 넉넉히 챙겨."`
+      `<b class="rar-t-${j.rarity}">${esc(j.name)}</b><br>"던전은 10층마다 보스가 다음 문을 봉인하고 있대. 물약은 넉넉히 챙겨."`,
+      `<b class="rar-t-${j.rarity}">${esc(j.name)}</b><br>"내 고유 특성은 <b>${esc(E.traitOf(j).name)}</b>. ${esc(E.traitOf(j).desc)}. ${esc(E.J(E.weaponOf(j).name, "을/를"))} 쥐고 싸우지."`
     ];
     say(lines[Math.floor(Math.random() * lines.length)] + `<br><small>(직업 도감에 기록됨)</small>`);
   }
@@ -740,7 +748,7 @@
     const rows = (touch
       ? [["▲ ▼ ◀ ▶", "명령 고르기"], ["A", "결정 · 전투 연출 빨리 넘기기"], ["B", "취소 · 명령으로 돌아가기"]]
       : [["방향키", "명령 고르기"], ["Z · Enter · Space", "결정 · 전투 연출 빨리 넘기기"], ["X · Esc", "취소 · 명령으로 돌아가기"]])
-      .concat([["싸운다", "기본 공격(MP 조금 회복)과 기술 카드 (기술은 Lv.1·1·4·7·10에 배움)"], ["가방", "물약 (한 차례를 쓴다)"], ["방어", "받는 피해 절반, MP 회복"], ["도망", "보상 없이 다음 싸움으로 (보스전 불가)"], ["상태", "능력치와 기술 설명"]]);
+      .concat([["싸운다", "기본 공격(쥔 무기마다 다르다)과 기술 카드 (기술은 Lv.1·1·4·7·10에 배움)"], ["고유 특성", "직업마다 하나. 드러나면 이름표 위에 특성 이름이 뜬다"], ["가방", "물약 (한 차례를 쓴다)"], ["방어", "받는 피해 절반, MP 회복"], ["도망", "보상 없이 다음 싸움으로 (보스전 불가)"], ["상태", "능력치와 기술 설명"]]);
     openWin(`<h2 class="win-h">조작 안내</h2><dl class="sheet help">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
       <p class="win-msg">전투는 주인공과 몬스터가 한 번씩 번갈아 움직이는 턴제다. 한 층에 몬스터 셋, 10층마다 마지막에 보스. 난이도는 운명을 뽑을 때 고른다: 쉬움은 몬스터가 약하고 순한 몬스터가 섞이며, 어려움은 몬스터가 세고 정예가 섞이며 5층마다 중간 보스가 나온다. 쓰러지면 그 운명은 끝난다.</p>
       <div class="opts"><button class="opt" type="button" data-opt="close">닫기</button></div>`, { onPick: (v, b, w) => { if (v === "close") closeWin(w); } });
@@ -791,7 +799,7 @@
 
   function openItems(onDone) {
     const p = G.player;
-    const pot = 1 + (p.job.passive.pot || 0);
+    const pot = E.potionPower(p);
     const w = openWin(`<h2 class="win-h">도구</h2><div class="opts">
       <button class="opt" type="button" data-opt="hp"${p.potions.hp ? "" : " disabled"}><img src="${S.icon("potion", 2)}" alt="">회복 물약 <small>${p.potions.hp}개 · HP ${Math.round(40 * pot)}%</small></button>
       <button class="opt" type="button" data-opt="mp"${p.potions.mp ? "" : " disabled"}><img src="${S.icon("ether", 2)}" alt="">마나 물약 <small>${p.potions.mp}개 · MP ${Math.round(50 * pot)}%</small></button>
@@ -812,14 +820,16 @@
   function openShop(onDone) {
     const p = G.player;
     const pr = E.prices(p);
-    const pot = 1 + (p.job.passive.pot || 0);
+    const pot = E.potionPower(p);
+    const tr = E.traitOf(p.job);
+    const craft = tr.id === "craftsman" ? ` · 장인 정신으로 효과 +${Math.round(tr.v * 100)}%` : "";
     const row = (key, icon, name, note) => `<button class="opt shop-row" type="button" data-opt="${key}"${p.gold >= pr[key] ? "" : " disabled"}><img src="${S.icon(icon, 2)}" alt=""><span><b>${name}</b><small>${note}</small></span><em>${fmt(pr[key])}G</em></button>`;
     const w = openWin(`<h2 class="win-h">상점 <small>보유 ${fmt(p.gold)}G${p.job.passive.disc ? ` · 할인 ${Math.round(Math.min(0.5, p.job.passive.disc) * 100)}%` : ""}</small></h2>
       <div class="opts scroll">
         ${row("hp", "potion", "회복 물약", `HP ${Math.round(40 * pot)}% 회복 · 보유 ${p.potions.hp}`)}
         ${row("mp", "ether", "마나 물약", `MP ${Math.round(50 * pot)}% 회복 · 보유 ${p.potions.mp}`)}
-        ${row("weapon", "sword", `무기 강화 +${p.weaponLv}→+${p.weaponLv + 1}`, "공격력 +6%, 추가 피해 +3")}
-        ${row("armor", "shield", `방어구 강화 +${p.armorLv}→+${p.armorLv + 1}`, "최대 HP +4%, 방어력 +3")}
+        ${row("weapon", "sword", `무기 강화 +${p.weaponLv}→+${p.weaponLv + 1}`, `공격력 +6%, 추가 피해 +3${craft}`)}
+        ${row("armor", "shield", `방어구 강화 +${p.armorLv}→+${p.armorLv + 1}`, `최대 HP +4%, 방어력 +3${craft}`)}
         ${row("scroll", "scroll", "전직의 두루마리", "레벨·장비는 그대로, 직업만 3,000개 중 무작위로")}
         <button class="opt" type="button" data-opt="close">나가기</button>
       </div><p class="win-msg" role="status"></p>`, {
@@ -861,7 +871,7 @@
     let limit = 60;
     const w = openWin(`<h2 class="win-h">직업 도감 <small>만난 직업 ${fmt(G.codex.size)} / 3,000</small></h2>
       <div class="cx-filters">
-        <input id="cx-q" type="search" placeholder="직업·기술 이름" aria-label="직업 검색">
+        <input id="cx-q" type="search" placeholder="직업·기술·특성 이름" aria-label="직업 검색">
         <select id="cx-fam" aria-label="계열"><option value="all">모든 계열</option><option value="combat">전투 계열</option><option value="life">생활 계열</option>
           ${F.FAMILY_LIST.map((f) => `<option value="${f.idx}">${esc(f.name)} · ${f.count}</option>`).join("")}</select>
         <select id="cx-rar" aria-label="등급"><option value="all">모든 등급</option>${D.RARITIES.map((r, i) => `<option value="${i}">${r.name} · ${r.count}</option>`).join("")}</select>
@@ -889,12 +899,12 @@
         if (!["all", "combat", "life"].includes(fam) && String(j.fam) !== fam) return false;
         if (rar !== "all" && String(j.rarity) !== rar) return false;
         if (found && !G.codex.has(j.id)) return false;
-        if (q && !j.name.includes(q) && !j.skills.some((s) => s.name.includes(q))) return false;
+        if (q && !j.name.includes(q) && !j.skills.some((s) => s.name.includes(q)) && !E.traitOf(j).name.includes(q) && E.weaponOf(j).name !== q) return false;
         return true;
       });
       $("cx-count").textContent = `${fmt(list.length)}개 직업`;
       $("cx-list").innerHTML = list.slice(0, limit).map((j) => `<button class="opt cx-row${G.codex.has(j.id) ? "" : " unseen"}" type="button" data-opt="job${j.id}">
-        <img src="${thumb(j)}" alt=""><span><b class="rar-t-${j.rarity}">${esc(j.name)}</b><small>${jobNo(j.id)} · ${esc(famOf(j).name)} · ${rarName(j.rarity)}</small></span>${G.codex.has(j.id) ? "<em>만남</em>" : ""}</button>`).join("")
+        <img src="${thumb(j)}" alt=""><span><b class="rar-t-${j.rarity}">${esc(j.name)}</b><small>${jobNo(j.id)} · ${esc(famOf(j).name)} · ${rarName(j.rarity)} · ${esc(E.traitOf(j).name)}</small></span>${G.codex.has(j.id) ? "<em>만남</em>" : ""}</button>`).join("")
         + (list.length > limit ? `<button class="opt" type="button" data-opt="more">더 보기 (${fmt(list.length - limit)}개 남음)</button>` : "");
       w.idx = 0;
     };
@@ -1525,7 +1535,8 @@
           <div class="pkb-bar hp"><span>HP</span><i><b id="bm-hp"></b></i></div>
           <div class="pkb-num" id="bm-hpt"></div>
           <div class="pkb-bar mp"><span>MP</span><i><b id="bm-mp"></b></i><em id="bm-mpt"></em></div>
-          <div class="pkb-bar xp"><span>EXP</span><i><b id="bm-xp"></b></i></div></div>
+          <div class="pkb-bar xp"><span>EXP</span><i><b id="bm-xp"></b></i></div>
+          <div class="pk-trait" id="btrait" aria-hidden="true"></div></div>
         <div class="pk-where" id="bf-where"></div>
         <div class="pk-msg" id="bmsg"><p id="bmsg-t"></p><i class="pk-more" id="bmsg-more" hidden>▼</i></div>`;
       this.el = {};
@@ -1575,10 +1586,15 @@
       await tween(this.foe, { dark: 0 }, 300);
       $("bx-foe").classList.add("in");
       if (e.boss) { this.quake = 0.45; Sp.ring(this.fbx, this.fby, e.el === "phys" ? "dark" : e.el, 130 * Z); }
-      for (const l of this.b.log) await this.say(l.text);
+      /* 첫 줄(몬스터 등장) → 주인공 이름표 → 전투 시작 때 드러나는 특성(보호막·위압·동료 등) */
+      const evs = this.b.log.concat(this.b.fx).sort((x, y) => x.n - y.n);
+      const first = evs.findIndex((ev) => ev.text !== undefined);
+      if (first >= 0) await this.say(evs[first].text);
       if (this.note) { await this.say(this.note); this.note = null; }
       $("bx-me").classList.add("in");
       await X.sleep(260);
+      const rest = evs.slice(first + 1);
+      if (rest.length) { await this.play(rest); await this.barsIdle(); }
       G.fast = false;
       this.prompt();
     },
@@ -1600,6 +1616,8 @@
       ["burn", "poison", "bleed", "curse", "charm", "debuff"].forEach((k) => { if (e.st[k]) est.push(ST_BADGE[k]); });
       if (e.st.stun) est.push(ST_BADGE[e.st.stunLabel === "얼어붙어" ? "freeze" : "stun"]);
       if (e.enraged) est.push(ST_BADGE.enrage);
+      if (e.st.shred) est.push([`방어↓${Math.round(e.st.shred * 100)}%`, "#7a6a4a"]);
+      if (e.st.cow) est.push(["공격↓", "#6a6a8a"]);
       $("bf-st").innerHTML = est.map(([t, c]) => `<i style="background:${c}">${t}</i>`).join("");
       $("bm-name").textContent = p.name;
       $("bm-job").innerHTML = `<span class="r${p.job.rarity}">${rarName(p.job.rarity)}</span> ${esc(p.job.name)}`;
@@ -1611,6 +1629,8 @@
         pst.push([`${ST_BADGE[k][0]} ${turns}`, ST_BADGE[k][1]]);
       });
       if (ps.barrier > 0) pst.push([`보호막 ${fmt(ps.barrier)}`, ST_BADGE.barrier[1]]);
+      if (ps.momentum) pst.push([`기세 ${ps.momentum}`, "#d0602a"]);
+      if (ps.ready) pst.push(["빈틈", "#3a88a8"]);
       $("bm-st").innerHTML = pst.map(([t, c]) => `<i style="background:${c}">${t}</i>`).join("");
       const n = E.floorFights(this.floor, p.diff);
       $("bf-where").innerHTML = `<b>${this.floor}층</b> ${esc(this.theme.name)} ${diffTag(p.diff)}<span class="dots">${Array.from({ length: n }, (_, i) => { const k = E.fightKind(this.floor, i, p.diff); return `<i class="${i < this.idx ? "done" : i === this.idx ? "now" : ""}${k === "mob" ? "" : " " + k}"></i>`; }).join("")}</span>`;
@@ -1757,7 +1777,7 @@
           <button type="button" class="pkbtn cancel" data-opt="back"><span>취소</span></button>`;
         focus = this.lastMove || 0;
       } else if (kind === "bag") {
-        const pot = 1 + (p.job.passive.pot || 0);
+        const pot = E.potionPower(p);
         box.className = "pk-panel moves";
         box.innerHTML = `<div class="pk-moves" style="--cols:2">
           <button type="button" class="pkmove item${p.potions.hp ? "" : " off"}" data-opt="ihp" style="--t:#e06060;--td:#a83030"><b><img src="${S.icon("potion", 2)}" alt="">회복 물약</b><span class="pkm-foot"><i class="pk-type">${p.potions.hp}개</i><em>HP ${Math.round(40 * pot)}%</em></span></button>
@@ -1775,9 +1795,10 @@
     moveCard(i) {
       const p = G.player;
       if (i < 0) {
-        const a = p.job.attack;
+        const a = E.attackOf(p.job);
         const c = EL_CARD[a.el] || EL_CARD.phys;
-        return `<button type="button" class="pkmove" data-opt="atk" style="--t:${c[0]};--td:${c[1]}"><b>${esc(a.name)}</b><span class="pkm-foot"><i class="pk-type">${D.ELEMENTS[a.el]}</i><em>MP 회복</em></span></button>`;
+        const w = E.weaponOf(p.job);
+        return `<button type="button" class="pkmove" data-opt="atk" style="--t:${c[0]};--td:${c[1]}"><b>${esc(a.name)}</b><span class="pkm-foot"><i class="pk-type">${D.ELEMENTS[a.el]}</i><em>${esc(w.name)}${w.hits > 1 ? ` ${w.hits}회` : ""}</em></span></button>`;
       }
       const sk = p.job.skills[i];
       const av = E.skillAvailable(p, this.b, i);
@@ -1791,7 +1812,7 @@
       const p = G.player;
       if (this.sub === "moves") {
         this.lastMove = this.panel.idx;
-        if (v === "atk") this.showText(`${p.job.attack.name}: 위력 100%의 기본 공격. MP가 조금 회복된다.`);
+        if (v === "atk") this.showText(`${E.attackOf(p.job).name}(${E.weaponOf(p.job).name}): ${E.describeAttack(p.job)}.`);
         else if (v.startsWith("sk")) {
           const sk = p.job.skills[Number(v.slice(2))];
           this.showText(`${sk.name}: ${E.describeSkill(sk, p)}${p.level < sk.lv ? ` (Lv.${sk.lv}에 배운다)` : ""}`);
@@ -2027,6 +2048,7 @@
             if (f.src === "summon") await Sp.shot([this.heroFeet().x - this.heroH * 0.3, this.heroFeet().y - this.heroH * 0.95], [fx, fy], "arcane", "orb");
             if (f.src === "counter") Sp.slash(fx, fy, 1, "phys", false, false);
             if (f.src === "self") Sp.impact(fx, fy, "dark", false);
+            if (f.src === "thorns") Sp.impact(fx, fy, "nature", false);
             Fo.blink = 0.5;
             Sp.number(fx, ftop, f.amount, f.kind === "crit" ? "crit" : "hit", 0);
             if (f.kind === "crit") this.quake = Math.max(this.quake, 0.16);
@@ -2045,6 +2067,26 @@
         case "miss":
           Sp.number(hx, htop, "MISS", "miss", 0);
           await X.sleep(260);
+          break;
+        case "trait": {
+          /* 특성이 드러나면 주인공 이름표 위에 특성 이름이 잠깐 뜬다 */
+          const el = $("btrait");
+          if (el) {
+            el.innerHTML = `<small>특성</small>${esc(f.name)}`;
+            el.classList.remove("show");
+            void el.offsetWidth;
+            el.classList.add("show");
+            clearTimeout(this.traitTimer);
+            this.traitTimer = setTimeout(() => el.classList.remove("show"), 1500);
+          }
+          Sp.aura(hx, hgy, "light");
+          await X.sleep(140);
+          break;
+        }
+        case "zap":
+          Sp.bolt([fx + 16 * Z, fy - 120 * Z], [fx, fy], "bolt");
+          this.quake = Math.max(this.quake, 0.12);
+          await X.sleep(150);
           break;
         case "dot": {
           const enemy = f.target === "enemy";

@@ -3,13 +3,14 @@
  * 직업 데이터 검증: node rpg/tools/verify-jobs.js
  * - 정확히 3,000개, 이름 중복 없음
  * - 기술 유형·능력치·속성 값이 모두 유효
- * - 등급·계열·수식어 분포 출력
+ * - 고유 특성과 무기별 기본 공격이 모두 정해져 있음
+ * - 등급·계열·수식어·특성·무기 분포 출력
  */
 "use strict";
 const path = require("path");
 
 const dir = path.join(__dirname, "..", "js");
-["data-jobs.js", "data-world.js", "jobs.js"].forEach((f) => require(path.join(dir, f)));
+["data-jobs.js", "data-world.js", "data-traits.js", "jobs.js", "engine.js", "data-heroes.js", "heroes.js"].forEach((f) => require(path.join(dir, f)));
 
 const F = globalThis.FATES;
 const D = F.data;
@@ -34,6 +35,13 @@ jobs.forEach((j) => {
   D.STATS.forEach((k) => {
     if (!(j.stats[k] >= 1)) errors.push(`#${j.id} ${j.name}: 능력치 ${k} 이상 (${j.stats[k]})`);
   });
+  const tr = F.engine.traitOf(j);
+  if (!D.TRAITS[tr.id] || /\{/.test(tr.desc)) errors.push(`#${j.id} ${j.name}: 고유 특성 이상 (${tr.id})`);
+  if (!D.WEAPON_STYLES[F.engine.weaponOf(j).key]) errors.push(`#${j.id} ${j.name}: 무기 이상`);
+});
+Object.entries(D.TRAIT_EXACT).forEach(([base, id]) => {
+  if (!D.TRAITS[id]) errors.push(`정해 둔 특성 이상: ${base} → ${id}`);
+  if (!jobs.some((j) => j.base === base)) errors.push(`정해 둔 특성의 기본 직업이 없음: ${base}`);
 });
 
 const rarity = D.RARITIES.map(() => 0);
@@ -49,6 +57,13 @@ const modUse = new Map();
 jobs.forEach((j) => j.mod && modUse.set(j.mod, (modUse.get(j.mod) || 0) + 1));
 const uses = [...modUse.values()];
 console.log(`수식어 사용 횟수: 최소 ${Math.min(...uses)} · 최대 ${Math.max(...uses)}`);
+const count = (keyOf) => {
+  const m = new Map();
+  jobs.forEach((j) => m.set(keyOf(j), (m.get(keyOf(j)) || 0) + 1));
+  return [...m.entries()].sort((x, y) => y[1] - x[1]).map(([k, n]) => `${k} ${n}`).join(", ");
+};
+console.log(`고유 특성 ${Object.keys(D.TRAITS).length}가지:`, count((j) => F.engine.traitOf(j).name));
+console.log("무기:", count((j) => F.engine.weaponOf(j).name));
 
 if (process.argv.includes("--sample")) {
   const step = Math.floor(jobs.length / 40);

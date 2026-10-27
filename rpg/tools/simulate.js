@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * 밸런스 시뮬레이션: node rpg/tools/simulate.js [표본 수] [easy|normal|hard|all] [--families]
+ * 밸런스 시뮬레이션: node rpg/tools/simulate.js [표본 수] [easy|normal|hard|all] [--families] [--traits]
  * 단순한 AI가 무작위 직업으로 여관·상점·던전을 오가며 쓰러질 때까지 진행한다.
  * 계열·등급별로 도달 층수를 비교해 특정 직업군이 지나치게 강하거나 약한지 본다.
  */
@@ -8,7 +8,7 @@
 const path = require("path");
 
 const dir = path.join(__dirname, "..", "js");
-["data-jobs.js", "data-world.js", "jobs.js", "engine.js"].forEach((f) => require(path.join(dir, f)));
+["data-jobs.js", "data-world.js", "data-traits.js", "jobs.js", "engine.js", "data-heroes.js", "heroes.js"].forEach((f) => require(path.join(dir, f)));
 
 const F = globalThis.FATES;
 const D = F.data;
@@ -96,8 +96,11 @@ function runLife(job, diff) {
         E.enterFloor(p, p.floor + 1);
         cleared = 0;
       }
+      /* HP가 반 아래로 떨어졌거나 장비를 강화할 돈이 모이면 마을에 들른다 */
       const d = E.derive(p);
-      if (p.hp < d.maxHp * 0.5 || p.floor > FLOOR_CAP || battles >= BATTLE_CAP) break;
+      const pr = E.prices(p);
+      const canUpgrade = p.gold >= Math.min(pr.weapon, pr.armor) + pr.hp * 2;
+      if (p.hp < d.maxHp * 0.5 || canUpgrade || p.floor > FLOOR_CAP || battles >= BATTLE_CAP) break;
     }
   }
   return { p, battles, dead: false };
@@ -135,5 +138,16 @@ DIFFS.forEach((diff) => {
   if (process.argv.includes("--families")) {
     console.log("");
     F.FAMILY_LIST.forEach((f) => summary(f.name, results.filter((r) => r.job.fam === f.idx)));
+  }
+  /* --traits: 고유 특성·무기별 도달층(중앙값 순) */
+  if (process.argv.includes("--traits")) {
+    const by = (label, keyOf) => {
+      const groups = {};
+      results.forEach((r) => { const k = keyOf(r.job); (groups[k] = groups[k] || []).push(r); });
+      console.log(`\n${label}`);
+      Object.entries(groups).sort((x, y) => quantile(y[1].map((r) => r.best), 0.5) - quantile(x[1].map((r) => r.best), 0.5)).forEach(([k, rows]) => summary(k, rows));
+    };
+    by("고유 특성", (j) => E.traitOf(j).name);
+    by("무기", (j) => E.weaponOf(j).name);
   }
 });
