@@ -1528,7 +1528,8 @@
       $("hud").innerHTML = `
         <div class="pkb foe" id="bx-foe"><div class="pkb-top"><b id="bf-name"></b><span class="pkb-lv" id="bf-lv"></span></div>
           <div class="pkb-st" id="bf-st"></div>
-          <div class="pkb-bar hp"><span>HP</span><i><b id="bf-hp"></b></i></div></div>
+          <div class="pkb-bar hp"><span>HP</span><i><b id="bf-hp"></b></i></div>
+          <div class="pk-trait foe-trait" id="bftrait" aria-hidden="true"></div></div>
         <div class="pkb me" id="bx-me"><div class="pkb-top"><b id="bm-name"></b><span class="pkb-lv" id="bm-lv"></span></div>
           <div class="pkb-job" id="bm-job"></div>
           <div class="pkb-st" id="bm-st"></div>
@@ -2069,21 +2070,25 @@
           await X.sleep(120);
           break;
         case "miss":
-          Sp.number(hx, htop, "MISS", "miss", 0);
+          if (f.target === "enemy") Sp.number(fx, ftop, "MISS", "miss", 0);
+          else Sp.number(hx, htop, "MISS", "miss", 0);
           await X.sleep(260);
           break;
         case "trait": {
-          /* 특성이 드러나면 주인공 이름표 위에 특성 이름이 잠깐 뜬다 */
-          const el = $("btrait");
+          /* 특성이 드러나면 이름표 곁에 특성 이름이 잠깐 뜬다(주인공은 이름표 위, 몬스터는 이름표 아래) */
+          const foe = f.target === "enemy";
+          const el = $(foe ? "bftrait" : "btrait");
+          const timer = foe ? "foeTraitTimer" : "traitTimer";
           if (el) {
             el.innerHTML = `<small>특성</small>${esc(f.name)}`;
             el.classList.remove("show");
             void el.offsetWidth;
             el.classList.add("show");
-            clearTimeout(this.traitTimer);
-            this.traitTimer = setTimeout(() => el.classList.remove("show"), 1500);
+            clearTimeout(this[timer]);
+            this[timer] = setTimeout(() => el.classList.remove("show"), 1500);
           }
-          Sp.aura(hx, hgy, "light");
+          if (foe) Sp.aura(fx, fgy, Fo.mon.el === "phys" ? "dark" : Fo.mon.el);
+          else Sp.aura(hx, hgy, "light");
           await X.sleep(140);
           break;
         }
@@ -2129,9 +2134,11 @@
         }
         case "heal":
           if (f.target === "enemy") {
-            Sp.heal(fx, fgy);
+            /* 되살아나면 HP 바가 그 값으로 다시 찬다 */
+            if (f.src === "revive") Sp.pillar(fx, fgy, Fo.mon.el === "phys" ? "light" : Fo.mon.el, true);
+            else Sp.heal(fx, fgy);
             Sp.number(fx, ftop, "+" + f.amount, "heal", 0);
-            this.goal.fhp = Math.min(Fo.mon.maxHp, this.goal.fhp + f.amount);
+            this.goal.fhp = f.src === "revive" ? f.amount : Math.min(Fo.mon.maxHp, this.goal.fhp + f.amount);
           } else {
             if (f.src === "revive") Sp.pillar(hx, hgy, "fire", true);
             else Sp.heal(hx, hgy);

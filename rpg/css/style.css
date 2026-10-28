@@ -345,6 +345,8 @@ button { cursor: pointer; }
 }
 .pk-trait small { margin-right: 6px; font-size: 10.5px; font-weight: 400; color: #ffd86a; }
 .pk-trait.show { opacity: 1; transform: none; }
+.pk-trait.foe-trait { left: 10px; right: auto; top: calc(100% + 8px); bottom: auto; transform: translateY(-4px); }
+.pk-trait.foe-trait.show { transform: none; }
 .pkb-st i { font-style: normal; font-size: 10px; line-height: 14px; padding: 0 4px; color: #fff; border-radius: 3px; text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3); }
 .pkb-bar { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
 .pkb-bar span { flex: none; min-width: 22px; padding: 0 3px; font-size: 9px; line-height: 12px; font-weight: 700; text-align: center; color: #fff8d8; background: #e09a1a; border-radius: 3px; }

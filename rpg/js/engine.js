@@ -289,7 +289,7 @@
       el: m.el, weak: m.weak, resist: m.resist, traits: m.traits.slice(),
       exp: Math.round((10 + lv * 5) * k.exp * dv.exp),
       gold: Math.round((6 + lv * 3.5) * k.gold * dv.gold),
-      base: m.name, st: {}, enraged: false
+      base: m.name, st: {}, enraged: false, mv: D.MON_MOVES[m.name] || {}, revived: false
     };
   }
 
@@ -332,8 +332,33 @@
     if (p.job.passive.barrier) b.ps.barrier = Math.round(d.maxHp * p.job.passive.barrier);
     log(b, "sys", e.mid ? `강적 ${J(e.name, "이/가")} 앞을 가로막았다!` : e.boss ? `보스 ${J(e.name, "이/가")} 앞을 가로막았다!` : `앗! 야생의 ${J(e.name, "이/가")} 튀어나왔다!`);
     if (b.ps.barrier) log(b, "buff", `${J(p.name, "은/는")} 보호막에 둘러싸였다!`);
+    if (e.traits.includes("armor")) monTrait(b, "armor", "받는 피해가 줄어든다!");
+    if (e.traits.includes("evade")) monTrait(b, "evade", "공격이 잘 맞지 않는다!");
     traitOpening(p, b, d);
     return b;
+  }
+
+  /* 몬스터 특성이 드러나는 한마디: 몬스터 이름표 아래에 특성 이름이 뜨고 문장이 나온다 */
+  const MON_TRAIT = { armor: "단단한 몸", evade: "재빠른 몸놀림", regen: "재생", revive: "부활", heal: "회복", enrage: "분노" };
+  function monTrait(b, key, text) {
+    const e = b.enemy;
+    const name = e.mv[key] || MON_TRAIT[key];
+    fx(b, "enemy", "trait", 0, { name });
+    log(b, "warn", `${e.name}의 ${name}! ${text}`);
+  }
+  /* 단단한 몸은 받는 피해를 줄이고, 재빠른 몬스터는 한 번씩 공격을 피한다 */
+  const MON_ARMOR = 0.87;
+  const MON_EVADE = 0.09;
+  /* 되살아나는 몬스터: 처음 쓰러질 때 한 번, HP 4분의 1(보스는 5분의 1)로 다시 일어선다 */
+  function rise(b) {
+    const e = b.enemy;
+    if (e.hp > 0 || e.revived || !e.traits.includes("revive")) return false;
+    e.revived = true;
+    e.hp = Math.round(e.maxHp * (e.boss ? 0.2 : 0.25));
+    e.st = {};
+    monTrait(b, "revive", "쓰러졌다가 다시 일어섰다!");
+    fx(b, "enemy", "heal", e.hp, { src: "revive" });
+    return true;
   }
 
   /* 특성이 드러나는 한마디: 주인공 머리 위에 특성 이름이 뜨고 문장이 나온다 */
@@ -395,7 +420,9 @@
     let weakHit = false;
     let resisted = false;
     const res = { total: 0, crits: 0, hits, landed: 0, weakHit: false, resisted: false };
+    let dodged = 0;
     for (let h = 0; h < hits && e.hp > 0; h++) {
+      if (e.traits.includes("evade") && R() < MON_EVADE) { dodged++; continue; }
       let roll = 0.9 + R() * 0.2;
       if (tr.id === "gamble") {
         if (R() < tr.c) { roll = 2.5; res.jackpot = true; } else roll = 0.7 + R() * 0.6;
@@ -425,10 +452,15 @@
       if (critNow) { dmg *= tr.id === "deadeye" ? 2.1 : 1.75; crits++; }
       const pen = Math.min(0.9, (pa.pen || 0) + (opt.pen || 0) + (tr.id === "pierce" ? tr.v : 0));
       const def = e.def * (e.st.debuff ? 0.7 : 1) * (1 - (e.st.shred || 0)) * (1 - pen);
+      if (e.traits.includes("armor")) dmg *= MON_ARMOR;
       dmg = Math.max(1, Math.round((dmg * 100) / (100 + def * 1.2)));
       e.hp -= dmg;
       total += dmg;
       landed++;
+    }
+    if (dodged) {
+      if (!landed) fx(b, "enemy", "miss", 0, {});
+      monTrait(b, "evade", landed ? "공격 하나를 피했다!" : "공격을 피했다!");
     }
     if (opt.kind !== "extra") ps.ready = false;
     if (weakHit) b.weakKnown = true;
@@ -999,21 +1031,22 @@
     let atk = e.atk * (e.st.debuff ? 0.7 : 1) * (e.st.cow ? 1 - e.st.cow.v : 1);
     if (e.traits.includes("enrage") && !e.enraged && e.hp < e.maxHp * 0.5) {
       e.enraged = true;
+      monTrait(b, "enrage", "분노로 공격이 크게 올라갔다!");
       fx(b, "enemy", "status", 0, { st: "enrage" });
-      log(b, "warn", `${J(e.name, "은/는")} 분노했다! 공격이 크게 올라갔다!`);
     }
     if (e.enraged) atk *= 1.4;
     if (e.traits.includes("heal") && e.hp < e.maxHp * 0.5 && R() < 0.3) {
       const amount = Math.round(e.maxHp * 0.15);
       const before = e.hp;
       e.hp = Math.min(e.maxHp, e.hp + amount);
-      log(b, "warn", `${J(e.name, "은/는")} 몸을 웅크리고 상처를 재생했다!`);
+      monTrait(b, "heal", "상처를 크게 회복했다!");
       fx(b, "enemy", "heal", e.hp - before, {});
       return;
     }
-    const roll = e.traits.filter((t) => t !== "enrage" && t !== "heal");
+    /* 기술로 쓰는 특성만 고른다(단단한 몸·회피·재생·부활·분노·회복은 저절로 드러난다) */
+    const roll = e.traits.filter((t) => TRAIT_MOVE[t]);
     const trait = roll.length && R() < 0.38 ? roll[Math.floor(R() * roll.length)] : null;
-    log(b, "enemy", `${e.name}의 ${TRAIT_MOVE[trait] || MON_MOVE[e.el] || "몸통박치기"}!`);
+    log(b, "enemy", `${e.name}의 ${trait ? e.mv[trait] || TRAIT_MOVE[trait] : e.mv.a || MON_MOVE[e.el] || "몸통박치기"}!`);
     fx(b, "enemy", "act", 0, { trait: trait || "attack", el: e.el });
     switch (trait) {
       case "heavy":
@@ -1050,8 +1083,9 @@
         const dealt = hurtPlayer(p, b, d, atk * 0.8);
         if (dealt > 0 && p.hp > 0 && R() < 0.45 && !purified(p, b)) {
           ps.stun = 1;
-          fx(b, "player", "status", 0, { st: "stun" });
-          log(b, "status", `${J(p.name, "은/는")} 몸이 저려 다음 차례에 움직일 수 없다!`);
+          ps.stunLabel = e.mv.s || "몸이 저려";
+          fx(b, "player", "status", 0, { st: ps.stunLabel.includes("얼어") ? "freeze" : "stun" });
+          log(b, "status", `${J(p.name, "은/는")} ${ps.stunLabel} 다음 차례에 움직일 수 없다!`);
         }
         return;
       }
@@ -1110,6 +1144,14 @@
       tickDown(e.st, k);
     });
     if (e.hp <= 0) return;
+    if (e.traits.includes("regen") && e.hp < e.maxHp) {
+      const before = e.hp;
+      /* 보스는 HP가 커서 조금만(같은 비율이면 주인공이 깎는 만큼 다 메운다) */
+      e.hp = Math.min(e.maxHp, e.hp + Math.max(1, Math.round(e.maxHp * (e.boss ? 0.015 : 0.035))));
+      /* 문장은 처음 한 번만, 그 뒤로는 HP가 차오르는 숫자만 */
+      if (!b.once.regen) { b.once.regen = 1; monTrait(b, "regen", "매 차례 상처가 조금씩 아문다!"); }
+      fx(b, "enemy", "heal", e.hp - before, {});
+    }
     b.phase++;
     enemyAct(p, b, d);
   }
@@ -1241,13 +1283,13 @@
     b.ps.guard = false;
     playerPhase(p, b, d, action);
     if (b.result) return b;
-    if (b.enemy.hp <= 0) { win(p, b); return b; }
+    if (b.enemy.hp <= 0 && !rise(b)) { win(p, b); return b; }
 
     let rounds = 0;
     do {
-      if (rounds > 0) log(b, "status", `${J(p.name, "은/는")} 몸이 저려 움직일 수 없다!`);
+      if (rounds > 0) log(b, "status", `${J(p.name, "은/는")} ${b.ps.stunLabel || "몸이 저려"} 움직일 수 없다!`);
       enemyPhase(p, b, d);
-      if (b.enemy.hp <= 0) { win(p, b); return b; }
+      if (b.enemy.hp <= 0 && !rise(b)) { win(p, b); return b; }
       if (checkDeath(p, b, d)) return b;
       endRound(p, b, d);
       if (checkDeath(p, b, d)) return b;

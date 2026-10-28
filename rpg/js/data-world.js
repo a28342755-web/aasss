@@ -210,53 +210,53 @@
    *   나오는 난이도: 비우면 모두, E = 쉬움만(순한 몬스터), H = 어려움만(정예), NH = 보통·어려움
    */
   const MONSTERS = `
-슬라임|0|nature|fire|nature|none|0.79|0.81|0.6
+슬라임|0|nature|fire|nature|regen|0.73|0.81|0.6
 고블린|0|phys|fire||steal|0.89|1.02|0.8
-스켈레톤|0|dark|light|dark|none|0.94|1.02|0.9
+스켈레톤|0|dark|light|dark|revive|0.8|1.02|0.9
 좀비|0|dark|fire|dark|poison|1.09|0.87|0.8
 늑대|0|phys|fire||multi|0.89|1.02|0.7
 멧돼지|0|phys|ice||heavy|1.09|1.02|0.9
 고블린 창병|0|phys|fire||multi|0.89|1.07|0.8
 거미|0|nature|fire|nature|poison|0.74|0.92|0.6
-나무 정령|0|nature|fire|nature|poison|1.04|0.87|1
+나무 정령|0|nature|fire|nature|weaken|1.04|0.87|1
 도적|0|phys|bolt||steal|0.94|1.02|0.85
-요정|0|wind|dark|wind|none|0.6|0.61|0.5||E
-거대 달팽이|0|nature|fire|nature|none|0.69|0.61|0.7||E
+요정|0|wind|dark|wind|evade|0.55|0.61|0.5||E
+거대 달팽이|0|nature|fire|nature|armor|0.62|0.61|0.7||E
 독거미|0|nature|fire|nature|poison|0.84|1.02|0.8||NH
-오크|0|phys|arcane||heavy|0.99|1.12|0.9||H
-궁수|0|phys|wind||multi|0.94|1.12|0.85||H
+오크|0|phys|arcane||heavy,enrage|0.99|1.12|0.9||H
+궁수|0|phys|wind||multi,evade|0.86|1.12|0.85||H
 곰|0|phys|fire||heavy,enrage|1.08|1.08|0.9|M|H
-트롤|0|phys|fire||heal,heavy|1.13|0.98|0.9|B
+트롤|0|phys|fire||regen,heavy|1.04|0.98|0.9|B
 거미 여왕|0|nature|fire|nature|poison,stun|1.03|1.03|1.0|B
-정령의 나무|0|nature|fire|nature|heal,poison|1.18|0.93|1.1|B
+정령의 나무|0|nature|fire|nature|heal,weaken|1.18|0.93|1.1|B
 늑대인간|1|phys|light||enrage|1|1.1|0.85
-하피|1|wind|bolt|wind|multi|0.84|1.05|0.75
+하피|1|wind|bolt|wind|evade|0.77|1.05|0.75
 맨티스|1|nature|fire|nature|multi|0.9|1.1|0.8
 전갈|1|earth|wind|earth|poison|0.95|1|1.03
 엘프 궁수|1|nature|fire|wind|multi|0.84|1.1|0.75
-바위 골렘|1|earth|wind|phys|heavy|1.3|0.95|1.22
-바람의 정령|1|wind|bolt|wind|weaken|0.84|1|0.75
+바위 골렘|1|earth|wind|phys|armor|1.17|0.95|1.22
+바람의 정령|1|wind|bolt|wind|evade|0.77|1|0.75
 대지의 정령|1|earth|wind|earth|heavy|1.15|1|1.08
-사냥꾼|1|phys|bolt||steal|0.95|1.05|0.85
+사냥꾼|1|phys|bolt||stun|0.95|1.05|0.85
 거대 지네|1|nature|fire|nature|poison|1|1|0.94
 유니콘|1|light|dark|light|heal|0.65|0.7|0.56||E
-페가수스|1|wind|bolt|wind|none|0.7|0.7|0.56||E
-요정의 기사|1|light|dark|light|multi|0.95|1.05|1.03||NH
-사이클롭스|1|phys|arcane||heavy|1.15|1.15|0.89||H
-모래의 괴물|1|earth|ice|earth|weaken,heavy|1.1|1.1|1.03||H
-그리핀|1|wind|bolt|wind|multi,enrage|1.08|1.08|0.95|M|H
+페가수스|1|wind|bolt|wind|evade|0.64|0.7|0.56||E
+요정의 기사|1|light|dark|light|multi,evade|0.87|1.05|1.03||NH
+사이클롭스|1|phys|arcane||heavy,stun|1.15|1.15|0.89||H
+모래의 괴물|1|earth|ice|earth|weaken,armor|0.99|1.1|1.03||H
+그리핀|1|wind|bolt|wind|multi,evade|0.99|1.08|0.95|M|H
 미노타우로스|1|phys|arcane||heavy,enrage|1.18|1.08|1.0|B
 스핑크스|1|arcane|dark|light|stun,weaken|1.08|1.03|1.05|B
 사막의 용|1|fire|ice|fire|burn,heavy|1.13|1.08|1.0|B
 뱀파이어|2|dark|light|dark|drain|1.05|1.08|0.9
 화염 골렘|2|fire|ice|fire|burn|1.38|1.03|1.25
-해골 기사|2|dark|light|dark|heavy|1.15|1.08|1.15
-흑기사|2|dark|light|dark|heavy|1.22|1.13|1.2
+해골 기사|2|dark|light|dark|revive|0.98|1.08|1.15
+흑기사|2|dark|light|dark|armor|1.1|1.13|1.2
 흑마법사|2|dark|light|dark|weaken|0.94|1.13|0.8
-성기사|2|light|dark|light|heavy|1.22|0.98|1.25
+성기사|2|light|dark|light|armor|1.1|0.98|1.25
 마도사|2|arcane|light|arcane|stun|0.94|1.13|0.8
 지옥견|2|fire|ice|fire|burn|1.05|1.13|0.85
-흑암 골렘|2|earth|wind|phys|heavy|1.43|1.03|1.35
+흑암 골렘|2|earth|wind|phys|armor|1.29|1.03|1.35
 해골 마법사|2|dark|light|dark|weaken|0.99|1.08|0.85
 사제|2|light|dark|light|heal|0.72|0.67|0.7||E
 미믹|2|phys|bolt||steal|0.82|0.77|1.1||E
@@ -264,49 +264,153 @@
 화산의 정령|2|fire|ice|fire|burn,heavy|1.13|1.18|1.0||H
 그림 리퍼|2|dark|light|dark|drain,weaken|1.03|1.24|0.9||H
 다크 그리핀|2|dark|light|wind|multi,drain|1.13|1.13|1.0|M|H
-케르베로스|2|fire|ice|fire|burn,multi|1.17|1.08|1.0|B
-리치|2|dark|light|dark|drain,weaken|1.07|1.08|1.0|B
-뱀파이어 로드|2|dark|light|dark|drain,enrage|1.17|1.08|1.05|B
-얼음 골렘|3|ice|fire|ice|heavy|1.41|1.06|1.4
+케르베로스|2|fire|ice|fire|multi,burn|1.17|1.08|1.0|B
+리치|2|dark|light|dark|drain,revive|0.91|1.08|1.0|B
+뱀파이어 로드|2|dark|light|dark|drain,evade|1.08|1.08|1.05|B
+얼음 골렘|3|ice|fire|ice|armor|1.27|1.06|1.4
 번개 정령|3|bolt|earth|bolt|stun|0.98|1.16|0.88
-물의 정령|3|ice|bolt|ice|weaken|1.08|1.01|0.99
+물의 정령|3|ice|bolt|ice|regen|0.99|1.01|0.99
 바다뱀|3|ice|bolt|ice|multi|1.13|1.11|0.99
-크리스탈 골렘|3|ice|fire|ice|heavy|1.35|1.06|1.46
+크리스탈 골렘|3|ice|fire|ice|armor|1.22|1.06|1.46
 폭풍의 정령|3|bolt|earth|bolt|multi|1.03|1.16|0.88
 빙하의 정령|3|ice|fire|ice|stun|1.03|1.16|0.94
 심해어|3|ice|bolt|ice|drain|1.03|1.11|0.94
-상어|3|phys|bolt|ice|multi|1.13|1.22|0.94
-문어 괴물|3|ice|bolt|ice|weaken|1.08|1.11|0.99
-크랩|3|ice|bolt|ice|heavy|0.87|0.79|1.04||E
-문어|3|ice|bolt|ice|none|0.75|0.79|0.73||E
-사이렌|3|ice|bolt|ice|weaken,stun|1.03|1.11|0.94||NH
-해치 괴물|3|wind|bolt|wind|multi,stun|1.08|1.22|0.99||H
-스카이 드래곤|3|wind|bolt|wind|multi,heavy|1.19|1.22|1.04||H
-화이트 드래곤|3|ice|fire|ice|stun,drain|1.08|1.13|1.05|M|H
+상어|3|phys|bolt|ice|enrage|1.13|1.22|0.94
+문어 괴물|3|ice|bolt|ice|stun|1.08|1.11|0.99
+크랩|3|ice|bolt|ice|armor|0.78|0.79|1.04||E
+문어|3|ice|bolt|ice|weaken|0.75|0.79|0.73||E
+사이렌|3|ice|bolt|ice|stun,weaken|1.03|1.11|0.94||NH
+해치 괴물|3|wind|bolt|wind|heavy,multi|1.08|1.22|0.99||H
+스카이 드래곤|3|wind|bolt|wind|evade,multi|1.09|1.22|1.04||H
+화이트 드래곤|3|ice|fire|ice|stun,armor|0.97|1.13|1.05|M|H
 크라켄|3|ice|bolt|ice|multi,stun|1.13|1.03|1.0|B
-아이스 드래곤|3|ice|fire|ice|stun,weaken|1.08|1.08|1.05|B
+아이스 드래곤|3|ice|fire|ice|stun,armor|0.97|1.08|1.05|B
 스톰 드래곤|3|bolt|earth|bolt|stun,multi|1.08|1.13|1.0|B
 드래곤|4|fire|ice|fire|burn|1.08|1.13|1.0
-불사조|4|fire|ice|fire|heal|1.03|1.08|0.9
+불사조|4|fire|ice|fire|revive|0.88|1.08|0.9
 용|4|earth|wind|earth|heavy|1.24|1.13|1.1
 악마|4|dark|light|dark|burn|1.08|1.13|1.0
 키메라|4|phys|ice||multi|1.08|1.13|0.95
 우주 괴물|4|arcane|light|arcane|heavy|1.18|1.13|1.0
-고요의 사신|4|dark|light|dark|drain|1.03|1.13|0.95
+고요의 사신|4|dark|light|dark|weaken|1.03|1.13|0.95
 레드 드래곤|4|fire|ice|fire|burn|1.18|1.13|1.05
-골든 드래곤|4|light|dark|light|heavy|1.24|1.08|1.15
+골든 드래곤|4|light|dark|light|armor|1.12|1.08|1.15
 다크 드래곤|4|dark|light|dark|drain|1.18|1.13|1.05
-타락한 천사|4|light|dark|light|none|0.82|0.82|0.8||E
-생명의 수호자|4|nature|fire|nature|multi|0.82|0.82|0.8||E
-시간의 수호자|4|arcane|dark|arcane|heavy,weaken|1.24|1.13|1.3||NH
-공간의 수호자|4|arcane|light|arcane|heavy,stun|1.24|1.18|1.25||H
-기억의 수호자|4|arcane|dark|arcane|weaken|1.18|1.18|1.2||H
+타락한 천사|4|light|dark|light|weaken|0.82|0.82|0.8||E
+생명의 수호자|4|nature|fire|nature|regen|0.75|0.82|0.8||E
+시간의 수호자|4|arcane|dark|arcane|stun,weaken|1.24|1.13|1.3||NH
+공간의 수호자|4|arcane|light|arcane|evade,heavy|1.14|1.18|1.25||H
+기억의 수호자|4|arcane|dark|arcane|weaken,stun|1.18|1.18|1.2||H
 블랙 드래곤|4|dark|light|dark|drain,enrage|1.13|1.13|1.0|M|H
 차원 포식자|4|arcane|light|arcane|heavy,drain|1.19|1.08|1.1|B
 마계 군주|4|fire|light|fire|burn,enrage|1.15|1.08|1.05|B
-파멸의 수호자|4|fire|ice|fire|drain,weaken|1.15|1.08|1.05|B
-창조의 수호자|4|arcane|dark|arcane|heavy,stun|1.15|1.08|1.15|B
+파멸의 수호자|4|fire|ice|fire|heavy,weaken|1.15|1.08|1.05|B
+창조의 수호자|4|arcane|dark|arcane|regen,stun|1.06|1.08|1.15|B
 `;
+
+  /*
+   * 몬스터마다 기술 이름: a = 기본 공격, 특성 id = 그 특성으로 쓰는 기술이나 특성 이름, s = 못 움직이게 할 때의 말("○○ 다음 차례에 움직일 수 없다")
+   * 특성: steal 훔치기 · poison 독 · burn 화상 · multi 두 번 공격 · drain 흡혈 · heavy 강타 · stun 못 움직이게 · weaken 공격 약화
+   *       enrage HP 반 아래에서 분노 · heal HP 반 아래에서 크게 회복 · armor 받는 피해 줄이기 · evade 공격 피하기 · regen 매 차례 조금 회복 · revive 한 번 되살아남
+   */
+  const MON_MOVES = {
+    슬라임: { a: "몸통박치기", regen: "말랑한 몸" },
+    고블린: { a: "녹슨 칼 휘두르기", steal: "주머니 털기" },
+    스켈레톤: { a: "뼈 칼 베기", revive: "뼈 맞추기" },
+    좀비: { a: "물어뜯기", poison: "썩은 손톱" },
+    늑대: { a: "물기", multi: "물어뜯기 연타" },
+    멧돼지: { a: "엄니 찌르기", heavy: "돌진" },
+    "고블린 창병": { a: "창 찌르기", multi: "연속 찌르기" },
+    거미: { a: "물기", poison: "독니" },
+    "나무 정령": { a: "가지 후려치기", weaken: "덩굴 휘감기" },
+    도적: { a: "단검 찌르기", steal: "소매치기" },
+    요정: { a: "요정 가루", evade: "팔랑팔랑 날개" },
+    "거대 달팽이": { a: "점액 뿌리기", armor: "단단한 껍데기" },
+    독거미: { a: "물기", poison: "맹독니" },
+    오크: { a: "주먹질", heavy: "힘껏 내려치기", enrage: "오크의 분노" },
+    궁수: { a: "화살 쏘기", multi: "연속 사격", evade: "거리 두기" },
+    곰: { a: "할퀴기", heavy: "앞발 후려치기", enrage: "성난 곰" },
+    트롤: { a: "주먹질", regen: "재생력", heavy: "바위 주먹" },
+    "거미 여왕": { a: "물기", poison: "여왕의 독니", stun: "거미줄 감기", s: "거미줄에 묶여" },
+    "정령의 나무": { a: "가지 후려치기", heal: "생명의 수액", weaken: "뿌리 휘감기" },
+    늑대인간: { a: "할퀴기", enrage: "달빛 광폭화" },
+    하피: { a: "발톱 할퀴기", evade: "날렵한 날개" },
+    맨티스: { a: "낫 베기", multi: "낫 연베기" },
+    전갈: { a: "집게 찍기", poison: "독침" },
+    "엘프 궁수": { a: "화살 쏘기", multi: "연속 사격" },
+    "바위 골렘": { a: "바위 주먹", armor: "바위 피부" },
+    "바람의 정령": { a: "칼바람", evade: "바람의 몸" },
+    "대지의 정령": { a: "흙덩이 던지기", heavy: "땅 가르기" },
+    사냥꾼: { a: "화살 쏘기", stun: "덫 놓기", s: "덫에 걸려" },
+    "거대 지네": { a: "물기", poison: "독 턱" },
+    유니콘: { a: "뿔 찌르기", heal: "치유의 뿔" },
+    페가수스: { a: "발굽 차기", evade: "하늘 날기" },
+    "요정의 기사": { a: "요정검 베기", multi: "요정검 연격", evade: "요정의 날개" },
+    사이클롭스: { a: "주먹질", heavy: "거인의 일격", stun: "땅 울리기", s: "충격에 휘청여" },
+    "모래의 괴물": { a: "모래 주먹", weaken: "모래 뿌리기", armor: "모래 갑옷" },
+    그리핀: { a: "부리 쪼기", multi: "발톱 연격", evade: "높이 날기" },
+    미노타우로스: { a: "도끼 휘두르기", heavy: "도끼 돌진", enrage: "황소의 분노" },
+    스핑크스: { a: "발톱 할퀴기", stun: "석화의 눈빛", s: "돌처럼 굳어", weaken: "수수께끼의 저주" },
+    "사막의 용": { a: "할퀴기", burn: "열사의 숨결", heavy: "꼬리 후려치기" },
+    뱀파이어: { a: "할퀴기", drain: "흡혈" },
+    "화염 골렘": { a: "용암 주먹", burn: "용암 분출" },
+    "해골 기사": { a: "대검 베기", revive: "뼈 맞추기" },
+    흑기사: { a: "흑검 베기", armor: "검은 갑주" },
+    흑마법사: { a: "암흑탄", weaken: "저주" },
+    성기사: { a: "철퇴 내려치기", armor: "성스러운 방패" },
+    마도사: { a: "마력탄", stun: "봉인 마법", s: "마력에 묶여" },
+    지옥견: { a: "물기", burn: "지옥불 송곳니" },
+    "흑암 골렘": { a: "흑암 주먹", armor: "흑암석 몸" },
+    "해골 마법사": { a: "뼈 화살", weaken: "저주의 손길" },
+    사제: { a: "신성한 빛", heal: "치유의 기도" },
+    미믹: { a: "물기", steal: "보물 삼키기" },
+    마법사: { a: "마력탄", burn: "화염구" },
+    "화산의 정령": { a: "용암 주먹", burn: "용암 분출", heavy: "화산탄" },
+    "그림 리퍼": { a: "낫 베기", drain: "영혼 수확", weaken: "죽음의 손길" },
+    "다크 그리핀": { a: "부리 쪼기", multi: "어둠 발톱", drain: "피의 발톱" },
+    케르베로스: { a: "물기", multi: "세 머리 물기", burn: "지옥불 숨결" },
+    리치: { a: "암흑탄", drain: "생명 흡수", revive: "불멸의 성물함" },
+    "뱀파이어 로드": { a: "할퀴기", drain: "피의 향연", evade: "박쥐 변신" },
+    "얼음 골렘": { a: "얼음 주먹", armor: "얼음 갑각" },
+    "번개 정령": { a: "전기 충격", stun: "전격", s: "몸이 저려" },
+    "물의 정령": { a: "물대포", regen: "물의 몸" },
+    바다뱀: { a: "물기", multi: "휘감아 물기" },
+    "크리스탈 골렘": { a: "수정 주먹", armor: "수정 갑각" },
+    "폭풍의 정령": { a: "돌풍", multi: "폭풍 연격" },
+    "빙하의 정령": { a: "얼음 파편", stun: "빙결", s: "몸이 얼어붙어" },
+    심해어: { a: "물기", drain: "심해의 이빨" },
+    상어: { a: "물어뜯기", enrage: "피 냄새" },
+    "문어 괴물": { a: "촉수 채찍", stun: "촉수 휘감기", s: "촉수에 감겨" },
+    크랩: { a: "집게 찍기", armor: "단단한 등딱지" },
+    문어: { a: "촉수 채찍", weaken: "먹물 뿜기" },
+    사이렌: { a: "물의 창", stun: "유혹의 노래", s: "노래에 홀려", weaken: "슬픈 노래" },
+    "해치 괴물": { a: "뿔 들이받기", heavy: "정의의 뿔", multi: "발톱 연격" },
+    "스카이 드래곤": { a: "할퀴기", evade: "하늘의 날개", multi: "질풍 할퀴기" },
+    "화이트 드래곤": { a: "할퀴기", stun: "얼음 숨결", s: "몸이 얼어붙어", armor: "백색 비늘" },
+    크라켄: { a: "촉수 채찍", multi: "촉수 난타", stun: "촉수 휘감기", s: "촉수에 감겨" },
+    "아이스 드래곤": { a: "할퀴기", stun: "빙결의 숨결", s: "몸이 얼어붙어", armor: "얼음 비늘" },
+    "스톰 드래곤": { a: "할퀴기", stun: "낙뢰", s: "몸이 저려", multi: "폭풍 발톱" },
+    드래곤: { a: "할퀴기", burn: "화염 숨결" },
+    불사조: { a: "불꽃 날개", revive: "불사의 불꽃" },
+    용: { a: "물기", heavy: "꼬리 후려치기" },
+    악마: { a: "할퀴기", burn: "지옥불" },
+    키메라: { a: "물기", multi: "세 머리 공격" },
+    "우주 괴물": { a: "촉수 내려치기", heavy: "중력 붕괴" },
+    "고요의 사신": { a: "암흑탄", weaken: "침묵의 저주" },
+    "레드 드래곤": { a: "할퀴기", burn: "작열의 숨결" },
+    "골든 드래곤": { a: "할퀴기", armor: "황금 비늘" },
+    "다크 드래곤": { a: "물기", drain: "어둠의 숨결" },
+    "타락한 천사": { a: "빛의 화살", weaken: "타락의 속삭임" },
+    "생명의 수호자": { a: "덩굴 채찍", regen: "생명의 가호" },
+    "시간의 수호자": { a: "시간의 칼날", stun: "시간 정지", s: "시간이 멈춰", weaken: "느려지는 시간" },
+    "공간의 수호자": { a: "공간 베기", evade: "공간 도약", heavy: "공간 붕괴" },
+    "기억의 수호자": { a: "수정 파편", weaken: "망각의 빛", stun: "기억 봉인", s: "기억을 잃고 멍해져" },
+    "블랙 드래곤": { a: "물기", drain: "어둠의 이빨", enrage: "흑룡의 분노" },
+    "차원 포식자": { a: "촉수 내려치기", heavy: "차원 붕괴", drain: "차원 포식" },
+    "마계 군주": { a: "마검 베기", burn: "마염", enrage: "마왕의 분노" },
+    "파멸의 수호자": { a: "파멸의 주먹", heavy: "종말의 일격", weaken: "파멸의 선고" },
+    "창조의 수호자": { a: "빛의 창", regen: "창조의 빛", stun: "창세의 섬광", s: "빛에 눈이 멀어" }
+  };
 
   const HERO_NAMES = [
     "아린", "카엘", "루시엔", "도담", "세라", "바론", "미르", "하람", "이안", "레온",
@@ -314,5 +418,5 @@
     "로웬", "다온", "카렌", "무진", "에단", "솔", "하율", "베른", "나비", "라엘"
   ];
 
-  FATES.data = { ELEMENTS, RARITIES, STATS, STAT_NAMES, SKILL_TYPES, PASSIVES, MODIFIERS, MONSTERS, HERO_NAMES };
+  FATES.data = { ELEMENTS, RARITIES, STATS, STAT_NAMES, SKILL_TYPES, PASSIVES, MODIFIERS, MONSTERS, MON_MOVES, HERO_NAMES };
 })(typeof window !== "undefined" ? window : globalThis);
