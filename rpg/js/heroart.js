@@ -202,6 +202,26 @@
   const erode = (m, w, h, k) => boxPass(boxPass(m, w, h, k, true, true), w, h, k, true, false);
   const dilate = (m, w, h, k) => boxPass(boxPass(m, w, h, k, false, true), w, h, k, false, false);
   const heads = {};
+  /* 목 가운데 x: 턱 바로 아래 줄마다 목 폭만 한 살색 토막을 따라 내려간다. 옷깃·복면·머리카락에 가려 못 찾으면 얼굴 가운데 */
+  function neckX(inf, f) {
+    const w = inf.w;
+    let px = f.x;
+    let sum = 0;
+    let n = 0;
+    for (let y = Math.round(f.chin + f.w * 0.04); y <= Math.round(f.chin + f.w * 0.3) && y < inf.h; y++) {
+      let best = null;
+      for (let x = Math.max(0, Math.round(f.x - f.w * 0.9)); x <= Math.min(w - 1, Math.round(f.x + f.w * 0.9)); ) {
+        if (inf.kind[y * w + x] !== 1) { x++; continue; }
+        let e = x;
+        while (e < w && inf.kind[y * w + e] === 1) e++;
+        const m = (x + e - 1) / 2;
+        if (e - x >= f.w * 0.12 && e - x <= f.w * 0.75 && (best === null || Math.abs(m - px) < Math.abs(best - px))) best = m;
+        x = e;
+      }
+      if (best !== null && Math.abs(best - px) < f.w * 0.35) { sum += best; n++; px = best; }
+    }
+    return n >= 2 ? Math.max(f.x - f.w * 0.4, Math.min(f.x + f.w * 0.4, sum / n)) : f.x;
+  }
   function headOf(id) {
     if (heads[id] !== undefined) return heads[id];
     const inf = analyze(id);
@@ -216,13 +236,18 @@
     const chin = f.chin;
     const cut = Math.min(h - 1, Math.round(chin + fw * 0.1));
     const R = new Uint8Array(w * h);
+    /* 손에 든 무기(heroes.WEAPON_AT에 잰 자리) */
+    const caps = [];
+    (H.WEAPON_AT[id] || []).forEach((wp) => wp.slice(2).forEach((c) => caps.push(c)));
     for (let y = 0; y <= cut; y++) {
       /* 모자 챙 높이는 넓게, 얼굴 높이는 머리카락까지, 턱 아래 띠에서는 목 둘레만(어깨는 빼고, 아래로 갈수록 좁게) */
       const lim = y > chin - fw * 0.1 ? fw * (0.5 - 0.6 * (y - chin + fw * 0.1) / fw) : y < f.top - fw * 0.15 ? fw * 2.4 : fw * 1.8;
-      for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] > 60 && Math.abs(x - f.x) <= lim) R[y * w + x] = 1;
+      for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] > 60 && Math.abs(x - f.x) <= lim && !caps.some((c) => capsuleHit(x, y, c))) R[y * w + x] = 1;
     }
+    /* 깎아 내지 않고 얼굴과 이어진 픽셀을 다 가져간다(깎으면 삐친 머리카락·머리끝·뿔·리본이 떨어져 나간다).
+       얼굴에 닿은 무기는 위에서 잰 자리로 미리 뺐다 */
     const k = Math.max(2, Math.round(fw * 0.1));
-    const E = erode(R, w, h, k);
+    const E = R;
     /* 얼굴 가운데에서 가장 가까운 남은 픽셀부터 채우기 */
     let seed = -1;
     for (let r = 0; r < fw && seed < 0; r++) {
@@ -246,7 +271,45 @@
         stack.push(j);
       });
     }
-    const D = dilate(C, w, h, k);
+    /* 가늘고 길게 곧은 조각(지팡이·총신·지휘봉 끝)은 뺀다: 깎아 내도 남는 두꺼운 부분 말고, 가는 부분 덩어리마다
+       길이가 얼굴 폭의 0.6배 넘고 거의 일직선이면 무기. 짧거나 굽은 것(삐친 머리카락, 머리끝, 리본)은 그대로 */
+    const O = dilate(erode(C, w, h, 2), w, h, 2);
+    const thin = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) if (C[i] && !O[i]) thin[i] = 1;
+    const seenT = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      if (!thin[i] || seenT[i]) continue;
+      const comp = [i];
+      seenT[i] = 1;
+      for (let q = 0; q < comp.length; q++) {
+        const j = comp[q];
+        const x = j % w;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const n = j + oy * w + ox;
+            if (x + ox < 0 || x + ox >= w || n < 0 || n >= w * h || seenT[n] || !thin[n]) continue;
+            seenT[n] = 1;
+            comp.push(n);
+          }
+        }
+      }
+      if (comp.length < fw * 0.6) continue;
+      let mx = 0;
+      let my = 0;
+      comp.forEach((j) => { mx += j % w; my += Math.floor(j / w); });
+      mx /= comp.length;
+      my /= comp.length;
+      let sxx = 0;
+      let syy = 0;
+      let sxy = 0;
+      comp.forEach((j) => { const ddx = (j % w) - mx; const ddy = Math.floor(j / w) - my; sxx += ddx * ddx; syy += ddy * ddy; sxy += ddx * ddy; });
+      const tr = (sxx + syy) / comp.length;
+      const det = (sxx * syy - sxy * sxy) / comp.length / comp.length;
+      const l1 = tr / 2 + Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
+      const l2 = Math.max(0, tr - l1);
+      if (Math.sqrt(l1) * 3.4 >= fw * 0.6 && Math.sqrt(l2) <= Math.sqrt(l1) * 0.12) comp.forEach((j) => { C[j] = 0; });
+    }
+    const D = dilate(C, w, h, 1);
     let x0 = w;
     let y0 = h;
     let x1 = 0;
@@ -287,25 +350,20 @@
       }
       if (touch && comp.length <= small) comp.forEach((j) => { D2[j] = 1; });
     }
-    /* 그림이 이어지는데 자른 가장자리(긴 머리카락, 목, 옷깃)는 몇 픽셀에 걸쳐 흐리게: 칼로 자른 듯한 곧은 선이 안 보이게 */
-    const F = Math.max(2, Math.round(fw * 0.08));
-    const fade = new Uint8Array(w * h);
-    let ring = [];
-    for (let i = 0; i < w * h; i++) {
-      if (!D[i]) continue;
+    /* 붙일 머리 조각: 머리 덩어리에 둘러싸인 빈틈과 가장자리의 옅은 픽셀까지(안 그러면 머리카락 사이가 뚫려 보인다) */
+    const Dh = dilate(D, w, h, 1);
+    const outside = new Uint8Array(w * h);
+    const st0 = [];
+    for (let x = 0; x < w; x++) [x, (h - 1) * w + x].forEach((i) => { if (!D[i] && !outside[i]) { outside[i] = 1; st0.push(i); } });
+    for (let y = 0; y < h; y++) [y * w, y * w + w - 1].forEach((i) => { if (!D[i] && !outside[i]) { outside[i] = 1; st0.push(i); } });
+    while (st0.length) {
+      const i = st0.pop();
       const x = i % w;
-      const cutAt = (n, ok) => ok && n >= 0 && n < w * h && !D[n] && data[n * 4 + 3] > 60;
-      if (cutAt(i - 1, x > 0) || cutAt(i + 1, x < w - 1) || cutAt(i - w, true) || cutAt(i + w, true)) { fade[i] = 1; ring.push(i); }
+      [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => { if (n >= 0 && n < w * h && !D[n] && !outside[n]) { outside[n] = 1; st0.push(n); } });
     }
-    for (let d = 2; d <= F; d++) {
-      const next = [];
-      ring.forEach((i) => {
-        const x = i % w;
-        [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => {
-          if (n >= 0 && n < w * h && D[n] && !fade[n]) { fade[n] = d; next.push(n); }
-        });
-      });
-      ring = next;
+    for (let i = 0; i < w * h; i++) {
+      if (!outside[i]) Dh[i] = 1;
+      else if (Dh[i] && !D[i] && data[i * 4 + 3] > 60) Dh[i] = 0;
     }
     /* gone: 몸 쪽에서 지운 자리(새 머리를 단 뒤 구멍이 남으면 메울 곳).
        under: 그 가운데 턱 아래(목·옷깃)와, 눈높이 아래에서 얼굴 둘레 밖에 있으면서 위쪽 머리(모자 챙)보다 몸에 더 붙은 조각
@@ -343,8 +401,7 @@
     const u = g3.createImageData(w, h);
     for (let i = 0, p = 0; i < w * h; i++, p += 4) {
       for (let c = 0; c < 4; c++) { a.data[p + c] = data[p + c]; b.data[p + c] = data[p + c]; }
-      if (!D[i]) a.data[p + 3] = 0;
-      else if (fade[i]) a.data[p + 3] = Math.round((data[p + 3] * fade[i]) / (F + 1));
+      if (!Dh[i]) a.data[p + 3] = 0;
       if (D2[i] || (near[i] && data[p + 3] <= 60)) {
         if (data[p + 3] > 60) gone[i] = 1;
         b.data[p + 3] = 0;
@@ -384,35 +441,25 @@
       if (c === main || !c.touch || c.cy >= chin) return;
       c.px.forEach((j) => { b.data[j * 4 + 3] = 0; u.data[j * 4 + 3] = 0; });
     });
-    /* 지운 자리와 맞닿은 몸 쪽 가장자리는 몇 픽셀에 걸쳐 흐리게: 새 머리가 못 덮은 곳에 자로 그은 듯한 선이 남지 않게 */
-    const F2 = Math.max(2, Math.round(fw * 0.12));
-    const seen2 = new Uint8Array(w * h);
-    let edge = [];
-    const shown = (n) => b.data[n * 4 + 3] > 0 || u.data[n * 4 + 3] > 0;
-    for (let i = 0; i < w * h; i++) {
-      if (data[i * 4 + 3] <= 60 || shown(i)) continue;
-      const x = i % w;
-      [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => {
-        if (n >= 0 && n < w * h && !seen2[n] && shown(n)) { seen2[n] = 1; edge.push(n); }
-      });
-    }
-    for (let d = 1; d <= F2 && edge.length; d++) {
-      const next = [];
-      edge.forEach((i) => {
-        const k = d / (F2 + 1);
-        b.data[i * 4 + 3] = Math.round(b.data[i * 4 + 3] * k);
-        u.data[i * 4 + 3] = Math.round(u.data[i * 4 + 3] * k);
-        const x = i % w;
-        [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => {
-          if (n >= 0 && n < w * h && !seen2[n] && shown(n)) { seen2[n] = 1; next.push(n); }
-        });
-      });
-      edge = next;
-    }
+    plug(a.data, w, h, erode(dilate(Dh, w, h, 1), w, h, 1));
     g1.putImageData(a, 0, 0);
     g2.putImageData(b, 0, 0);
     g3.putImageData(u, 0, 0);
-    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, under: underCv, w, h, face: f, mask: D, gone };
+    /* 머리를 떼어 낼 때 자른 가장자리 바로 바깥(그림이 이어지던 곳) */
+    const edge = [];
+    for (let i = 0; i < w * h; i++) {
+      if (!D[i]) continue;
+      const x = i % w;
+      const y = (i - x) / w;
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ox, oy]) => {
+        const X = x + ox;
+        const Y = y + oy;
+        if (X >= 0 && Y >= 0 && X < w && Y < h && !D[Y * w + X] && data[(Y * w + X) * 4 + 3] > 60) edge.push(X, Y);
+      });
+    }
+    const alpha = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) alpha[i] = data[i * 4 + 3];
+    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, under: underCv, w, h, face: f, mask: D, gone, neck: neckX(inf, f), edge, alpha };
     return heads[id];
   }
   /* 새 머리가 지운 자리를 다 덮지 못해 목·옷깃 둘레에 생긴 구멍을 둘레 색으로 메운다.
@@ -490,6 +537,53 @@
     }
     g.putImageData(im, 0, 0);
   }
+  /* 잘린 자리가 그대로 드러난 길이(얼굴 폭 단위): 몸에서 지웠는데 새 머리가 덮지 못해 빈 곳에 맞닿은 몸 픽셀,
+     그리고 새 머리를 떼어 낼 때 자른 가장자리가 빈 곳에 닿은 곳 */
+  function seamOf(cv, bh, hh, L, T, dx, dy, s, hd) {
+    const W = cv.width;
+    const Hh = cv.height;
+    const d = cv.getContext("2d").getImageData(0, 0, W, Hh).data;
+    const A = (x, y) => (x < 0 || y < 0 || x >= W || y >= Hh ? 0 : d[(y * W + x) * 4 + 3]);
+    let n = 0;
+    for (let y = 0; y < bh.h; y++) {
+      for (let x = 0; x < bh.w; x++) {
+        if (!bh.gone[y * bh.w + x]) continue;
+        const X = x - L;
+        const Y = y - T;
+        if (A(X, Y) >= 40) continue;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ox, oy]) => {
+          const X2 = X + ox;
+          const Y2 = Y + oy;
+          if (A(X2, Y2) > 150 && hd[(Y2 * W + X2) * 4 + 3] < 40) n++;
+        });
+      }
+    }
+    for (let k = 0; k < hh.edge.length; k += 2) if (A(Math.round(hh.edge[k] * s + dx - L), Math.round(hh.edge[k + 1] * s + dy - T)) < 40) n++;
+    return n / bh.fw;
+  }
+  /* 한두 픽셀짜리 틈(머리카락 가닥 사이 등)을 둘레 색으로 메운다: 크게 그리면 뒤 배경이 점점이 비친다.
+     where가 있으면 그 안에서만, 없으면 둘레 8칸 가운데 5칸 넘게 차 있는 곳 */
+  function plug(d, w, h, where) {
+    for (let i = 0; i < w * h; i++) {
+      if ((where && !where[i]) || d[i * 4 + 3] >= 128) continue;
+      const x = i % w;
+      let rr = 0;
+      let gg = 0;
+      let bb = 0;
+      let n = 0;
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const j = i + oy * w + ox;
+          if (x + ox < 0 || x + ox >= w || j < 0 || j >= w * h || d[j * 4 + 3] < 200) continue;
+          rr += d[j * 4];
+          gg += d[j * 4 + 1];
+          bb += d[j * 4 + 2];
+          n++;
+        }
+      }
+      if (n >= 5) { d[i * 4] = rr / n; d[i * 4 + 1] = gg / n; d[i * 4 + 2] = bb / n; d[i * 4 + 3] = 255; }
+    }
+  }
   /* 몸 그림에 다른 그림의 머리를 단 새 그림. anchorX는 발밑 x(원래 그림의 0.46 지점) */
   const composed = {};
   function compose(bodyId, headId) {
@@ -499,9 +593,12 @@
     const hh = headOf(headId);
     if (bh === null || hh === null) return null;
     if (!bh || !hh) return (composed[key] = image(bodyId));
-    const s = Math.max(0.7, Math.min(1.45, bh.fw / hh.fw));
-    const dx = bh.cx - hh.cx * s;
-    const dy = bh.chin - hh.chin * s;
+    /* 얼굴 크기가 비슷하면(머리 고르기에서 그렇게 고른다) 늘리지 않고 픽셀 그대로 붙인다: 늘리면 머리만 흐려진다.
+       목 가운데끼리, 턱끼리 맞춘다(얼굴 가운데끼리 맞추면 비스듬한 얼굴에서 목이 어긋나 돌아간 듯 보인다) */
+    const ratio = bh.fw / hh.fw;
+    const s = ratio >= 0.86 && ratio <= 1.16 ? 1 : Math.max(0.75, Math.min(1.3, ratio));
+    const dx = Math.round(bh.neck - hh.neck * s);
+    const dy = Math.round(bh.chin - hh.chin * s);
     const L = Math.floor(Math.min(0, dx + hh.x0 * s));
     const T = Math.floor(Math.min(0, dy + hh.y0 * s));
     const Rr = Math.ceil(Math.max(bh.w, dx + (hh.x1 + 1) * s));
@@ -512,11 +609,34 @@
     g.imageSmoothingEnabled = true;
     g.imageSmoothingQuality = "high";
     g.drawImage(bh.erased, -L, -T);
+    g.imageSmoothingEnabled = s !== 1;
     g.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
+    g.imageSmoothingEnabled = true;
+    /* 새 머리에 딸려 온 턱 옆 아래쪽(옷깃·털 목도리·늘어진 머리채)이 몸 테두리 밖으로 나가면 잘라 낸다: 거기서 끊긴 자리가 그대로 드러난다 */
+    {
+      const im = g.getImageData(0, 0, W, Hh);
+      const y0 = Math.max(0, Math.floor(bh.chin - bh.fw * 0.45));
+      for (let y = y0; y < bh.h; y++) {
+        for (let x = 0; x < bh.w; x++) {
+          if (Math.abs(x - bh.neck) < bh.fw * 0.45 || bh.alpha[y * bh.w + x] > 60) continue;
+          im.data[((y - T) * W + (x - L)) * 4 + 3] = 0;
+        }
+      }
+      g.putImageData(im, 0, 0);
+    }
     g.globalCompositeOperation = "destination-over";
     g.drawImage(bh.under, -L, -T);
     g.globalCompositeOperation = "source-over";
     fillGaps(cv, bh, L, T);
+    /* 새 머리 자리: 옷 색을 바꿀 때 머리는 원래 색 그대로 둔다(머리카락 픽셀마다 갈래가 달라 얼룩이 생긴다) */
+    const hc = canvas(W, Hh);
+    const hcg = hc.getContext("2d");
+    hcg.imageSmoothingEnabled = s !== 1;
+    hcg.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
+    const hd = hcg.getImageData(0, 0, W, Hh).data;
+    cv.headMask = new Uint8Array(W * Hh);
+    for (let i = 0; i < W * Hh; i++) if (hd[i * 4 + 3] > 0) cv.headMask[i] = 1;
+    cv.seam = seamOf(cv, bh, hh, L, T, dx, dy, s, hd);
     cv.anchorX = bh.w * 0.46 - L;
     cv.place = { bodyId, headId, L, T, dx, dy, s };
     const hf = hh.face;
@@ -542,7 +662,26 @@
     if (plus < 0) { const img = image(key); return ready(img) ? img : null; }
     return compose(key.slice(0, plus), key.slice(plus + 1));
   }
-  const srcKey = (job, lk) => H.heroArtId(job) + (lk.head ? "+" + lk.head : "");
+  /* 머리 후보(heroes.lookOf의 heads) 가운데 붙여서 잘린 자리가 거의 안 드러나는 첫 머리. 다 드러나면 원래 머리 그대로 */
+  const SEAM_OK = 0.6;
+  const chosen = new Map();
+  function headFor(job, lk) {
+    if (!lk.heads) return null;
+    const body = H.heroArtId(job);
+    const key = body + ">" + lk.heads.join(",");
+    if (chosen.has(key)) return chosen.get(key);
+    /* 짐승 머리(수인·용인·리자드맨)는 수식어의 모습이라 그대로 단다 */
+    if (H.HEAD_TAG[lk.heads[0]] === "b") { chosen.set(key, lk.heads[0]); return lk.heads[0]; }
+    for (const id of lk.heads) {
+      const cv = compose(body, id);
+      /* 그림을 아직 못 읽었으면 첫 후보로 두고 다음에 다시 고른다 */
+      if (cv === null) return lk.heads[0];
+      if (!cv.place || cv.seam <= SEAM_OK) { chosen.set(key, id); return id; }
+    }
+    chosen.set(key, null);
+    return null;
+  }
+  const srcKey = (job, lk) => { const hd = headFor(job, lk); return H.heroArtId(job) + (hd ? "+" + hd : ""); };
 
   /* ── 옷·피부 색 바꾸기 (원래 크기에서 한 번) ── */
   /* [색상, 원래 채도에 곱할 값, 더할 채도, 밝기 배율] */
@@ -565,24 +704,26 @@
     const img = source(sk0);
     const inf = analyze(sk0);
     if (!img || inf === null) return null;
-    if (!inf || (!lk.pal && !lk.skin && !lk.hair)) { baked.set(key, img); return img; }
+    if (!inf) { baked.set(key, img); return img; }
     const cv = canvas(inf.w, inf.h);
     cv.anchorX = img.anchorX;
     const g = cv.getContext("2d");
     g.drawImage(img, 0, 0);
     const im = g.getImageData(0, 0, inf.w, inf.h);
     const d = im.data;
+    plug(d, inf.w, inf.h);
     const pal = lk.pal;
     const dh = pal ? pal.h / 360 - inf.dom : 0;
     const ps = pal ? pal.s || 1 : 1;
     const pv = pal ? pal.v || 1 : 1;
     const nv = 1 + (pv - 1) * 0.6;
     const sk = lk.skin ? SKINS[lk.skin] : null;
-    const hr = lk.hair ? HAIRS[lk.hair] : null;
+    /* 다른 그림의 머리를 단 그림은 그 머리의 머리카락 색 그대로(얼굴 둘레를 다시 칠하면 베일·두건까지 물든다) */
+    const hr = lk.hair && !sk0.includes("+") ? HAIRS[lk.hair] : null;
     const c = [0, 0, 0];
     for (let i = 0, n = inf.w * inf.h; i < n; i++) {
       const k = inf.kind[i];
-      if (!k) continue;
+      if (!k || (img.headMask && img.headMask[i] && k !== 1)) continue;
       const p = i * 4;
       if (k === 4 && hr) {
         toHsv(d[p], d[p + 1], d[p + 2], c);
@@ -622,7 +763,7 @@
     const bh = base.naturalHeight || base.height;
     /* 머리를 바꿔 달아 그림이 위로 커졌으면, 몸의 키가 같아지도록 전체 키를 늘린다 */
     const body = image(H.heroArtId(job));
-    const grow = lk.head && body.naturalHeight ? bh / body.naturalHeight : 1;
+    const grow = sk0.includes("+") && body.naturalHeight ? bh / body.naturalHeight : 1;
     const hpx = Math.max(8, Math.round(heightPx * grow));
     const key = `${sk0}#${lookKey(lk)}@${hpx}`;
     let cv = scaled.get(key);
@@ -632,7 +773,15 @@
       const g = cv.getContext("2d");
       g.imageSmoothingEnabled = true;
       g.imageSmoothingQuality = "high";
-      g.drawImage(base, 0, 0, cv.width, cv.height);
+      /* 크게 그릴 때는 먼저 정수 배로 픽셀 그대로 키우고 남은 만큼만 부드럽게: 통째로 부드럽게 늘리면 뭉개진다 */
+      const k = Math.floor(hpx / bh);
+      if (k >= 2) {
+        const big = canvas(bw * k, bh * k);
+        const gb = big.getContext("2d");
+        gb.imageSmoothingEnabled = false;
+        gb.drawImage(base, 0, 0, bw * k, bh * k);
+        g.drawImage(big, 0, 0, cv.width, cv.height);
+      } else g.drawImage(base, 0, 0, cv.width, cv.height);
       if (scaled.size > 300) scaled.clear();
       scaled.set(key, cv);
     }
@@ -914,7 +1063,7 @@
     const M = rigMasks(sk0);
     if (!base || !M) return M === false ? false : null;
     const body0 = image(H.heroArtId(job));
-    const grow = lk.head && body0.naturalHeight ? M.h / body0.naturalHeight : 1;
+    const grow = sk0.includes("+") && body0.naturalHeight ? M.h / body0.naturalHeight : 1;
     const hpx = Math.max(8, Math.round(heightPx * grow));
     const key = `${sk0}#${lookKey(lk)}@${hpx}`;
     let R = rigCache.get(key);
@@ -1685,7 +1834,7 @@
     ctx.save();
     ctx.translate(Math.round(x), Math.round(y + dy));
     ctx.scale(dir * lk.wide, breath);
-    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingEnabled = !o.crisp;
     ctx.globalAlpha = alpha;
     if (lk.aura) aura(ctx, lk.aura, A, T, false);
     if (lk.wings) wings(ctx, lk.wings, A, T);
@@ -1842,14 +1991,16 @@
     ctx.save();
     ctx.translate(Math.round(x), Math.round(y - (lk.float ? 0.03 * hh : 0)));
     ctx.scale((o.dir || 1) * lk.wide, 1);
-    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingEnabled = !o.crisp;
     ctx.globalAlpha = alpha;
     if (lk.aura) aura(ctx, lk.aura, A, T, false);
     if (lk.wings) wings(ctx, lk.wings, A, T);
     if (lk.rarity >= 3) {
       const gl = glow(base, F.sprites.RARITY_COLOR[lk.rarity]);
       ctx.globalAlpha = alpha * (0.5 + 0.12 * (lk.rarity - 3));
+      ctx.imageSmoothingEnabled = true;
       ctx.drawImage(gl, fx - gl.pad, fy - gl.pad);
+      ctx.imageSmoothingEnabled = !o.crisp;
       ctx.globalAlpha = alpha;
     }
     if (lk.clone === "twin") ctx.drawImage(tinted(base, "#1a1430", 0.3), fx - A.W * 0.3, fy * 0.94, base.width * 0.94, base.height * 0.94);
@@ -2045,33 +2196,30 @@
   function profile(job) {
     if (profiles.has(job.id)) return profiles.get(job.id);
     const lk = H.lookOf(job);
-    if (!analyze(srcKey(job, lk)) || !sprite(job, 10)) return url(job);
-    const S = 240;
-    /* 얼굴 폭이 액자의 26%쯤 되게 키운다(그림마다 머리 크기가 달라서) */
-    const probeH = S * 1.6;
-    const probe = sprite(job, probeH * lk.size);
-    const A0 = anchors(analyze(srcKey(job, lk)), probe);
-    const h = Math.max(S * 1.15, Math.min(S * 2.4, probeH * ((S * 0.26) / Math.max(1, A0.fw))));
-    const base = sprite(job, h * lk.size);
+    const inf = analyze(srcKey(job, lk));
+    const body = image(H.heroArtId(job));
+    if (!inf || !sprite(job, 10) || !body || !body.naturalHeight) return url(job);
+    /* 그림 픽셀을 정수 배로만 키워 또렷하게(부드럽게 늘리면 머리가 뭉개진다). 얼굴 폭이 액자의 26%쯤 되는 배율을 고르고,
+       액자 크기를 그 배율에 맞춘다(화면에서는 같은 크기로 보인다) */
+    const h0 = body.naturalHeight / lk.size;
+    const base = sprite(job, body.naturalHeight);
     if (!base) return url(job);
-    let A = anchors(analyze(srcKey(job, lk)), base);
-    /* 머리 꼭대기(머리카락·모자·투구)까지 액자 안에 들어오게: 먼저 얼굴을 내리고, 그래도 넘치면 작게 */
-    const M = S * 0.07;
-    let up = A.fy - headTop(base, A);
-    let fy = Math.max(S * 0.46, Math.min(S * 0.56, M + up));
-    let hh = h;
-    if (fy - up < M) {
-      hh = h * ((fy - M) / up);
-      const small = sprite(job, hh * lk.size);
-      if (small) { A = anchors(analyze(srcKey(job, lk)), small); up = A.fy - headTop(small, A); fy = Math.max(S * 0.46, Math.min(S * 0.56, M + up)); } else hh = h;
-    }
+    const A = anchors(inf, base);
+    const k = Math.max(1, Math.min(4, Math.round((240 * 0.26) / Math.max(1, A.fw))));
+    /* 머리 꼭대기(머리카락·모자·투구)까지 액자 안에 들어오게: 얼굴을 내리고, 그래도 넘치면 액자를 넓힌다 */
+    const up = (A.fy - headTop(base, A)) * k;
+    const S = Math.max(Math.round((k * A.fw) / 0.26), Math.ceil(up / 0.49));
+    const fy = Math.max(S * 0.46, Math.min(S * 0.56, S * 0.07 + up));
     const dir = pfHash(job.name) & 1 ? 1 : -1;
     const cv = canvas(S, S);
     const g = cv.getContext("2d");
     pfBackground(g, job, S);
-    const x = S * 0.5 - A.fx * dir * lk.wide;
-    const y = fy - A.fy + (lk.float ? 0.03 * hh * lk.size : 0);
-    drawStill(g, job, x, y, { dir, h: hh });
+    const x = S * 0.5 - A.fx * k * dir * lk.wide;
+    const y = fy - A.fy * k + (lk.float ? 0.03 * base.height * k : 0);
+    g.save();
+    g.scale(k, k);
+    drawStill(g, job, x / k, y / k, { dir, h: h0, crisp: true });
+    g.restore();
     pfFrame(g, job, S);
     const out = cv.toDataURL("image/png");
     if (profiles.size > 300) profiles.clear();
@@ -2088,5 +2236,5 @@
     for (let i = 0; i < 6; i++) frameOf(pr.R, poseOf("walk", (i + 0.5) / WALK_FPS, 0), true);
   }
 
-  F.heroArt = { warm, preload, sprite, draw, drawStill, url, profile, image, analyze, headOf, compose, rigOf, frameOf };
+  F.heroArt = { warm, preload, sprite, draw, drawStill, url, profile, image, analyze, headOf, compose, headFor, rigOf, frameOf };
 })(typeof window !== "undefined" ? window : globalThis);

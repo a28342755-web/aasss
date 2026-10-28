@@ -467,7 +467,7 @@
   function pickHead(job, body, mod, combat) {
     if (KEEP_HEAD.includes(body)) return null;
     const beast = mod === "수인" ? (BODY_TAKES[body] === "fn" ? ["bl_fox"] : ["bl_wolf", "n_beast"]) : mod === "용인" || mod === "리자드맨" ? ["bl_dragon"] : null;
-    if (beast) return beast.includes(body) ? null : beast[fnv(job.name + "^") % beast.length];
+    if (beast) return beast.includes(body) ? null : [beast[fnv(job.name + "^") % beast.length]];
     const kinds = BODY_TAKES[body];
     if (!kinds) return null;
     let allow = kinds;
@@ -475,12 +475,17 @@
     else if (MALE.test(job.base)) allow = "m";
     if (!combat) allow = allow.replace(/[xh]/g, "");
     const pool = [];
-    allow.split("").forEach((k) => (HEADS_BY[k] || []).forEach((id) => { if (id !== body && headFits(id, body)) pool.push(id); }));
+    /* 얼굴 크기가 비슷한 머리만(붙일 때 늘리거나 줄이지 않게: 늘린 머리는 몸보다 흐리게 보인다) */
+    const sizeFits = (id) => { const r = HEAD_AT[body][2] / HEAD_AT[id][2]; return r >= 0.86 && r <= 1.16; };
+    allow.split("").forEach((k) => (HEADS_BY[k] || []).forEach((id) => { if (id !== body && headFits(id, body) && sizeFits(id)) pool.push(id); }));
     if (!pool.length) return null;
-    /* 열에 하나 남짓은 원래 머리 그대로 */
+    /* 열에 하나 남짓은 원래 머리 그대로. 나머지는 이름으로 정한 순서의 후보 몇 개: 그림에서 붙여 보고
+       잘린 자리가 드러나면 다음 후보로 넘어간다(heroart.js의 headFor) */
     const r = fnv(job.name + "^");
     if (r % 7 === 0) return null;
-    return pool[r % pool.length];
+    const out = [];
+    for (let k = 0; k < Math.min(8, pool.length); k++) out.push(pool[(r + k * 5) % pool.length]);
+    return [...new Set(out)];
   }
 
   function fnv(str) {
@@ -517,13 +522,13 @@
     const lk = Object.assign({ size: 1, wide: 1 }, ml, { pal });
     /* 그림마다 첫 기본 직업은 원래 인물, 나머지는 다른 그림의 머리를 단다 */
     /* 마법사 그림은 참고 시트의 프레임으로 움직이므로 머리를 바꾸지 않는다 */
-    if ((mod || i > 0) && heroArtId(job) !== "m_wizard") lk.head = pickHead(job, heroArtId(job), mod ? mod.name : null, F.FAMILY_LIST[job.fam].combat);
+    if ((mod || i > 0) && heroArtId(job) !== "m_wizard") lk.heads = pickHead(job, heroArtId(job), mod ? mod.name : null, F.FAMILY_LIST[job.fam].combat);
+    if (lk.heads) lk.head = lk.heads[0];
+    else delete lk.heads;
     if (lk.head && HEAD_TAG[lk.head] === "b") { delete lk.ears; delete lk.horns; delete lk.skin; }
     if (!lk.aura && mod && mod.el && mod.el !== "phys" && mod.tier >= 1) lk.aura = mod.el;
     /* 머리카락 색: 그림마다 첫 기본 직업은 원래 색, 나머지는 이름으로 고른다(원래 색도 섞인다) */
     if (!lk.hair && (mod || i > 0)) lk.hair = HAIR_LIST[fnv(job.name + "@") % HAIR_LIST.length];
-    /* 다른 그림의 머리를 단 직업은 그 머리의 머리카락 색 그대로(얼굴 둘레를 다시 칠하면 베일·두건까지 물든다) */
-    if (lk.head) delete lk.hair;
     lk.size *= 1 + ((fnv(job.name + "#") % 7) - 3) * 0.012;
     lk.rarity = job.rarity;
     job._look = lk;
