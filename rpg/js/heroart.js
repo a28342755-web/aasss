@@ -221,14 +221,8 @@
       }
     }
     if (skn) { sk[0] /= skn; sk[1] /= skn; sk[2] /= skn; }
-    const faceCore = (x, y) => ((x - f.x) / (fw * 0.5)) ** 2 + ((y - f.y - fw * 0.04) / (fw * 0.56)) ** 2 < 1;
     const skinLike = (cc) => skn && Math.abs(cc[0] - sk[0]) < 0.04 && Math.abs(cc[1] - sk[1]) < 0.2 && Math.abs(cc[2] - sk[2]) < 0.22;
-    const ok = (i) => {
-      if (!piece[i] || data[i * 4 + 3] <= 100 || inf.kind[i] === 1) return false;
-      const x = i % w;
-      if (faceCore(x, (i - x) / w)) return false;
-      return !skinLike(hsv(i));
-    };
+    const ok = (i) => piece[i] && data[i * 4 + 3] > 100 && inf.kind[i] !== 1 && !skinLike(hsv(i));
     /* 표본: 얼굴 양옆(눈~턱), 이마 위 띠 */
     const seeds = [];
     for (let y = Math.round(f.top - fw * 0.55); y <= Math.round(f.chin); y++) {
@@ -282,6 +276,43 @@
         }
       }
     }
+    /* 얼굴 안(줄마다 양옆이 살갗인 곳)에서는 위쪽 머리카락과 곧게 이어진 픽셀(앞머리 가닥)만 남긴다.
+       눈·눈썹·입은 위가 살갗이나 속눈썹이라 끊겨 빠진다(갈색 눈이 갈색 머리카락과 같은 색이어도) */
+    const lo = new Int32Array(h).fill(-1);
+    const hi = new Int32Array(h).fill(-1);
+    for (let y = Math.max(0, Math.round(f.top - fw * 0.3)); y <= Math.min(h - 1, Math.round(f.chin)); y++) {
+      for (let x = Math.max(0, Math.round(f.x - fw * 1.1)); x <= Math.min(w - 1, Math.round(f.x + fw * 1.1)); x++) {
+        const i = y * w + x;
+        if (!piece[i] || inf.kind[i] !== 1) continue;
+        if (lo[y] < 0) lo[y] = x;
+        hi[y] = x;
+      }
+    }
+    const isSkin = (x, y) => x >= 0 && y >= 0 && x < w && y < h && piece[y * w + x] && inf.kind[y * w + x] === 1;
+    /* 돌린 얼굴의 먼 쪽 눈은 살갗 가장자리에 붙어 있다: 눈높이에서 바로 아래(볼)와 옆이 살갗이면 얼굴 안으로 친다 */
+    const reach = Math.max(3, Math.round(fw * 0.3));
+    const skinBelow = (x, y) => {
+      for (let d = 1; d <= reach; d++) {
+        if (isSkin(x, y + d)) return true;
+        if (y + d >= h || data[((y + d) * w + x) * 4 + 3] <= 100) return false;
+      }
+      return false;
+    };
+    const skinSide = (x, y) => {
+      for (let d = 1; d <= reach; d++) if (isSkin(x - d, y) || isSkin(x + d, y)) return true;
+      return false;
+    };
+    const inside = (x, y) => (lo[y] >= 0 && x > lo[y] && x < hi[y]) ||
+      (y > f.top && y < f.y + fw * 0.15 && Math.abs(x - f.x) < fw * 0.9 && skinBelow(x, y) && skinSide(x, y));
+    for (let x = 0; x < w; x++) {
+      let fromTop = false;
+      for (let y = 0; y < h; y++) {
+        const i = y * w + x;
+        if (!mask[i]) { fromTop = false; continue; }
+        if (!inside(x, y)) fromTop = true;
+        else if (!fromTop) mask[i] = 0;
+      }
+    }
     let sv = 0;
     let ss = 0;
     let n = 0;
@@ -325,6 +356,46 @@
       d[p + 1] = c[1];
       d[p + 2] = c[2];
     }
+  }
+  /* 머리 조각에서 살갗 픽셀: 얼굴 살빛과 닮은 픽셀을 얼굴 가운데부터 따라간다(색상만 보면 주황·갈색 머리카락도 살갗으로 잡힌다).
+     종족 살빛(오크·고블린…)을 입힐 때와 몸에 맞춰 살빛을 고칠 때 쓴다 */
+  function skinMaskOf(data, w, h, f, piece, skin, hair) {
+    const c = [0, 0, 0];
+    const ref = [0, 0, 0];
+    toHsv(skin[0], skin[1], skin[2], ref);
+    /* 얼굴과 목 둘레 안에서만(머리카락·베일로 번지지 않게). 아주 하얀 살빛은 머리카락·베일과 가까워 더 엄격하게 */
+    const pale = ref[1] < 0.2;
+    const near = (i) => {
+      const x = i % w;
+      const y = (i - x) / w;
+      if (y > f.chin) return Math.abs(x - f.x) < f.w * 0.45 && y < f.chin + f.w * 0.5;
+      return ((x - f.x) / (f.w * 0.78)) ** 2 + ((y - f.y) / (f.w * (pale ? 0.6 : 0.85))) ** 2 < 1;
+    };
+    const like = (i) => {
+      if (!piece[i] || data[i * 4 + 3] <= 100 || (hair && hair.mask[i]) || !near(i)) return false;
+      toHsv(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], c);
+      if (pale && (c[1] < ref[1] * 0.7 || Math.abs(c[2] - ref[2]) > 0.2)) return false;
+      const dh = Math.abs(c[0] - ref[0]);
+      /* 밝은 볼(채도 낮음)과 그늘진 볼(어두움)까지: 색상은 가깝게, 채도·밝기는 넉넉하게 */
+      /* 흰 베일·베이지 머리카락처럼 살빛과 색상이 같아도 채도가 훨씬 낮은 것은 뺀다 */
+      return Math.min(dh, 1 - dh) < 0.065 && c[1] > Math.max(0.05, ref[1] * 0.5) && c[1] < ref[1] + 0.3 && c[2] > ref[2] * 0.5;
+    };
+    const mask = new Uint8Array(w * h);
+    const st = [];
+    /* 씨앗: 얼굴 타원 안 전체(얼굴이 비스듬해도 양 볼이 다 들어오게) */
+    for (let y = Math.round(f.y - f.w * 0.3); y <= Math.round(f.chin); y++) {
+      for (let x = Math.round(f.x - f.w * 0.6); x <= Math.round(f.x + f.w * 0.6); x++) {
+        if (((x - f.x) / (f.w * 0.6)) ** 2 + ((y - f.y) / (f.w * 0.62)) ** 2 > 1) continue;
+        const i = y * w + x;
+        if (x >= 0 && y >= 0 && x < w && y < h && !mask[i] && like(i)) { mask[i] = 1; st.push(i); }
+      }
+    }
+    while (st.length) {
+      const i = st.pop();
+      const x = i % w;
+      [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => { if (n >= 0 && n < w * h && !mask[n] && like(n)) { mask[n] = 1; st.push(n); } });
+    }
+    return mask;
   }
   /* 목 가운데 x: 턱 바로 아래 줄마다 목 폭만 한 살색 토막을 따라 내려간다. 옷깃·복면·머리카락에 가려 못 찾으면 얼굴 가운데 */
   function neckX(inf, f) {
@@ -648,7 +719,8 @@
       }
     }
     const skin = sk[3] > fw * 0.5 ? [sk[0] / sk[3], sk[1] / sk[3], sk[2] / sk[3]] : null;
-    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, under: underCv, w, h, face: f, mask: D, gone, neck: nx, edge, alpha, hair: hairOf(data, w, h, inf, f, Dh), skin };
+    const hair = hairOf(data, w, h, inf, f, Dh);
+    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, under: underCv, w, h, face: f, mask: D, gone, neck: nx, edge, alpha, hair, skin, piece: Dh, skinMask: skin ? skinMaskOf(data, w, h, f, Dh, skin, hair) : null };
     return heads[id];
   }
   /* 새 머리가 지운 자리를 다 덮지 못해 목·옷깃 둘레에 생긴 구멍을 둘레 색으로 메운다.
@@ -734,7 +806,6 @@
     const key = "skin>" + (bh.skin.map(Math.round).join(","));
     hh.skinCache = hh.skinCache || {};
     if (hh.skinCache[key]) return hh.skinCache[key];
-    const inf = analyze(headId);
     const cv = canvas(hh.w, hh.h);
     const g = cv.getContext("2d");
     g.drawImage(hh.cut, 0, 0);
@@ -742,12 +813,28 @@
     const d = im.data;
     const k = [0, 1, 2].map((c) => Math.max(0.62, Math.min(1.6, bh.skin[c] / Math.max(1, hh.skin[c]))));
     for (let i = 0; i < hh.w * hh.h; i++) {
-      if (inf.kind[i] !== 1 || d[i * 4 + 3] === 0) continue;
+      if (!hh.skinMask || !hh.skinMask[i] || d[i * 4 + 3] === 0) continue;
       for (let c = 0; c < 3; c++) d[i * 4 + c] = Math.min(255, d[i * 4 + c] * k[c]);
     }
     g.putImageData(im, 0, 0);
     hh.skinCache[key] = cv;
     return cv;
+  }
+  /* 머리 조각 좌표의 마스크를 합친 그림 좌표로 옮긴다 */
+  function placeMask(src, hh, W, Hh, ox, oy, s, hd) {
+    const m = canvas(hh.w, hh.h);
+    const mg = m.getContext("2d");
+    const mi = mg.createImageData(hh.w, hh.h);
+    for (let i = 0; i < hh.w * hh.h; i++) if (src[i]) mi.data[i * 4 + 3] = 255;
+    mg.putImageData(mi, 0, 0);
+    const t = canvas(W, Hh);
+    const tg = t.getContext("2d");
+    tg.imageSmoothingEnabled = s !== 1;
+    tg.drawImage(m, ox, oy, hh.w * s, hh.h * s);
+    const td = tg.getImageData(0, 0, W, Hh).data;
+    const out = new Uint8Array(W * Hh);
+    for (let i = 0; i < W * Hh; i++) if (td[i * 4 + 3] > 127 && hd[i * 4 + 3] > 0) out[i] = 1;
+    return out;
   }
   /* 잘린 자리가 그대로 드러난 길이(얼굴 폭 단위): 몸에서 지웠는데 새 머리가 덮지 못해 빈 곳에 맞닿은 몸 픽셀,
      그리고 새 머리를 떼어 낼 때 자른 가장자리가 빈 곳에 닿은 곳 */
@@ -939,6 +1026,7 @@
       /* 모자 머리는 머리카락 색 대신 옷 색으로 */
       cv.hatOnly = H.HAT_OK.includes(headId);
     }
+    if (hh.skinMask) cv.skinMask = placeMask(hh.skinMask, hh, W, Hh, dx - L, dy - T, s, hd);
     const hinf = analyze(headId);
     cv.seam = seamOf(cv, bh, hh, L, T, dx, dy, s, hd, hinf && hinf.kind, H.DRAPE.includes(headId));
     cv.anchorX = bh.w * 0.46 - L;
@@ -1073,12 +1161,41 @@
     const pv = pal ? pal.v || 1 : 1;
     const nv = 1 + (pv - 1) * 0.6;
     const sk = lk.skin && !beastKey(sk0) ? SKINS[lk.skin] : null;
-    /* 다른 그림의 머리를 단 그림은 따로 찾아 둔 머리카락 자리만 칠한다(아래). 원래 머리는 얼굴 둘레의 머리카락(4)을 칠한다 */
-    const hr = lk.hair && !sk0.includes("+") ? HAIRS[lk.hair] : null;
+    /* 머리: 원래 머리든 바꿔 단 머리든 같은 방법으로. 머리 자리는 옷 색을 입히지 않고, 찾아 둔 머리카락·모자·살갗 자리만 칠한다
+       (얼굴 둘레를 통째로 칠하면 두건·털·배경까지 네모나게 물든다) */
+    let region = null;
+    let skinM = null;
+    let hairM = null;
+    let tone = null;
+    let hatOnly = false;
+    if (img.headMask) {
+      region = img.headMask;
+      skinM = img.skinMask || null;
+      hairM = img.hairMask || null;
+      tone = img.hairTone;
+      hatOnly = !!img.hatOnly;
+    } else if (H.HEAD_AT[sk0]) {
+      const ho = headOf(sk0);
+      if (ho) {
+        region = ho.piece;
+        skinM = ho.skinMask;
+        if (ho.hair && (H.HAIR_OK.includes(sk0) || H.HAT_OK.includes(sk0))) {
+          hairM = ho.hair.mask;
+          tone = [ho.hair.v, ho.hair.s];
+          hatOnly = H.HAT_OK.includes(sk0);
+        }
+      }
+    }
+    /* 머리 정보가 없는 그림(마법사 시트 등)은 예전처럼 얼굴 둘레의 머리카락(4)을 칠한다 */
+    const hr = lk.hair && !region ? HAIRS[lk.hair] : null;
     const c = [0, 0, 0];
     for (let i = 0, n = inf.w * inf.h; i < n; i++) {
-      const k = inf.kind[i];
-      if (!k || (img.headMask && img.headMask[i] && k !== 1)) continue;
+      let k = inf.kind[i];
+      if (!k) continue;
+      if (region && region[i]) {
+        if (!(sk && skinM && skinM[i])) continue;
+        k = 1;
+      }
       const p = i * 4;
       if (k === 4 && hr) {
         toHsv(d[p], d[p + 1], d[p + 2], c);
@@ -1101,8 +1218,8 @@
       d[p + 1] = c[1];
       d[p + 2] = c[2];
     }
-    if (img.hairMask && img.hatOnly && pal) tintHat(d, img.hairMask, img.hairTone[1], pal);
-    else if (img.hairMask && lk.hair) recolorHair(d, img.hairMask, img.hairTone[0], img.hairTone[1], lk.hair);
+    if (hairM && hatOnly && pal) tintHat(d, hairM, tone[1], pal);
+    else if (hairM && !hatOnly && lk.hair) recolorHair(d, hairM, tone[0], tone[1], lk.hair);
     g.putImageData(im, 0, 0);
     if (baked.size > 400) baked.clear();
     baked.set(key, cv);
@@ -2071,6 +2188,9 @@
       c.fillStyle = g;
       c.fillRect(cx - Hh * 0.6, -Hh * 1.05, Hh * 1.2, Hh * 1.1);
     }
+    /* 앞에 그리는 반짝이·번개는 머리(얼굴·머리카락·모자)를 가리지 않게: 턱보다 위, 얼굴 둘레 넉넉히 */
+    const chinY = A.fy + A.fw * 0.42;
+    const onFace = (x, y) => y < chinY && Math.abs(x - A.fx) < A.fw * 1.15;
     for (let i = 0; i < au.n; i++) {
       const r1 = rnd(i, 1);
       const r2 = rnd(i, 2);
@@ -2105,6 +2225,12 @@
         if ((T * 5 + r1 * 7) % 1 > 0.35) continue;
         x = cx + (rnd(step, i) - 0.5) * W * 0.9;
         y = -Hh * (0.15 + rnd(step, i + 9) * 0.8);
+        /* 번개(가로 s*4, 세로 s*6)가 머리에 걸리면 턱 아래 몸통으로 내린다 */
+        if (y < chinY && x + s * 4 > A.fx - A.fw * 1.15 && x < A.fx + A.fw * 1.15) {
+          const lo = chinY + 2;
+          const hi = Math.max(lo, -Hh * 0.15 - s * 6);
+          y = lo + rnd(step, i + 5) * (hi - lo);
+        }
         if (front) {
           c.globalAlpha = a0;
           c.strokeStyle = col;
@@ -2119,6 +2245,7 @@
         continue;
       }
       if (isFront !== front) continue;
+      if (front && onFace(x, y)) continue;
       particle(c, au.shape || "dot", x, y, s, col, a0 * a);
     }
     c.restore();

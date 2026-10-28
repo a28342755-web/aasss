@@ -463,7 +463,7 @@
      여기 없는 머리는 원래 머리카락 색 그대로 */
   const HAIR_OK = ["b_dancer", "bl_mermaid", "c_void", "e_water", "k_rose", "ma_girl", "o_miko", "s_kunoichi", "sv_maid", "tr_acrobat",
     "sp_medium", "w_twin", "o_warrior", "su_summoner", "ci_guard", "cr_smith", "k_paladin", "o_samurai", "sc_scholar", "w_spear",
-    "al_alch", "tr_magician", "me_doctor"];
+    "al_alch", "tr_magician"];
   /* 모자·투구·베일을 직업 옷 색으로 물들여도 되는 머리(찾은 자리가 모자뿐이고 머리카락은 안 물드는 머리) */
   const HAT_OK = ["ga_fisher", "r_trickster", "hu_slayer", "g_slinger", "m_witch", "ar_painter", "tr_jester", "mi_soldier", "k_dark", "h_nun"];
   /* 여러 몸에 깔끔하게 붙어 너무 많은 직업이 같은 얼굴이 되는 머리: 후보 순서에서 뒤로 미룬다 */
