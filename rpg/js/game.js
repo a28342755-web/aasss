@@ -593,7 +593,9 @@
         this.spinT -= dt;
         this.flick -= dt;
         if (this.flick <= 0) {
-          const j = F.JOBS[Math.floor(Math.random() * F.JOBS.length)];
+          /* 머리를 미리 골라 둔 직업을 먼저(처음 보는 직업은 그리기 전에 머리 후보를 붙여 봐야 해서 멈칫한다) */
+          let j = F.JOBS[Math.floor(Math.random() * F.JOBS.length)];
+          for (let k = 0; k < 12 && !HA.headReady(j); k++) j = F.JOBS[Math.floor(Math.random() * F.JOBS.length)];
           this.shown = j;
           const el = doc.querySelector(".roll-name");
           if (el) el.textContent = j.name;
@@ -2503,6 +2505,7 @@
     G.codex = new Set(store.get("codex", []));
     G.hall = store.get("hall", []);
     HA.preload();
+    HA.warmHeads();
     resize();
     bindPad();
     root.addEventListener("resize", () => resize());

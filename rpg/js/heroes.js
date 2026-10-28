@@ -459,6 +459,15 @@
   const HEAD_SKIP = {
     bl_fox: [[56, 34, 13, 68, 92, 16], [142, 46, 8, 146, 92, 12]]
   };
+  /* 머리를 바꿔 단 직업마다 머리카락 색을 바꿔도 되는 머리(머리카락이 또렷하게 드러나고 모자·두건·베일과 색이 다른 머리).
+     여기 없는 머리는 원래 머리카락 색 그대로 */
+  const HAIR_OK = ["b_dancer", "bl_mermaid", "c_void", "e_water", "k_rose", "ma_girl", "o_miko", "s_kunoichi", "sv_maid", "tr_acrobat",
+    "sp_medium", "w_twin", "o_warrior", "su_summoner", "ci_guard", "cr_smith", "k_paladin", "o_samurai", "sc_scholar", "w_spear",
+    "al_alch", "tr_magician", "me_doctor"];
+  /* 모자·투구·베일을 직업 옷 색으로 물들여도 되는 머리(찾은 자리가 모자뿐이고 머리카락은 안 물드는 머리) */
+  const HAT_OK = ["ga_fisher", "r_trickster", "hu_slayer", "g_slinger", "m_witch", "ar_painter", "tr_jester", "mi_soldier", "k_dark", "h_nun"];
+  /* 여러 몸에 깔끔하게 붙어 너무 많은 직업이 같은 얼굴이 되는 머리: 후보 순서에서 뒤로 미룬다 */
+  const COMMON_HEAD = ["g_bomber", "w_berserker", "fa_herder", "w_sword"];
   /* 두건·베일·망토 깃처럼 어깨까지 늘어지는 천을 쓴 머리: 턱에서 잘린 자락이 허공에 뜨면 바로 드러난다 */
   const DRAPE = ["a_elf", "a_hunter", "r_thief", "s_shadow", "d_necro", "d_reaper", "h_nun", "e_ice", "e_water", "bl_vamp", "fa_bee"];
   const headFits = (head, body) => !HEAD_FOR[head] || HEAD_FOR[head].includes(body.split("_")[0]);
@@ -489,9 +498,9 @@
        잘린 자리가 드러나면 다음 후보로 넘어간다(heroart.js의 headFor) */
     const r = fnv(job.name + "^");
     if (r % 7 === 0) return null;
-    const out = [];
-    for (let k = 0; k < Math.min(8, pool.length); k++) out.push(pool[(r + k * 5) % pool.length]);
-    return [...new Set(out)];
+    /* 직업 이름으로 섞은 순서(모든 머리가 고르게 앞에 올 수 있게) */
+    const uniq = [...new Set(pool)].map((id) => [fnv(job.name + "|" + id), id]).sort((a, b) => a[0] - b[0]).slice(0, 16).map((x) => x[1]);
+    return uniq.filter((id) => !COMMON_HEAD.includes(id)).concat(uniq.filter((id) => COMMON_HEAD.includes(id)));
   }
 
   function fnv(str) {
@@ -540,5 +549,5 @@
     return lk;
   }
 
-  F.heroes = { ART, heroArtId, styleOf, weaponOf, WEAPONS, lookOf, HEAD_AT, HEAD_TAG, BODY_TAKES, WEAPON_AT, DRAPE, HEAD_SKIP };
+  F.heroes = { ART, heroArtId, styleOf, weaponOf, WEAPONS, lookOf, HEAD_AT, HEAD_TAG, BODY_TAKES, WEAPON_AT, DRAPE, HEAD_SKIP, HAIR_OK, HAT_OK };
 })(typeof window !== "undefined" ? window : globalThis);
