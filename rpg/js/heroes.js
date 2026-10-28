@@ -321,7 +321,7 @@
   /* 그림마다 직접 잰 얼굴 위치 [얼굴 가운데 x, 턱 y, 얼굴 폭] (원래 그림 픽셀). 머리를 떼고 붙이는 기준 */
   const HEAD_AT = {
     a_elf: [78, 59, 29], a_hunter: [84, 74, 30], al_alch: [87, 78, 30], al_mad: [96, 76, 40], ar_painter: [105, 82, 36],
-    b_bard: [73, 60, 30], b_dancer: [118, 64, 28], bl_dragon: [113, 58, 40], bl_fox: [98, 62, 26], bl_mermaid: [104, 49, 25],
+    b_bard: [73, 60, 30], b_dancer: [118, 64, 28], bl_dragon: [113, 58, 40], bl_fox: [112, 66, 26], bl_mermaid: [104, 49, 25],
     bl_vamp: [99, 55, 24], bl_wolf: [92, 58, 40], bu_builder: [87, 68, 34], c_astro: [96, 76, 28], c_time: [95, 70, 30],
     c_void: [103, 65, 32], ci_guard: [82, 71, 34], co_merchant: [77, 74, 30], cr_smith: [54, 61, 30], cu_chef: [97, 75, 34],
     d_curse: [102, 64, 36], d_necro: [102, 60, 30], d_reaper: [104, 64, 30], e_earth: [77, 76, 28], e_fire: [107, 76, 30],
@@ -449,12 +449,18 @@
     m_witch: MAGIC, n_flower: MAGIC, c_astro: MAGIC, e_storm: MAGIC, m_wizard: MAGIC, e_earth: MAGIC, m_rune: MAGIC, hu_monster: ["hu", "d", "a"],
     h_nun: ["h", "my", "me"], e_ice: ["e", "h", "my"], h_priest: ["h", "my"],
     bu_builder: ["bu", "cr", "ga"], ga_miner: ["ga", "bu", "cr", "t"], cu_chef: ["cu"], fa_farmer: ["fa", "ga", "sv"], ga_fisher: ["ga", "se", "fa"],
-    fa_bee: ["fa"], me_doctor: ["me", "h"], sc_scholar: ["sc", "m"], ar_painter: ["ar", "tr", "b"], t_engineer: ["t", "al", "g"],
+    fa_bee: [], me_doctor: ["me", "h"], sc_scholar: ["sc", "m"], ar_painter: ["ar", "tr", "b"], t_engineer: ["t", "al", "g"],
     ci_guard: ["ci", "mi"], mi_general: ["mi", "ci", "k"], co_merchant: ["co", "tr"], tr_magician: ["tr", "co"], r_trickster: ["r", "co", "s", "tr"],
     g_slinger: ["g", "hu", "se"], se_pirate: ["se", "g"], b_bard: ["b", "ar", "tr"], sp_shaman: ["sp", "n"], tr_jester: ["tr", "b"],
     my_fortune: ["my", "c", "sp"], o_samurai: ["o", "ma"], o_taoist: ["o", "sp", "ma"], hu_hunter: ["hu", "ga", "fa"], a_elf: ["a", "n", "hu"],
     sv_maid: ["sv", "cu", "me"], bl_fox: [], se_sailor: ["se"]
   };
+  /* 머리를 떼어 낼 때 빼는 것(머리에 붙어 있지만 몸의 일부): [x1, y1, 반지름1, x2, y2, 반지름2] 캡슐 */
+  const HEAD_SKIP = {
+    bl_fox: [[56, 34, 13, 68, 92, 16], [142, 46, 8, 146, 92, 12]]
+  };
+  /* 두건·베일·망토 깃처럼 어깨까지 늘어지는 천을 쓴 머리: 턱에서 잘린 자락이 허공에 뜨면 바로 드러난다 */
+  const DRAPE = ["a_elf", "a_hunter", "r_thief", "s_shadow", "d_necro", "d_reaper", "h_nun", "e_ice", "e_water", "bl_vamp", "fa_bee"];
   const headFits = (head, body) => !HEAD_FOR[head] || HEAD_FOR[head].includes(body.split("_")[0]);
   const HEADS_BY = {};
   Object.entries(HEAD_TAG).forEach(([id, t]) => { (HEADS_BY[t] = HEADS_BY[t] || []).push(id); });
@@ -525,7 +531,6 @@
     if ((mod || i > 0) && heroArtId(job) !== "m_wizard") lk.heads = pickHead(job, heroArtId(job), mod ? mod.name : null, F.FAMILY_LIST[job.fam].combat);
     if (lk.heads) lk.head = lk.heads[0];
     else delete lk.heads;
-    if (lk.head && HEAD_TAG[lk.head] === "b") { delete lk.ears; delete lk.horns; delete lk.skin; }
     if (!lk.aura && mod && mod.el && mod.el !== "phys" && mod.tier >= 1) lk.aura = mod.el;
     /* 머리카락 색: 그림마다 첫 기본 직업은 원래 색, 나머지는 이름으로 고른다(원래 색도 섞인다) */
     if (!lk.hair && (mod || i > 0)) lk.hair = HAIR_LIST[fnv(job.name + "@") % HAIR_LIST.length];
@@ -535,5 +540,5 @@
     return lk;
   }
 
-  F.heroes = { ART, heroArtId, styleOf, weaponOf, WEAPONS, lookOf, HEAD_AT, HEAD_TAG, BODY_TAKES, WEAPON_AT };
+  F.heroes = { ART, heroArtId, styleOf, weaponOf, WEAPONS, lookOf, HEAD_AT, HEAD_TAG, BODY_TAKES, WEAPON_AT, DRAPE, HEAD_SKIP };
 })(typeof window !== "undefined" ? window : globalThis);

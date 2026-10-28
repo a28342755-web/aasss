@@ -236,13 +236,14 @@
     const chin = f.chin;
     const cut = Math.min(h - 1, Math.round(chin + fw * 0.1));
     const R = new Uint8Array(w * h);
-    /* 손에 든 무기(heroes.WEAPON_AT에 잰 자리) */
+    /* 손에 든 무기(heroes.WEAPON_AT에 잰 자리)와 머리에 붙은 몸의 일부(heroes.HEAD_SKIP: 꼬리 등) */
     const caps = [];
     (H.WEAPON_AT[id] || []).forEach((wp) => wp.slice(2).forEach((c) => caps.push(c)));
+    (H.HEAD_SKIP[id] || []).forEach((c) => caps.push(c));
     for (let y = 0; y <= cut; y++) {
       /* 모자 챙 높이는 넓게, 얼굴 높이는 머리카락까지, 턱 아래 띠에서는 목 둘레만(어깨는 빼고, 아래로 갈수록 좁게) */
       const lim = y > chin - fw * 0.1 ? fw * (0.5 - 0.6 * (y - chin + fw * 0.1) / fw) : y < f.top - fw * 0.15 ? fw * 2.4 : fw * 1.8;
-      for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] > 60 && Math.abs(x - f.x) <= lim && !caps.some((c) => capsuleHit(x, y, c))) R[y * w + x] = 1;
+      for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] > 60 && Math.abs(x - f.x) <= lim && !caps.some((c) => capsuleHit(x, y, [c[0], c[1], c[2] + 2, c[3], c[4], c[5] + 2]))) R[y * w + x] = 1;
     }
     /* 깎아 내지 않고 얼굴과 이어진 픽셀을 다 가져간다(깎으면 삐친 머리카락·머리끝·뿔·리본이 떨어져 나간다).
        얼굴에 닿은 무기는 위에서 잰 자리로 미리 뺐다 */
@@ -365,6 +366,59 @@
       if (!outside[i]) Dh[i] = 1;
       else if (Dh[i] && !D[i] && data[i * 4 + 3] > 60) Dh[i] = 0;
     }
+    /* 턱 아래는 목 살갗만 가져간다(옷깃·늘어진 머리채는 몸 쪽 것을 쓴다) */
+    const nx = neckX(inf, f);
+    const chinY = Math.round(chin);
+    for (let y = chinY + 1; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (Dh[i] && (Math.abs(x - nx) > fw * 0.45 || (inf.kind[i] !== 1 && y > chinY + 1))) Dh[i] = 0;
+      }
+    }
+    /* 그래서 잘린 머리카락·수염·두건 끝은 톱니처럼 뾰족하게 다듬고 끝을 어둡게 한다(곧게 자른 선이 안 보이게) */
+    const tipD = Math.max(2, Math.round(fw * 0.13));
+    const tipP = Math.max(3, Math.round(fw * 0.13));
+    const tips = [];
+    for (let x = 0; x < w; x++) {
+      let y = Math.min(h - 1, chinY + 1);
+      while (y > 0 && !Dh[y * w + x]) y--;
+      if (y < chin - fw * 0.6 || !Dh[y * w + x] || inf.kind[y * w + x] === 1) continue;
+      if (y + 1 >= h || data[((y + 1) * w + x) * 4 + 3] <= 60) continue;
+      const t = Math.round(tipD * Math.abs(((x % tipP) / tipP) * 2 - 1));
+      let k = 0;
+      while (k < t && y - k > 0 && Dh[(y - k) * w + x] && inf.kind[(y - k) * w + x] !== 1) { Dh[(y - k) * w + x] = 0; k++; }
+      if (Dh[(y - k) * w + x]) tips.push((y - k) * w + x);
+    }
+    /* 한 픽셀 폭으로 남은 톱니 끝은 떼어 낸다(허공에 점선처럼 보인다) */
+    for (let pass = 0; pass < 2; pass++) {
+      for (let y = Math.max(0, chinY - tipD - 1); y <= Math.min(h - 1, chinY + 1); y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (!Dh[i] || inf.kind[i] === 1) continue;
+          if ((x > 0 && Dh[i - 1]) || (x < w - 1 && Dh[i + 1])) continue;
+          Dh[i] = 0;
+        }
+      }
+    }
+    for (let k = tips.length - 1; k >= 0; k--) {
+      let i = tips[k];
+      while (i < w * h && !Dh[i] && i - w >= 0) i -= w;
+      if (Dh[i]) tips[k] = i;
+      else tips.splice(k, 1);
+    }
+    /* 톱니로 다듬다 끊겨 떨어진 부스러기(가는 끈·총신 끝이 점점이 남은 것)는 버린다: 얼굴과 이어진 덩어리만 */
+    {
+      const keepH = new Uint8Array(w * h);
+      const s0 = Math.round(f.y) * w + Math.round(f.x);
+      const st = [];
+      if (Dh[s0]) { keepH[s0] = 1; st.push(s0); }
+      while (st.length) {
+        const i = st.pop();
+        const x = i % w;
+        [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].forEach((n) => { if (n >= 0 && n < w * h && Dh[n] && !keepH[n]) { keepH[n] = 1; st.push(n); } });
+      }
+      if (st.length === 0 && Dh[s0]) for (let i = 0; i < w * h; i++) if (!keepH[i] && Dh[i] && i >= (chinY - Math.round(fw * 0.6)) * w) Dh[i] = 0;
+    }
     /* gone: 몸 쪽에서 지운 자리(새 머리를 단 뒤 구멍이 남으면 메울 곳).
        under: 그 가운데 턱 아래(목·옷깃)와, 눈높이 아래에서 얼굴 둘레 밖에 있으면서 위쪽 머리(모자 챙)보다 몸에 더 붙은 조각
        (어깨에 걸친 망토·목도리·부채·꼬리·화살통)은 새 머리 밑에 다시 깐다 */
@@ -442,24 +496,25 @@
       c.px.forEach((j) => { b.data[j * 4 + 3] = 0; u.data[j * 4 + 3] = 0; });
     });
     plug(a.data, w, h, erode(dilate(Dh, w, h, 1), w, h, 1));
+    tips.forEach((i) => { for (let c = 0; c < 3; c++) a.data[i * 4 + c] = Math.round(a.data[i * 4 + c] * 0.5); });
     g1.putImageData(a, 0, 0);
     g2.putImageData(b, 0, 0);
     g3.putImageData(u, 0, 0);
     /* 머리를 떼어 낼 때 자른 가장자리 바로 바깥(그림이 이어지던 곳) */
     const edge = [];
     for (let i = 0; i < w * h; i++) {
-      if (!D[i]) continue;
+      if (!Dh[i]) continue;
       const x = i % w;
       const y = (i - x) / w;
       [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ox, oy]) => {
         const X = x + ox;
         const Y = y + oy;
-        if (X >= 0 && Y >= 0 && X < w && Y < h && !D[Y * w + X] && data[(Y * w + X) * 4 + 3] > 60) edge.push(X, Y);
+        if (X >= 0 && Y >= 0 && X < w && Y < h && !Dh[Y * w + X] && data[(Y * w + X) * 4 + 3] > 60) edge.push(X, Y);
       });
     }
     const alpha = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) alpha[i] = data[i * 4 + 3];
-    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, under: underCv, w, h, face: f, mask: D, gone, neck: neckX(inf, f), edge, alpha };
+    heads[id] = { cx: f.x, chin, cutY: cut, fw, x0, y0, x1, y1, cut: cutCv, erased: ersCv, under: underCv, w, h, face: f, mask: D, gone, neck: nx, edge, alpha };
     return heads[id];
   }
   /* 새 머리가 지운 자리를 다 덮지 못해 목·옷깃 둘레에 생긴 구멍을 둘레 색으로 메운다.
@@ -539,27 +594,99 @@
   }
   /* 잘린 자리가 그대로 드러난 길이(얼굴 폭 단위): 몸에서 지웠는데 새 머리가 덮지 못해 빈 곳에 맞닿은 몸 픽셀,
      그리고 새 머리를 떼어 낼 때 자른 가장자리가 빈 곳에 닿은 곳 */
-  function seamOf(cv, bh, hh, L, T, dx, dy, s, hd) {
+  function seamOf(cv, bh, hh, L, T, dx, dy, s, hd, hk, drape) {
     const W = cv.width;
     const Hh = cv.height;
+    const N = W * Hh;
     const d = cv.getContext("2d").getImageData(0, 0, W, Hh).data;
     const A = (x, y) => (x < 0 || y < 0 || x >= W || y >= Hh ? 0 : d[(y * W + x) * 4 + 3]);
-    let n = 0;
+    const isHead = (x, y) => x >= 0 && y >= 0 && x < W && y < Hh && hd[(y * W + x) * 4 + 3] >= 40;
+    const parts = [0, 0, 0, 0];
+    const goneC = new Uint8Array(N);
+    /* 자른 자리 후보 점(종류별). 그림 원래 가장자리는 들쭉날쭉하고, 칼로 자른 자리는 곧게 이어진다: 곧게 4칸 넘게 이어진 점만 센다 */
+    const marks = [new Uint8Array(N), new Uint8Array(N), new Uint8Array(N)];
+    const mark = (k, x, y) => { if (x >= 0 && y >= 0 && x < W && y < Hh) marks[k][y * W + x] = 1; };
+    /* 1. 몸에서 지웠는데 비어 있는 곳에 맞닿은 몸 픽셀(곧게 잘린 베일·부채·머리채) */
     for (let y = 0; y < bh.h; y++) {
       for (let x = 0; x < bh.w; x++) {
         if (!bh.gone[y * bh.w + x]) continue;
         const X = x - L;
         const Y = y - T;
+        goneC[Y * W + X] = 1;
         if (A(X, Y) >= 40) continue;
         [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([ox, oy]) => {
-          const X2 = X + ox;
-          const Y2 = Y + oy;
-          if (A(X2, Y2) > 150 && hd[(Y2 * W + X2) * 4 + 3] < 40) n++;
+          if (A(X + ox, Y + oy) > 150 && !isHead(X + ox, Y + oy)) mark(0, X + ox, Y + oy);
         });
       }
     }
-    for (let k = 0; k < hh.edge.length; k += 2) if (A(Math.round(hh.edge[k] * s + dx - L), Math.round(hh.edge[k + 1] * s + dy - T)) < 40) n++;
-    return n / bh.fw;
+    for (let k = 0; k < hh.edge.length; k += 2) {
+      const X = Math.round(hh.edge[k] * s + dx - L);
+      const Y = Math.round(hh.edge[k + 1] * s + dy - T);
+      /* 2. 새 머리를 떼어 낸 자리가 빈 곳에 닿음 */
+      if (A(X, Y) < 40) { mark(1, X, Y); continue; }
+      if (isHead(X, Y)) continue;
+      /* 3. 새 머리의 잘린 가장자리(머리카락·옷깃)가 색이 다른 몸 위에서 끝남. 목 살갗끼리는 괜찮다 */
+      const p = (Y * W + X) * 4;
+      for (const [ox, oy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) {
+        const X2 = X + ox;
+        const Y2 = Y + oy;
+        if (!isHead(X2, Y2) || A(X2, Y2) < 150) continue;
+        const hx = Math.round((X2 + L - dx) / s);
+        const hy = Math.round((Y2 + T - dy) / s);
+        if (hk && hk[hy * hh.w + hx] === 1) break;
+        const q = (Y2 * W + X2) * 4;
+        if (Math.abs(d[p] - d[q]) + Math.abs(d[p + 1] - d[q + 1]) + Math.abs(d[p + 2] - d[q + 2]) > 120) mark(2, X, Y);
+        break;
+      }
+    }
+    marks.forEach((m, k) => {
+      for (let i = 0; i < N; i++) {
+        if (!m[i]) continue;
+        /* 두건·베일처럼 어깨까지 늘어지는 천은 허공에서 끝나면 모양과 상관없이 드러난다(머리카락 끝은 들쭉날쭉해도 괜찮다) */
+        if (k === 1 && drape) { parts[k]++; continue; }
+        const x = i % W;
+        let a = 0;
+        let b = 0;
+        while (x - a - 1 >= 0 && m[i - a - 1]) a++;
+        while (x + b + 1 < W && m[i + b + 1]) b++;
+        let c = 0;
+        let e = 0;
+        while (i - (c + 1) * W >= 0 && m[i - (c + 1) * W]) c++;
+        while (i + (e + 1) * W < N && m[i + (e + 1) * W]) e++;
+        if (a + b + 1 >= 4 || c + e + 1 >= 4) parts[k]++;
+      }
+    });
+    /* 4. 지운 자리 근처에 몸통과 떨어져 떠 있는 조각(옛 머리카락·모자 챙 부스러기) */
+    const near = dilate(goneC, W, Hh, 2);
+    const lab = new Int32Array(N).fill(-1);
+    const comps = [];
+    for (let i = 0; i < N; i++) {
+      if (d[i * 4 + 3] <= 60 || lab[i] >= 0) continue;
+      const comp = [i];
+      lab[i] = comps.length;
+      let touch = false;
+      let edge = 0;
+      for (let q = 0; q < comp.length; q++) {
+        const j = comp[q];
+        const x = j % W;
+        if (near[j]) touch = true;
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const nn = j + oy * W + ox;
+            if (x + ox < 0 || x + ox >= W || nn < 0 || nn >= N) continue;
+            if (d[nn * 4 + 3] <= 60) { if (!ox || !oy) edge++; continue; }
+            if (lab[nn] >= 0) continue;
+            lab[nn] = comps.length;
+            comp.push(nn);
+          }
+        }
+      }
+      comps.push({ n: comp.length, touch, edge });
+    }
+    const main = comps.reduce((m, c) => (!m || c.n > m.n ? c : m), null);
+    comps.forEach((c) => { if (c !== main && c.touch) parts[3] += c.edge; });
+    cv.seamParts = parts.map((v) => +(v / bh.fw).toFixed(2));
+    return (parts[0] + parts[1] + parts[2] + parts[3]) / bh.fw;
   }
   /* 한두 픽셀짜리 틈(머리카락 가닥 사이 등)을 둘레 색으로 메운다: 크게 그리면 뒤 배경이 점점이 비친다.
      where가 있으면 그 안에서만, 없으면 둘레 8칸 가운데 5칸 넘게 차 있는 곳 */
@@ -612,10 +739,11 @@
     g.imageSmoothingEnabled = s !== 1;
     g.drawImage(hh.cut, dx - L, dy - T, hh.w * s, hh.h * s);
     g.imageSmoothingEnabled = true;
-    /* 새 머리에 딸려 온 턱 옆 아래쪽(옷깃·털 목도리·늘어진 머리채)이 몸 테두리 밖으로 나가면 잘라 낸다: 거기서 끊긴 자리가 그대로 드러난다 */
+    /* 새 머리에 딸려 온 턱 아래(옷깃·털 목도리·늘어진 머리채)가 몸 테두리 밖으로 나가면 잘라 낸다: 거기서 끊긴 자리가 그대로 드러난다.
+       턱보다 위(투구 볼가리개, 옆머리)는 건드리지 않는다 */
     {
       const im = g.getImageData(0, 0, W, Hh);
-      const y0 = Math.max(0, Math.floor(bh.chin - bh.fw * 0.45));
+      const y0 = Math.max(0, Math.ceil(bh.chin));
       for (let y = y0; y < bh.h; y++) {
         for (let x = 0; x < bh.w; x++) {
           if (Math.abs(x - bh.neck) < bh.fw * 0.45 || bh.alpha[y * bh.w + x] > 60) continue;
@@ -636,7 +764,8 @@
     const hd = hcg.getImageData(0, 0, W, Hh).data;
     cv.headMask = new Uint8Array(W * Hh);
     for (let i = 0; i < W * Hh; i++) if (hd[i * 4 + 3] > 0) cv.headMask[i] = 1;
-    cv.seam = seamOf(cv, bh, hh, L, T, dx, dy, s, hd);
+    const hinf = analyze(headId);
+    cv.seam = seamOf(cv, bh, hh, L, T, dx, dy, s, hd, hinf && hinf.kind, H.DRAPE.includes(headId));
     cv.anchorX = bh.w * 0.46 - L;
     cv.place = { bodyId, headId, L, T, dx, dy, s };
     const hf = hh.face;
@@ -663,25 +792,28 @@
     return compose(key.slice(0, plus), key.slice(plus + 1));
   }
   /* 머리 후보(heroes.lookOf의 heads) 가운데 붙여서 잘린 자리가 거의 안 드러나는 첫 머리. 다 드러나면 원래 머리 그대로 */
-  const SEAM_OK = 0.6;
+  const SEAM_OK = 0.2;
   const chosen = new Map();
   function headFor(job, lk) {
     if (!lk.heads) return null;
     const body = H.heroArtId(job);
     const key = body + ">" + lk.heads.join(",");
     if (chosen.has(key)) return chosen.get(key);
-    /* 짐승 머리(수인·용인·리자드맨)는 수식어의 모습이라 그대로 단다 */
-    if (H.HEAD_TAG[lk.heads[0]] === "b") { chosen.set(key, lk.heads[0]); return lk.heads[0]; }
     for (const id of lk.heads) {
       const cv = compose(body, id);
       /* 그림을 아직 못 읽었으면 첫 후보로 두고 다음에 다시 고른다 */
       if (cv === null) return lk.heads[0];
-      if (!cv.place || cv.seam <= SEAM_OK) { chosen.set(key, id); return id; }
+      /* 머리 위치를 재 두지 않은 몸(cv.place 없음)은 머리를 바꿀 수 없다 */
+      if (!cv.place) break;
+      if (cv.seam <= SEAM_OK) { chosen.set(key, id); return id; }
     }
     chosen.set(key, null);
     return null;
   }
   const srcKey = (job, lk) => { const hd = headFor(job, lk); return H.heroArtId(job) + (hd ? "+" + hd : ""); };
+  /* 짐승 머리(수인·용인·리자드맨)를 달았으면 그 수식어의 덧그림(귀·뿔)과 살빛은 머리 그림이 대신한다.
+     못 달았으면(잘린 자리가 드러나서) 원래 머리에 덧그림과 살빛을 입힌다 */
+  const beastKey = (sk0) => { const i = sk0.indexOf("+"); const hd = i >= 0 ? sk0.slice(i + 1) : ""; return H.HEAD_TAG[hd] === "b" || hd === "bl_fox"; };
 
   /* ── 옷·피부 색 바꾸기 (원래 크기에서 한 번) ── */
   /* [색상, 원래 채도에 곱할 값, 더할 채도, 밝기 배율] */
@@ -717,7 +849,7 @@
     const ps = pal ? pal.s || 1 : 1;
     const pv = pal ? pal.v || 1 : 1;
     const nv = 1 + (pv - 1) * 0.6;
-    const sk = lk.skin ? SKINS[lk.skin] : null;
+    const sk = lk.skin && !beastKey(sk0) ? SKINS[lk.skin] : null;
     /* 다른 그림의 머리를 단 그림은 그 머리의 머리카락 색 그대로(얼굴 둘레를 다시 칠하면 베일·두건까지 물든다) */
     const hr = lk.hair && !sk0.includes("+") ? HAIRS[lk.hair] : null;
     const c = [0, 0, 0];
@@ -1873,7 +2005,8 @@
     const R = rigOf(job, hh);
     if (R === null) return { base, R: null, pending: true };
     const lk = H.lookOf(job);
-    r = { base, R, A: anchors(analyze(srcKey(job, lk)), base), headDeco: !!(lk.horns || lk.ears || lk.crown || lk.halo), backDeco: !!(lk.aura || lk.wings) };
+    const sk0 = srcKey(job, lk);
+    r = { base, R, A: anchors(analyze(sk0), base), beast: beastKey(sk0), headDeco: !!(lk.horns || lk.ears || lk.crown || lk.halo), backDeco: !!(lk.aura || lk.wings) };
     if (ready2.size > 400) ready2.clear();
     ready2.set(key, r);
     return r;
@@ -1957,8 +2090,8 @@
     if (pr.headDeco) {
       ctx.save();
       at(fr.headM);
-      if (lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
-      if (lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
+      if (!pr.beast && lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
+      if (!pr.beast && lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
       if (lk.crown) crown(ctx, A);
       if (lk.halo) halo(ctx, A, T);
       ctx.restore();
@@ -2015,8 +2148,9 @@
       ctx.drawImage(tinted(base, o.tint, 1), fx, fy);
       ctx.globalAlpha = alpha;
     }
-    if (lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
-    if (lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
+    const beast = beastKey(srcKey(job, lk));
+    if (!beast && lk.horns && (A.bare || lk.horns !== "tusk")) horns(ctx, lk.horns, A);
+    if (!beast && lk.ears && (A.bare || lk.ears !== "elf")) ears(ctx, lk.ears, A);
     if (lk.crown) crown(ctx, A);
     if (lk.halo) halo(ctx, A, T);
     if (lk.aura) aura(ctx, lk.aura, A, T, true);
