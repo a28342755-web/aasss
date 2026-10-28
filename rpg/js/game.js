@@ -1567,8 +1567,9 @@
       this.b = E.startBattle(p, { floor: this.floor, monster: mon || E.pickMonster(this.floor, kind, p.diff) });
       const e = this.b.enemy;
       const tpl = (S.MON_LOOK[e.base] || ["slime"])[0];
+      if (F.monArt) await F.monArt.load(e.name);
       /* 포켓몬처럼 몬스터도 주인공만큼 크게(보스는 더 크게) */
-      const img = F.monArt && F.monArt.has(e.name) ? F.monArt.render(e.name, Math.round((e.boss ? 116 : 92) * Z)) : S.monsterBig(e.name, e.boss ? (Z >= 2 ? 8 : 6) : (Z >= 2 ? 6 : 4));
+      const img = (F.monArt && F.monArt.render(e.name, Math.round((e.boss ? 116 : 92) * Z))) || S.monsterBig(e.name, e.boss ? (Z >= 2 ? 8 : 6) : (Z >= 2 ? 6 : 4));
       const bd = bounds(img);
       const art = F.monArt && F.monArt.info(e.base);
       const fly = art ? art.fly : FLYERS.has(tpl);

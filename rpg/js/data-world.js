@@ -204,107 +204,108 @@
 
   /*
    * 몬스터 형식: 이름|단계(0~4)|속성|약점|저항|특성(쉼표)|HP배율|공격배율|방어배율|보스|나오는 난이도
+   *   몬스터 도감 시트의 96종. 그림은 js/monart.js의 ART(이름 → 도감 번호)
    *   단계 0 = 1~10층, 1 = 11~20층 … 4 = 41층 이상
    *   보스: B = 10층마다 나오는 보스, M = 어려움에서 5층마다 나오는 중간 보스
    *   나오는 난이도: 비우면 모두, E = 쉬움만(순한 몬스터), H = 어려움만(정예), NH = 보통·어려움
    */
   const MONSTERS = `
-슬라임|0|nature|fire|nature|none|0.8|0.8|0.6
-고블린|0|phys|fire||steal|0.9|1.0|0.8
-거대 쥐|0|phys|fire|nature|poison|0.7|0.9|0.6
-굶주린 늑대|0|phys|fire||multi|0.9|1.0|0.7
-흡혈 박쥐|0|dark|light|dark|drain|0.7|0.9|0.6
-코볼트 광부|0|earth|wind|earth|heavy|1.0|0.9|1.1
-독버섯 괴물|0|nature|fire|nature|poison|1.0|0.8|0.9
-해골 병사|0|dark|light|dark|none|1.0|1.0|1.0
-성난 멧돼지|0|phys|ice||heavy|1.1|1.0|0.9
-산적|0|phys|bolt||steal|1.0|1.0|0.9
-고블린 족장|0|phys|fire||enrage,steal|1.0|1.0|1.0|B
-거대 슬라임 왕|0|nature|fire|nature|heal,poison|1.1|0.9|0.8|B
-아기 슬라임|0|nature|fire|nature|none|0.6|0.6|0.5||E
-솜털 토끼|0|phys|fire||none|0.65|0.65|0.5||E
-독침 임프|0|dark|light|dark|poison|0.85|1.0|0.8||NH
-그림자 늑대|0|dark|light|dark|multi|0.95|1.1|0.8||H
-칼날 고블린|0|phys|fire||multi,steal|0.95|1.1|0.9||H
-숲의 고목왕|0|nature|fire|nature|heal,heavy|1.15|0.95|1.1|B
-늑대 우두머리|0|phys|fire||multi,enrage|1.05|1.05|0.9|M|H
-오크 전사|1|phys|arcane||heavy|1.1|1.05|1.0
-거대 거미|1|nature|fire|nature|poison|0.9|1.0|0.9
-썩은 좀비|1|dark|fire|dark|poison|1.2|0.9|0.8
-하피|1|wind|bolt|wind|multi|0.85|1.05|0.8
-리자드맨 전사|1|nature|ice|nature|none|1.0|1.0|1.1
-그렘린|1|bolt|earth|bolt|steal|0.8|1.0|0.8
-늑대인간|1|phys|light||enrage|1.0|1.1|0.9
-화염 정령|1|fire|ice|fire|burn|0.9|1.05|0.8
-얼음 정령|1|ice|fire|ice|stun|0.9|1.0|0.9
-원한의 망령|1|dark|light|phys|drain|0.85|1.0|0.7
-거미 여왕|1|nature|fire|nature|poison,stun|1.0|1.0|1.0|B
-오크 대족장|1|phys|arcane||enrage,heavy|1.1|1.05|1.0|B
-꼬마 요정|1|wind|dark|wind|none|0.65|0.7|0.6||E
-졸린 버섯돌이|1|nature|fire|nature|stun|0.75|0.7|0.8||E
-철갑 집게|1|ice|bolt|ice|heavy|1.1|1.0|1.3||NH
-피의 박쥐|1|dark|light|dark|drain,multi|0.85|1.1|0.8||H
-광기의 하피|1|wind|bolt|wind|multi,weaken|0.9|1.15|0.85||H
-달빛 늑대왕|1|light|dark|light|multi,enrage|1.1|1.05|1.0|B
-식인 꽃의 여왕|1|nature|fire|nature|poison,drain|1.05|1.05|1.0|M|H
-트롤|2|phys|fire||heal|1.25|1.0|0.9
-미노타우로스|2|phys|arcane||heavy|1.15|1.1|1.0
-가고일|2|earth|bolt|phys|none|1.0|1.0|1.3
-와이번|2|wind|ice|wind|poison|1.0|1.1|0.9
-뱀파이어|2|dark|light|dark|drain|0.95|1.05|0.9
-바위 골렘|2|earth|bolt|phys|stun|1.3|0.95|1.3
-나가|2|ice|bolt|ice|poison|1.0|1.0|1.0
-켄타우로스 궁수|2|wind|earth|wind|multi|0.9|1.1|0.8
-암흑 기사|2|dark|light|dark|heavy|1.1|1.05|1.2
-늪지 마녀|2|nature|fire|dark|weaken|0.85|1.05|0.8
-리치|2|dark|light|dark|drain,weaken|1.0|1.05|1.0|B
-미궁의 황소왕|2|phys|arcane||heavy,enrage|1.15|1.05|1.0|B
-수줍은 미믹|2|phys|bolt||steal|0.8|0.75|1.1||E
-촛불 도깨비|2|fire|ice|fire|none|0.75|0.75|0.7||E
-해골 마법사|2|dark|light|dark|weaken|0.9|1.1|0.9||NH
-저주받은 갑옷|2|dark|light|phys|heavy,weaken|1.15|1.1|1.3||H
-흡혈 귀족|2|dark|light|dark|drain,enrage|1.0|1.15|0.9||H
-보물고의 미믹왕|2|phys|bolt||steal,heavy|1.15|1.05|1.2|B
-망령 기사단장|2|dark|light|dark|drain,heavy|1.1|1.1|1.15|M|H
-오우거|3|phys|arcane||heavy|1.25|1.1|0.9
-키메라|3|fire|ice|fire|burn|1.05|1.1|0.9
-바실리스크|3|earth|wind|earth|stun|1.0|1.0|1.2
-서큐버스|3|dark|light|dark|weaken|0.9|1.05|0.8
-만티코어|3|nature|ice|nature|poison|1.0|1.1|0.9
-강철 골렘|3|phys|bolt|phys|none|1.3|1.0|1.4
-듀라한|3|dark|light|dark|heavy|1.05|1.1|1.1
-크라켄의 촉수|3|ice|bolt|ice|multi|1.0|1.0|0.9
-화염 거인|3|fire|ice|fire|heavy|1.3|1.1|1.0
-서리 거인|3|ice|fire|ice|stun|1.3|1.05|1.0
-히드라|3|nature|fire|nature|heal,multi|1.1|1.0|1.0|B
-서리 여왕|3|ice|fire|ice|stun,weaken|1.0|1.05|1.0|B
-눈덩이 슬라임|3|ice|fire|ice|none|0.75|0.75|0.7||E
-눈꽃 새|3|ice|fire|ice|multi|0.7|0.8|0.7||E
-얼음 집게|3|ice|bolt|ice|heavy,stun|1.15|1.05|1.35||NH
-서리 늑대|3|ice|fire|ice|multi,stun|1.0|1.15|0.9||H
-눈보라 정령|3|ice|fire|ice|stun,weaken|0.95|1.15|0.85||H
-빙하 대지렁이|3|ice|fire|ice|heavy,multi|1.2|1.05|1.1|B
-눈보라 마녀|3|ice|fire|ice|stun,drain|1.05|1.1|1.0|M|H
-상급 악마|4|fire|light|fire|burn|1.05|1.1|1.0
-베헤모스|4|earth|wind|earth|heavy|1.35|1.05|1.2
-데스 나이트|4|dark|light|dark|drain|1.1|1.1|1.2
-타락천사|4|light|dark|light|weaken|1.0|1.1|1.0
-심연의 촉수|4|dark|light|dark|multi|1.0|1.05|0.9
-시간의 파수꾼|4|arcane|dark|arcane|stun|1.0|1.0|1.1
-혼돈의 마수|4|arcane|light|arcane|heavy|1.15|1.1|1.0
-폭풍 거인|4|bolt|earth|bolt|stun|1.3|1.05|1.0
-불사조|4|fire|ice|fire|heal|1.0|1.05|0.9
-그림자 용|4|dark|light|dark|multi|1.2|1.1|1.1
-고룡|4|fire|ice|fire|burn,enrage|1.15|1.05|1.1|B
-마왕의 그림자|4|dark|light|dark|drain,weaken|1.1|1.05|1.0|B
-공허의 군주|4|arcane|light|arcane|heavy,stun|1.15|1.05|1.0|B
-떠도는 별똥 정령|4|light|dark|light|none|0.8|0.8|0.8||E
-아기 촉수|4|dark|light|dark|multi|0.8|0.8|0.8||E
-공허 집게|4|arcane|light|arcane|heavy,weaken|1.2|1.1|1.3||NH
-나락의 임프|4|fire|ice|fire|burn,multi|1.0|1.15|0.95||H
-종말의 기사|4|dark|light|dark|drain,heavy|1.15|1.15|1.25||H
-세계 포식자 웜|4|arcane|light|arcane|heavy,drain|1.2|1.05|1.1|B
-임프 대공|4|fire|ice|fire|burn,enrage|1.1|1.1|1.0|M|H
+슬라임|0|nature|fire|nature|none|0.79|0.81|0.6
+고블린|0|phys|fire||steal|0.89|1.02|0.8
+스켈레톤|0|dark|light|dark|none|0.94|1.02|0.9
+좀비|0|dark|fire|dark|poison|1.09|0.87|0.8
+늑대|0|phys|fire||multi|0.89|1.02|0.7
+멧돼지|0|phys|ice||heavy|1.09|1.02|0.9
+고블린 창병|0|phys|fire||multi|0.89|1.07|0.8
+거미|0|nature|fire|nature|poison|0.74|0.92|0.6
+나무 정령|0|nature|fire|nature|poison|1.04|0.87|1
+도적|0|phys|bolt||steal|0.94|1.02|0.85
+요정|0|wind|dark|wind|none|0.6|0.61|0.5||E
+거대 달팽이|0|nature|fire|nature|none|0.69|0.61|0.7||E
+독거미|0|nature|fire|nature|poison|0.84|1.02|0.8||NH
+오크|0|phys|arcane||heavy|0.99|1.12|0.9||H
+궁수|0|phys|wind||multi|0.94|1.12|0.85||H
+곰|0|phys|fire||heavy,enrage|1.08|1.08|0.9|M|H
+트롤|0|phys|fire||heal,heavy|1.13|0.98|0.9|B
+거미 여왕|0|nature|fire|nature|poison,stun|1.03|1.03|1.0|B
+정령의 나무|0|nature|fire|nature|heal,poison|1.18|0.93|1.1|B
+늑대인간|1|phys|light||enrage|1|1.1|0.85
+하피|1|wind|bolt|wind|multi|0.84|1.05|0.75
+맨티스|1|nature|fire|nature|multi|0.9|1.1|0.8
+전갈|1|earth|wind|earth|poison|0.95|1|1.03
+엘프 궁수|1|nature|fire|wind|multi|0.84|1.1|0.75
+바위 골렘|1|earth|wind|phys|heavy|1.3|0.95|1.22
+바람의 정령|1|wind|bolt|wind|weaken|0.84|1|0.75
+대지의 정령|1|earth|wind|earth|heavy|1.15|1|1.08
+사냥꾼|1|phys|bolt||steal|0.95|1.05|0.85
+거대 지네|1|nature|fire|nature|poison|1|1|0.94
+유니콘|1|light|dark|light|heal|0.65|0.7|0.56||E
+페가수스|1|wind|bolt|wind|none|0.7|0.7|0.56||E
+요정의 기사|1|light|dark|light|multi|0.95|1.05|1.03||NH
+사이클롭스|1|phys|arcane||heavy|1.15|1.15|0.89||H
+모래의 괴물|1|earth|ice|earth|weaken,heavy|1.1|1.1|1.03||H
+그리핀|1|wind|bolt|wind|multi,enrage|1.08|1.08|0.95|M|H
+미노타우로스|1|phys|arcane||heavy,enrage|1.18|1.08|1.0|B
+스핑크스|1|arcane|dark|light|stun,weaken|1.08|1.03|1.05|B
+사막의 용|1|fire|ice|fire|burn,heavy|1.13|1.08|1.0|B
+뱀파이어|2|dark|light|dark|drain|1.05|1.08|0.9
+화염 골렘|2|fire|ice|fire|burn|1.38|1.03|1.25
+해골 기사|2|dark|light|dark|heavy|1.15|1.08|1.15
+흑기사|2|dark|light|dark|heavy|1.22|1.13|1.2
+흑마법사|2|dark|light|dark|weaken|0.94|1.13|0.8
+성기사|2|light|dark|light|heavy|1.22|0.98|1.25
+마도사|2|arcane|light|arcane|stun|0.94|1.13|0.8
+지옥견|2|fire|ice|fire|burn|1.05|1.13|0.85
+흑암 골렘|2|earth|wind|phys|heavy|1.43|1.03|1.35
+해골 마법사|2|dark|light|dark|weaken|0.99|1.08|0.85
+사제|2|light|dark|light|heal|0.72|0.67|0.7||E
+미믹|2|phys|bolt||steal|0.82|0.77|1.1||E
+마법사|2|arcane|light|arcane|burn|0.93|1.13|0.85||NH
+화산의 정령|2|fire|ice|fire|burn,heavy|1.13|1.18|1.0||H
+그림 리퍼|2|dark|light|dark|drain,weaken|1.03|1.24|0.9||H
+다크 그리핀|2|dark|light|wind|multi,drain|1.13|1.13|1.0|M|H
+케르베로스|2|fire|ice|fire|burn,multi|1.17|1.08|1.0|B
+리치|2|dark|light|dark|drain,weaken|1.07|1.08|1.0|B
+뱀파이어 로드|2|dark|light|dark|drain,enrage|1.17|1.08|1.05|B
+얼음 골렘|3|ice|fire|ice|heavy|1.41|1.06|1.4
+번개 정령|3|bolt|earth|bolt|stun|0.98|1.16|0.88
+물의 정령|3|ice|bolt|ice|weaken|1.08|1.01|0.99
+바다뱀|3|ice|bolt|ice|multi|1.13|1.11|0.99
+크리스탈 골렘|3|ice|fire|ice|heavy|1.35|1.06|1.46
+폭풍의 정령|3|bolt|earth|bolt|multi|1.03|1.16|0.88
+빙하의 정령|3|ice|fire|ice|stun|1.03|1.16|0.94
+심해어|3|ice|bolt|ice|drain|1.03|1.11|0.94
+상어|3|phys|bolt|ice|multi|1.13|1.22|0.94
+문어 괴물|3|ice|bolt|ice|weaken|1.08|1.11|0.99
+크랩|3|ice|bolt|ice|heavy|0.87|0.79|1.04||E
+문어|3|ice|bolt|ice|none|0.75|0.79|0.73||E
+사이렌|3|ice|bolt|ice|weaken,stun|1.03|1.11|0.94||NH
+해치 괴물|3|wind|bolt|wind|multi,stun|1.08|1.22|0.99||H
+스카이 드래곤|3|wind|bolt|wind|multi,heavy|1.19|1.22|1.04||H
+화이트 드래곤|3|ice|fire|ice|stun,drain|1.08|1.13|1.05|M|H
+크라켄|3|ice|bolt|ice|multi,stun|1.13|1.03|1.0|B
+아이스 드래곤|3|ice|fire|ice|stun,weaken|1.08|1.08|1.05|B
+스톰 드래곤|3|bolt|earth|bolt|stun,multi|1.08|1.13|1.0|B
+드래곤|4|fire|ice|fire|burn|1.08|1.13|1.0
+불사조|4|fire|ice|fire|heal|1.03|1.08|0.9
+용|4|earth|wind|earth|heavy|1.24|1.13|1.1
+악마|4|dark|light|dark|burn|1.08|1.13|1.0
+키메라|4|phys|ice||multi|1.08|1.13|0.95
+우주 괴물|4|arcane|light|arcane|heavy|1.18|1.13|1.0
+고요의 사신|4|dark|light|dark|drain|1.03|1.13|0.95
+레드 드래곤|4|fire|ice|fire|burn|1.18|1.13|1.05
+골든 드래곤|4|light|dark|light|heavy|1.24|1.08|1.15
+다크 드래곤|4|dark|light|dark|drain|1.18|1.13|1.05
+타락한 천사|4|light|dark|light|none|0.82|0.82|0.8||E
+생명의 수호자|4|nature|fire|nature|multi|0.82|0.82|0.8||E
+시간의 수호자|4|arcane|dark|arcane|heavy,weaken|1.24|1.13|1.3||NH
+공간의 수호자|4|arcane|light|arcane|heavy,stun|1.24|1.18|1.25||H
+기억의 수호자|4|arcane|dark|arcane|weaken|1.18|1.18|1.2||H
+블랙 드래곤|4|dark|light|dark|drain,enrage|1.13|1.13|1.0|M|H
+차원 포식자|4|arcane|light|arcane|heavy,drain|1.19|1.08|1.1|B
+마계 군주|4|fire|light|fire|burn,enrage|1.15|1.08|1.05|B
+파멸의 수호자|4|fire|ice|fire|drain,weaken|1.15|1.08|1.05|B
+창조의 수호자|4|arcane|dark|arcane|heavy,stun|1.15|1.08|1.15|B
 `;
 
   const HERO_NAMES = [
