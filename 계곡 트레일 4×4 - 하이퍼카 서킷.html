@@ -2681,10 +2681,10 @@ const grassBand=(mat,a,b,inv)=>{const {attribute,length,smoothstep,float,cameraP
   mat.opacityNode=(mat.opacityNode||float(1)).mul(inv?float(1).sub(f):f);return mat;};
 const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z),sf=g.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;pr*=(1-g.tw)*(1-g.ws)*k;if(c>pr)return false;
     const sc=(0.75+b*0.7)*s,kk=(a*7.3)%1;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.03*s,z),_gQ,_gS.set(sc,sc*hs*(0.85+kk*0.7),sc));col.copy(gA).lerp(gB,clamp(g.wd*0.6+kk*0.3,0,1)).multiplyScalar(0.72+0.28*g.sun);return true;};
-const grassT=makeTiler({size:14,radius:10,per:560,seed:1,geo:tuftGeo(4,1.25,0.62),
+const grassT=makeTiler({size:14,radius:10,per:840,seed:1,geo:tuftGeo(4,1.25,0.62),
   mat:tileCull(grassBand(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),GX0,GX1,true),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45))).and(within(ip,GX1+1))),
   place:grassPlace(1,1,1)});
-const grassF=makeTiler({size:28,radius:10,per:640,seed:5,geo:tuftGeo(3,1.25,0.62),
+const grassF=makeTiler({size:28,radius:10,per:900,seed:5,geo:tuftGeo(3,1.25,0.62),
   mat:tileCull(grassBand(grassBand(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true),GX0,GX1,false),GF0,GF1,true),
     ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(GX0-1)).and(within(ip,GF1+1))),
   place:grassPlace(0.6,1.9,0.7)});   // (wider, not much taller: a far tuft covers more ground, it is no bush)
@@ -2734,9 +2734,9 @@ const bladeT=(()=>{
    mat.alphaToCoverage=true;mat.opacityNode=k;
    mat.normalNode=normalize(mix(normalize(normalViewGeometry),cameraViewMatrix.mul(vec4(0,1,0,0)).xyz,0.6));}
   tileCull(mat,ip=>aheadOf(ip,1).and(within(ip,uGB.y.add(0.6))));
-  return makeTiler({size:6,radius:7,per:420,seed:3,geo:g,mat,
+  return makeTiler({size:6,radius:7,per:680,seed:3,geo:g,mat,
     place(x,z,a,b,c,M,col){const gi=gInfo(x,z),sf=gi.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;
-      pr*=(1-gi.tw)*(1-gi.ws)*(1-gi.wm)*(0.5+0.5*smooth(-0.35,0.35,nB(x*0.13,z*0.13)));if(c>pr)return false;
+      pr*=(1-gi.tw)*(1-gi.ws)*(1-gi.wm)*(0.75+0.25*smooth(-0.35,0.35,nB(x*0.13,z*0.13)));if(c>pr)return false;
       const sc=0.7+b*0.65;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.015,z),_gQ,_gS.set(sc,sc*(0.8+((a*7.3)%1)*0.5),sc));
       const d=clamp(gi.wd*0.8+((a*3.7)%1)*0.25,0,1),k=0.74+0.26*gi.sun;col.setRGB((1+0.55*d)*k,(1+0.22*d)*k,(1-0.35*d)*k);return true;}});
 })();
@@ -4142,14 +4142,25 @@ const HCB={};
 function hcBrake(w,wm){
   const F=w.front,s=w.side,x0=-0.03,R1=F?0.205:0.195,R0=F?0.127:0.122,T=F?0.038:0.032,ft=0.011,BETA=-0.41;
   if(!HCB.disc){
-    const cv=document.createElement('canvas');cv.width=cv.height=512;const x=cv.getContext('2d'),im=x.createImageData(512,512),D=im.data;let sd=11;const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647;
-    for(let j=0;j<512;j++)for(let i=0;i<512;i++){const k=(j*512+i)*4,fl=rnd()<0.035?55+rnd()*60:0,v=44+rnd()*18+fl;D[k]=v;D[k+1]=v*1.01;D[k+2]=v*1.05;D[k+3]=255;}
-    x.putImageData(im,0,0);const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;
-    HCB.disc=env(new THREE.MeshStandardNodeMaterial({map:t,roughness:0.55,metalness:0.35,side:THREE.DoubleSide}),0.6);
-    HCB.hole=new THREE.MeshStandardNodeMaterial({color:C('#050505'),roughness:0.9});
-    HCB.bell=env(new THREE.MeshStandardNodeMaterial({color:C('#1a1b1d'),roughness:0.35,metalness:0.8,side:THREE.DoubleSide}),0.8);
+    // the friction ring's face, laid out round the disc (u: angle, 1 = a full turn; v: from the inner to the outer edge):
+    // carbon-ceramic's mottled dark grey, clouds of short fibres, and where the pads sweep it a smoother, lighter band
+    // with fine concentric scoring
+    const W2=2048,H2=128,cv=document.createElement('canvas');cv.width=W2;cv.height=H2;const x=cv.getContext('2d'),im=x.createImageData(W2,H2),D=im.data;let sd=11;const rnd=()=>(sd=(sd*16807)%2147483647)/2147483647;
+    const G=64,gn=new Float32Array(G*G);for(let i=0;i<gn.length;i++)gn[i]=rnd();
+    const vn=(px,py)=>{const ix=Math.floor(px),iy=Math.floor(py),fx=px-ix,fy=py-iy,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy),h=(a,b)=>gn[(((a%G)+G)%G)+(((b%G)+G)%G)*G];
+      return lerp(lerp(h(ix,iy),h(ix+1,iy),sx),lerp(h(ix,iy+1),h(ix+1,iy+1),sx),sy);};
+    const score=new Float32Array(H2);for(let j=0;j<H2;j++)score[j]=rnd();
+    for(let j=0;j<H2;j++){const v=j/(H2-1),band=smooth(0.1,0.18,v)*smooth(0.97,0.89,v);
+      for(let i=0;i<W2;i++){const u=i/W2*G,k=(j*W2+i)*4;let f=0,a=0.5,fr=1;for(let o=0;o<4;o++){f+=a*vn(u*fr,v*8*fr);a*=0.5;fr*=2;}
+        const fib=rnd()<0.06?rnd()*0.35:0,mot=0.62+0.55*f+fib,sc=0.92+0.16*score[j];
+        const g=(36*mot)*(1-band)+(52+18*f)*sc*band;D[k]=g*1.02;D[k+1]=g;D[k+2]=g*0.97;D[k+3]=255;}}
+    x.putImageData(im,0,0);const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=THREE.RepeatWrapping;t.anisotropy=16;
+    HCB.disc=env(new THREE.MeshStandardNodeMaterial({map:t,roughness:0.62,metalness:0,side:THREE.DoubleSide}),0.5);
+    HCB.hole=new THREE.MeshStandardNodeMaterial({color:C('#030303'),roughness:0.9});
+    HCB.cham=env(new THREE.MeshStandardNodeMaterial({color:C('#6a6864'),roughness:0.45,metalness:0,side:THREE.DoubleSide}),0.6);
+    HCB.bell=env(new THREE.MeshStandardNodeMaterial({color:C('#4a4d52'),roughness:0.4,metalness:0.85,side:THREE.DoubleSide}),0.9);
     HCB.steel=env(new THREE.MeshStandardNodeMaterial({color:C('#b9bcc0'),roughness:0.28,metalness:1}),1);
-    HCB.cal=env(new THREE.MeshPhysicalNodeMaterial({color:C('#f2b30c'),roughness:0.26,metalness:0.05,clearcoat:1,clearcoatRoughness:0.08}),0.8);
+    HCB.cal=env(new THREE.MeshPhysicalNodeMaterial({color:C('#f5b50a'),roughness:0.22,metalness:0,clearcoat:1,clearcoatRoughness:0.04}),1);
     HCB.pad=new THREE.MeshStandardNodeMaterial({color:C('#232322'),roughness:0.92});
     HCB.back=env(new THREE.MeshStandardNodeMaterial({color:C('#3a3c3f'),roughness:0.5,metalness:0.8}),0.6);
     HCB.hose=new THREE.MeshStandardNodeMaterial({color:C('#111112'),roughness:0.7});
@@ -4162,34 +4173,43 @@ function hcBrake(w,wm){
       for(const k in g.attributes){const at=g.attributes[k],n=at.itemSize,A=at.array;for(let i=0;i<at.count;i+=3)for(let c=0;c<n;c++){const q=A[(i+1)*n+c];A[(i+1)*n+c]=A[(i+2)*n+c];A[(i+2)*n+c]=q;}}}
     const me=new THREE.Mesh(g,m);me.castShadow=cast;me.receiveShadow=true;into.add(me);return me;};
   // ---- the disc (turns): friction rings, vanes, drillings, bell, bobbins
-  const ring=(r0,r1,x,dir)=>{const g=new THREE.RingGeometry(r0,r1,72,1);g.rotateY(dir*Math.PI/2);g.translate(x,0,0);return g;};
+  const ring=(r0,r1,x,dir)=>{const g=new THREE.RingGeometry(r0,r1,144,1),uv=g.attributes.uv;for(let j=0;j<=1;j++)for(let i=0;i<=144;i++)uv.setXY(j*145+i,i/144,j);
+    g.rotateY(dir*Math.PI/2);g.translate(x,0,0);return g;};
   const tube=(r,len,x)=>{const g=new THREE.CylinderGeometry(r,r,len,72,1,true);g.rotateZ(Math.PI/2);g.translate(x,0,0);return g;};
   const DG=[],HG=[],BG=[],SG=[];
   for(const sd of[1,-1]){const xo=x0+sd*T/2,xi=x0+sd*(T/2-ft);DG.push(ring(R0,R1,xo,sd),ring(R0,R1,xi,-sd),tube(R1,ft,(xo+xi)/2),tube(R0,ft,(xo+xi)/2));}
   for(let k=0;k<40;k++){const v=new THREE.BoxGeometry(T-2*ft,R1-R0-0.006,0.005);v.rotateX(0.38);v.translate(x0,(R0+R1)/2,0);v.rotateX(k/40*TAU);DG.push(v);}
-  for(const sd of[1,-1]){const xf=x0+sd*(T/2+0.0004);for(let k=0;k<24;k++)for(let r=0;r<3;r++){const a=k/24*TAU+r*0.087,rr=R0+0.02+r*(R1-R0-0.04)/2,c=new THREE.CircleGeometry(0.0046,12);c.rotateY(sd*Math.PI/2);c.translate(xf,rr*Math.cos(a),rr*Math.sin(a));HG.push(c);}}
+  const CG=[];
+  for(const sd of[1,-1]){const xf=x0+sd*(T/2+0.0004);for(let k=0;k<24;k++)for(let r=0;r<3;r++){const a=k/24*TAU+r*0.087,rr=R0+0.02+r*(R1-R0-0.04)/2,c=new THREE.CircleGeometry(0.0034,14);c.rotateY(sd*Math.PI/2);c.translate(xf,rr*Math.cos(a),rr*Math.sin(a));HG.push(c);
+    const ch=new THREE.RingGeometry(0.0034,0.0046,14,1);ch.rotateY(sd*Math.PI/2);ch.translate(x0+sd*(T/2+0.0002),rr*Math.cos(a),rr*Math.sin(a));CG.push(ch);}}
   {const Lb=0.058;BG.push(tube(R0-0.004,Lb,x0+Lb/2),ring(0.034,R0-0.004,x0+Lb,1),ring(R0-0.016,R0+0.006,x0+T/2+0.0015,1),ring(R0-0.016,R0+0.006,x0-T/2-0.0015,-1));
    for(let k=0;k<5;k++){const a=k/5*TAU+0.3,c=new THREE.CircleGeometry(0.0075,14);c.rotateY(Math.PI/2);c.translate(x0+Lb+0.0004,0.058*Math.cos(a),0.058*Math.sin(a));HG.push(c);}}
   for(let k=0;k<12;k++){const a=k/12*TAU,b=cylX(0.0062,T+0.006,10);b.translate(x0,(R0+0.001)*Math.cos(a),(R0+0.001)*Math.sin(a));SG.push(b);}
   const hr=new THREE.Group();hr.rotation.y=s<0?Math.PI:0;wm.spinner.add(hr);
   const dm=HCB.disc.clone();dm.emissive=C('#ff3a08');dm.emissiveIntensity=0;wm.glow=dm;
-  merge(DG,dm,hr,true);merge(HG,HCB.hole,hr,false);merge(BG,HCB.bell,hr,true);merge(SG,HCB.steel,hr,false);
+  merge(DG,dm,hr,true);merge(HG,HCB.hole,hr,false);merge(CG,HCB.cham,hr,false);merge(BG,HCB.bell,hr,true);merge(SG,HCB.steel,hr,false);
   // ---- the caliper (stays): body halves, end bridges and centre strut, pads, pin and spring, pistons, fittings
   const cg=new THREE.Group();cg.rotation.x=BETA;const L={};const put=(g,m)=>{const me=new THREE.Mesh(g,m);cg.add(me);(L[m.uuid]||(L[m.uuid]={m,list:[]})).list.push(me);};
   const sector=(r0,r1,c,a,xa,xb,m,bev)=>{const sh=new THREE.Shape(),a0=Math.PI/2+c-a,a1=Math.PI/2+c+a;sh.moveTo(r1*Math.cos(a0),r1*Math.sin(a0));sh.absarc(0,0,r1,a0,a1,false);
     sh.lineTo(r0*Math.cos(a1),r0*Math.sin(a1));sh.absarc(0,0,r0,a1,a0,true);sh.closePath();
     const g=new THREE.ExtrudeGeometry(sh,{depth:Math.max(0.0005,xb-xa-2*bev),bevelEnabled:bev>0,bevelThickness:bev,bevelSize:bev,bevelSegments:3,curveSegments:24});
     g.rotateY(Math.PI/2);g.translate(xa+bev,0,0);put(g,m);};
+  // (the same, its two ends rounded off as half circles: a forged caliper has no square corners)
+  const sectorR=(r0,r1,c,a,xa,xb,m,bev)=>{const sh=new THREE.Shape(),a0=Math.PI/2+c-a,a1=Math.PI/2+c+a,rm=(r0+r1)/2,rc=(r1-r0)/2;
+    sh.moveTo(r1*Math.cos(a0),r1*Math.sin(a0));sh.absarc(0,0,r1,a0,a1,false);sh.absarc(rm*Math.cos(a1),rm*Math.sin(a1),rc,a1,a1+Math.PI,false);
+    sh.absarc(0,0,r0,a1,a0,true);sh.absarc(rm*Math.cos(a0),rm*Math.sin(a0),rc,a0+Math.PI,a0+2*Math.PI,false);
+    const g=new THREE.ExtrudeGeometry(sh,{depth:Math.max(0.0005,xb-xa-2*bev),bevelEnabled:bev>0,bevelThickness:bev,bevelSize:bev,bevelSegments:5,curveSegments:32});
+    g.rotateY(Math.PI/2);g.translate(xa+bev,0,0);put(g,m);};
   const pol=(r,c,x)=>[x,r*Math.cos(c),r*Math.sin(c)];
   const A=F?0.62:0.44,rI=R1-0.058,rO=R1+(F?0.026:0.024),xo0=x0+T/2+0.0025,xo1=xo0+(F?0.036:0.03),xi1=x0-T/2-0.0025,xi0=xi1-(F?0.04:0.034);
-  sector(rI,rO,0,A,xo0,xo1,HCB.cal,0.006);sector(rI,rO,0,A,xi0,xi1,HCB.cal,0.006);
-  for(const e of[-1,1])sector(R1+0.005,rO,e*(A-0.075),0.075,xi0+0.004,xo1-0.004,HCB.cal,0.005);
+  sectorR(rI,rO,0,A,xo0,xo1,HCB.cal,0.011);sectorR(rI,rO,0,A,xi0,xi1,HCB.cal,0.011);
+  for(const e of[-1,1])sectorR(R1+0.005,rO,e*(A-0.07),0.07,xi0+0.006,xo1-0.006,HCB.cal,0.008);
   sector(R1+0.012,rO-0.004,0,0.02,xi1-0.006,xo0+0.006,HCB.cal,0.003);
   for(const sd of[1,-1]){const xa=sd>0?x0+T/2+0.0003:x0-T/2-0.012,xb=xa+0.0117;sector(R1-0.052,R1-0.004,0,A-0.1,xa,xb,HCB.pad,0.0015);
     const xa2=sd>0?x0+T/2+0.012:x0-T/2-0.0175;sector(R1-0.054,R1+0.006,0,A-0.085,xa2,xa2+0.0055,HCB.back,0.001);}
   {const pin=cylX(0.0032,xo1-xi0-0.01,10);pin.translate(...pol(R1+0.019,0,x0));put(pin,HCB.steel);
    for(const tw of[0.5,-0.5]){const sp=new THREE.BoxGeometry(xo1-xi0-0.02,0.0016,0.012);sp.rotateY(tw*0.25);sp.translate(...pol(R1+0.013,0,x0));put(sp,HCB.steel);}}
-  {const N=F?5:2,span=A-0.13;for(const xf of[xo1+0.0028,xi0-0.0028])for(let k=0;k<N;k++){const c=N>1?-span+2*span*k/(N-1):0,rp=F?[0.0155,0.017,0.0185,0.017,0.0155][k]:0.019,
+  {const N=F?5:2,span=A-0.13;for(const xf of[xi0-0.0028])for(let k=0;k<N;k++){const c=N>1?-span+2*span*k/(N-1):0,rp=F?[0.0155,0.017,0.0185,0.017,0.0155][k]:0.019,
       pc=cylX(rp,0.0062,24);pc.translate(...pol((rI+rO)/2-0.006,c,xf));put(pc,HCB.cal);}}
   for(const e of[-1,1]){const c=e*(A-0.16),b=new THREE.CylinderGeometry(0.0042,0.0052,0.014,8);b.rotateX(c);b.translate(...pol(rO+0.005,c,xi0+0.011));put(b,HCB.steel);
     const cap=new THREE.CylinderGeometry(0.0056,0.0056,0.006,10);cap.rotateX(c);cap.translate(...pol(rO+0.014,c,xi0+0.011));put(cap,HCB.hose);}
@@ -4950,23 +4970,48 @@ function updateParticles(dt){
 // tyre tracks: one continuous ribbon per wheel, sampled every 20 cm and draped onto the ground at both edges,
 // with the tread lug pattern running along its length (ring buffer of quads; the oldest are overwritten)
 const TSEG=16000,TLEN=0.2;
-const trackTex=(()=>{const W_=64,H_=128,cv=document.createElement('canvas');cv.width=W_;cv.height=H_;const x=cv.getContext('2d');const r=rng(606);
-  const img=x.createImageData(W_,H_);
-  for(let y=0;y<H_;y++)for(let i=0;i<W_;i++){const u=i/(W_-1),edge=smooth(0,0.1,u)*smooth(1,0.9,u);
-    // staggered chevron lugs pressed into the soil, the carcass leaves a smoother band between them
-    const side=u<0.5?0:1,ph=(y/H_*4+(side?0.5:0)+Math.abs(u-0.5)*0.9)%1,lug=smooth(0.08,0.14,ph)*smooth(0.58,0.5,ph)*smooth(0.04,0.12,Math.abs(u-0.5));
-    const n=r()*0.12,a=edge*(0.55+0.45*lug)-n*0.3,s=0.78-0.28*lug+n;const o=(i+y*W_)*4;
-    img.data[o]=img.data[o+1]=img.data[o+2]=clamp(s*255,0,255);img.data[o+3]=clamp(a*255,0,255);}
-  x.putImageData(img,0,0);const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;t.wrapT=THREE.RepeatWrapping;t.anisotropy=4;return t;})();
-// relief for the tracks: lugs pressed into the ground and the raised lip the carcass squeezes out at each edge
-const trackNrm=(()=>{const W_=64,H_=128,hgt=new Float32Array(W_*H_);
-  for(let y=0;y<H_;y++)for(let i=0;i<W_;i++){const u=i/(W_-1),side=u<0.5?0:1,ph=(y/H_*4+(side?0.5:0)+Math.abs(u-0.5)*0.9)%1;
-    const lug=smooth(0.08,0.14,ph)*smooth(0.58,0.5,ph)*smooth(0.04,0.12,Math.abs(u-0.5));
-    hgt[i+y*W_]=-0.6*lug*smooth(0,0.12,u)*smooth(1,0.88,u)+0.5*Math.exp(-Math.pow((Math.min(u,1-u)-0.03)/0.05,2));}
+// The print of a 35" mud-terrain tyre, one texture repeat = four tread pitches along the track (0.42 m), across it the
+// ribbon's full width: the tyre's own width plus a berm of squeezed-out soil each side (BERM of the width). In the
+// tyre's part, two staggered rows of big chevron blocks with sipes, shoulder lugs out to the edges; where a block presses
+// the soil is packed down, darker and smooth, between blocks it stands up in ridges. hgt is the print's relief (-1 deep,
+// +ve proud), shared by the colour and the normal map; the berm crumbles off into the ground with a broken edge
+const BERM=0.12,TRK=(()=>{const W_=192,H_=512,hgt=new Float32Array(W_*H_),pk=new Float32Array(W_*H_),r=rng(606),G=48,gn=new Float32Array(G*G);
+  for(let i=0;i<gn.length;i++)gn[i]=r();
+  const vn=(px,py)=>{const ix=Math.floor(px),iy=Math.floor(py),fx=px-ix,fy=py-iy,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy),h=(a,b)=>gn[(((a%G)+G)%G)+(((b%G)+G)%G)*G];
+    return lerp(lerp(h(ix,iy),h(ix+1,iy),sx),lerp(h(ix,iy+1),h(ix+1,iy+1),sx),sy);};
+  const fb=(x,y)=>(vn(x,y)*0.55+vn(x*2.1,y*2.1)*0.3+vn(x*4.3,y*4.3)*0.15);
+  for(let y=0;y<H_;y++)for(let i=0;i<W_;i++){const U=i/(W_-1),V=y/H_,k=i+y*W_;
+    // u: across the tyre's own width (0..1), outside it the berm
+    const u=(U-BERM)/(1-2*BERM),inT=u>=0&&u<=1;
+    const grain=fb(U*24,V*96)-0.5;
+    if(inT){const c=Math.abs(u-0.5),side=u<0.5?0:1,p3=V*3;
+      // big blocks as diagonal bars running from the centre out to the shoulder, the two halves mirrored (a chevron
+      // pointing along the track) and offset half a pitch; each bar broken in two at a staggered gap, a groove down the
+      // middle, shoulder lugs alternating long and short; their edges wobble a little, as soil does
+      const wob=(fb(U*9+side*5,V*30)-0.5)*0.08,ph=((p3+c*1.7+(side?0.5:0)+wob)%1+1)%1,bi=Math.floor(p3+c*1.7+(side?0.5:0)+wob);
+      const bar=smooth(0.05,0.11,ph)*smooth(0.6,0.54,ph);
+      const gapC=bi%2?0.24:0.3,gap=1-smooth(0.03,0,Math.abs(c-gapC));
+      const shL=bi%2?0.5:0.455,body=smooth(0.03,0.055,c)*smooth(shL,shL-0.02,c);
+      const sip=1-0.6*smooth(0.025,0,Math.abs(((ph-0.05)*2.4)%1-0.5)-0.46);
+      const press=bar*gap*body*sip;
+      hgt[k]=-0.5-0.5*press+grain*0.22;pk[k]=press;}
+    else{const o=u<0?-u:u-1,w=BERM/(1-2*BERM),nb=fb(U*22+7,V*48);   // berm: soil squeezed out beside the tyre, crumbling away
+      const b=Math.exp(-Math.pow((o/w-0.35)/0.4,2))*(0.45+0.8*nb);hgt[k]=b*0.45+grain*0.2;pk[k]=-b;}}
+  return{W_,H_,hgt,pk,fb};})();
+const trackTex=(()=>{const {W_,H_,hgt,pk,fb}=TRK,cv=document.createElement('canvas');cv.width=W_;cv.height=H_;const x=cv.getContext('2d'),img=x.createImageData(W_,H_);
+  for(let y=0;y<H_;y++)for(let i=0;i<W_;i++){const U=i/(W_-1),V=y/H_,k=i+y*W_,u=(U-BERM)/(1-2*BERM),o=(i+y*W_)*4,n=fb(U*40+3,V*160);
+    let s_,a;
+    // (the print packed and darker, the blocks most; its edges and the berm broken up by the soil's grain)
+    if(u>=0&&u<=1){const e=Math.min(u,1-u);s_=0.82-0.26*pk[k]+(n-0.5)*0.14;a=clamp(0.92*smooth(0,0.05+0.04*n,e)+0.05,0,0.95);}
+    else{const b=-pk[k];s_=0.98+(n-0.5)*0.22;a=clamp(b*1.1*(0.4+1.0*n)-0.18,0,0.7);}
+    img.data[o]=img.data[o+1]=img.data[o+2]=clamp(s_*235,0,255);img.data[o+3]=clamp(a*255,0,255);}
+  x.putImageData(img,0,0);const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t;})();
+// relief for the tracks, from the same heights: block prints pressed in, ridges between them, the berm's lip
+const trackNrm=(()=>{const {W_,H_,hgt}=TRK;
   const d=new Uint8Array(W_*H_*4),at=(i,y)=>hgt[Math.min(W_-1,Math.max(0,i))+((y%H_+H_)%H_)*W_];
-  for(let y=0;y<H_;y++)for(let i=0;i<W_;i++){const dx=(at(i-1,y)-at(i+1,y))*2.2,dy=(at(i,y-1)-at(i,y+1))*2.2,l=Math.hypot(dx,dy,1),o=(i+y*W_)*4;
+  for(let y=0;y<H_;y++)for(let i=0;i<W_;i++){const dx=(at(i-1,y)-at(i+1,y))*2.4,dy=(at(i,y-1)-at(i,y+1))*2.4,l=Math.hypot(dx,dy,1),o=(i+y*W_)*4;
     d[o]=(dx/l*0.5+0.5)*255;d[o+1]=(dy/l*0.5+0.5)*255;d[o+2]=(1/l*0.5+0.5)*255;d[o+3]=255;}
-  const t=new THREE.DataTexture(d,W_,H_,THREE.RGBAFormat);t.wrapT=THREE.RepeatWrapping;t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearMipmapLinearFilter;t.generateMipmaps=true;t.needsUpdate=true;return t;})();
+  const t=new THREE.DataTexture(d,W_,H_,THREE.RGBAFormat);t.wrapT=THREE.RepeatWrapping;t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearMipmapLinearFilter;t.generateMipmaps=true;t.anisotropy=8;t.needsUpdate=true;return t;})();
 const trackGeo=new THREE.BufferGeometry();
 {
   const n=TSEG*4,idx=new Uint16Array(TSEG*6);
@@ -4975,7 +5020,7 @@ const trackGeo=new THREE.BufferGeometry();
   for(const[nm,k]of[['position',3],['normal',3],['uv',2],['color',3],['tf',1]])trackGeo.setAttribute(nm,new THREE.BufferAttribute(new Float32Array(n*k),k).setUsage(THREE.DynamicDrawUsage));
   trackGeo.setDrawRange(0,0);
 }
-const trackMat=new THREE.MeshStandardNodeMaterial({map:trackTex,normalMap:trackNrm,normalScale:new THREE.Vector2(0.9,0.9),vertexColors:true,transparent:true,depthWrite:false,roughness:0.95,metalness:0,side:THREE.DoubleSide});
+const trackMat=new THREE.MeshStandardNodeMaterial({map:trackTex,normalMap:trackNrm,normalScale:new THREE.Vector2(1.4,1.4),vertexColors:true,transparent:true,depthWrite:false,roughness:0.95,metalness:0,side:THREE.DoubleSide});
 trackMat.opacityNode=TSL.materialOpacity.mul(TSL.attribute('tf','float'));
 const tracks=new THREE.Mesh(trackGeo,trackMat);tracks.frustumCulled=false;tracks.renderOrder=1;tracks.receiveShadow=true;W(tracks);scene.add(tracks);
 let trackHead=0,trackCount=0,trackLo=1e9,trackHi=-1,trackWrap=false;
@@ -4985,12 +5030,13 @@ function trackVert(A,i,x,z,col,a,u,v,nx,ny,nz){
   P[i*3]=x;P[i*3+1]=groundH(x,z)+0.035;P[i*3+2]=z;N[i*3]=nx;N[i*3+1]=ny;N[i*3+2]=nz;U[i*2]=u;U[i*2+1]=v;Cc[i*3]=col.r;Cc[i*3+1]=col.g;Cc[i*3+2]=col.b;F[i]=a;
 }
 // (on pavement: black rubber laid down only while the tyre spins or slides, the darker the harder)
-const SKID_C=C('#0c0c0c'),SMOKE_C=C('#e2e2df');
+const SKID_C=C('#0c0c0c'),SMOKE_C=C('#e2e2df'),_trkC=new THREE.Color();
 function layTrack(w,S,ok,slip){
   const t=w.trk,skid=w.surf===S_ASPH?clamp((slip-1.6)/4,0,0.8):0,col=S.track||(skid>0.03?SKID_C:null);
   if(!ok||!col){t.has=false;return;}
-  const hw=SC?0.15:drive.airDown?0.16:0.145,lx=w.sG.x,lz=w.sG.z,ll=Math.hypot(lx,lz)||1;
-  const a=S.track?clamp(TRACK_K[w.surf]*(0.55+0.45*clamp(w.Fz/FZ0,0,1.3))+Math.min(0.25,slip*0.05),0,1):skid;
+  const hw=(SC?0.15:drive.airDown?0.18:0.16)/(1-2*BERM)*(S.track?1:1-2*BERM),lx=w.sG.x,lz=w.sG.z,ll=Math.hypot(lx,lz)||1;
+  const a=S.track?clamp(TRACK_K[w.surf]*(0.6+0.45*clamp(w.Fz/FZ0,0,1.3))+Math.min(0.25,slip*0.05)+Math.min(0.2,w.sink*2),0,1):skid;
+  if(S.track){const dk=1-Math.min(0.4,w.sink*2.6+slip*0.02);_trkC.setRGB(col.r*dk,col.g*dk,col.b*dk);}else _trkC.copy(col);
   if(!t.has){t.has=true;t.x=w.cp.x;t.z=w.cp.z;t.lx=lx/ll*hw;t.lz=lz/ll*hw;t.v=0;t.a=a;return;}
   const dx=w.cp.x-t.x,dz=w.cp.z-t.z,d=Math.hypot(dx,dz);
   if(d>3){t.x=w.cp.x;t.z=w.cp.z;return;}
@@ -5004,8 +5050,8 @@ function layTrack(w,S,ok,slip){
     const i=trackHead*4;
     // (rubber on pavement is laid smooth: the texture's plain middle, no lugs)
     const u0=S.track?0:0.5,u1=S.track?1:0.5;
-    trackVert(A,i,sx+plx,sz+plz,col,t.a,u0,v0,w.n.x,w.n.y,w.n.z);trackVert(A,i+1,sx-plx,sz-plz,col,t.a,u1,v0,w.n.x,w.n.y,w.n.z);
-    trackVert(A,i+2,ex+clx,ez+clz,col,a,u0,v1,w.n.x,w.n.y,w.n.z);trackVert(A,i+3,ex-clx,ez-clz,col,a,u1,v1,w.n.x,w.n.y,w.n.z);
+    trackVert(A,i,sx+plx,sz+plz,_trkC,t.a,u0,v0,w.n.x,w.n.y,w.n.z);trackVert(A,i+1,sx-plx,sz-plz,_trkC,t.a,u1,v0,w.n.x,w.n.y,w.n.z);
+    trackVert(A,i+2,ex+clx,ez+clz,_trkC,a,u0,v1,w.n.x,w.n.y,w.n.z);trackVert(A,i+3,ex-clx,ez-clz,_trkC,a,u1,v1,w.n.x,w.n.y,w.n.z);
     trackLo=Math.min(trackLo,trackHead);trackHi=Math.max(trackHi,trackHead);
     trackHead++;if(trackHead>=TSEG){trackHead=0;trackWrap=true;}trackCount=Math.min(TSEG,trackCount+1);
   }
