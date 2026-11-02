@@ -1605,14 +1605,14 @@ const POFF=renderer.reversedDepthBuffer?-1:1;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,LOWQ?1:1.5,Math.max(0.75,Math.sqrt(4.5e6/Math.max(1,innerWidth*innerHeight)))));
 renderer.setSize(app.clientWidth,app.clientHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=NIGHT?1.9:1.02;   // (the night: eyes used to the dark)
+renderer.toneMappingExposure=NIGHT?1.75:1.02;   // (the night: eyes used to the dark)
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=THREE.PCFShadowMap;
 renderer.domElement.className='gl';
 renderer.domElement.tabIndex=0;
 app.prepend(renderer.domElement);
 const scene=new THREE.Scene();
-const FOG=C(NIGHT?'#1a2433':WINTER?'#c4cfdb':'#a9c0d8');
+const FOG=C(NIGHT?'#22375a':WINTER?'#c4cfdb':'#a9c0d8');
 scene.fog=new THREE.FogExp2(FOG,0.0016);
 const camera=new THREE.PerspectiveCamera(62,app.clientWidth/app.clientHeight,0.12,60000);
 // a late-afternoon sun, 22 degrees up: long shadows, warm light raking across the valley
@@ -1621,7 +1621,8 @@ const sunDir=new V3(-0.66,0.36,-0.62).normalize();
 // haze lit from behind), bluer looking up. Its extinction is per channel (Rayleigh-like: blue fades into the haze first,
 // red last; green as before), so ridges behind ridges layer into blue while warm sunlit faces keep their colour longer
 (()=>{{const {Fn,float,vec3,vec4,uniform,positionWorld,cameraPosition,length,exp,abs,max,dot,pow,mix,smoothstep,clamp,select,output}=TSL;
- const fogC=uniform(FOG),dens=uniform(WINTER?5.5e-5:3.4e-5),SD=vec3(sunDir.x,sunDir.y,sunDir.z);
+ const fogC=uniform(FOG),dens=uniform(NIGHT?3.2e-3:WINTER?5.5e-5:3.4e-5),   // (the winter night: a blue haze, half gone at ~150 m)
+ SD=vec3(sunDir.x,sunDir.y,sunDir.z);
  scene.fogNode=Fn(()=>{const fv=positionWorld.sub(cameraPosition).toVar(),fd=length(fv).toVar(),vd=fv.div(max(fd,1e-3)).toVar();
    const HF=1/1500,dy=fv.y.mul(HF).toVar();
    const integ=select(abs(dy).greaterThan(1e-3),float(1).sub(exp(dy.negate())).div(dy),float(1).sub(dy.mul(0.5)));
@@ -1635,9 +1636,9 @@ const LPI=Math.PI,PL=137;   // legacy -> physical light units (studio points: le
 // the world's sun and sky (one pair of values: the garage puts these back on the way out)
 // (winter: the sun weaker and whiter through the haze, the sky's light stronger, and the snow throwing light back up)
 // (the night: the 'sun' is the moon, a cold faint light; the sky's light fainter still, the snow throwing some back up)
-const SUN_I=(NIGHT?0.5:WINTER?2.2:3.0)*LPI,HEMI_I=(NIGHT?0.3:WINTER?1.05:0.8)*LPI;
-const hemi=new THREE.HemisphereLight(C(NIGHT?'#2c3b57':WINTER?'#c9d6e6':'#b3c9e6'),C(NIGHT?'#3b424f':WINTER?'#c8ccd2':'#5b4f3b'),HEMI_I);scene.add(hemi);
-const sun=new THREE.DirectionalLight(C(NIGHT?'#a9bde6':WINTER?'#ffe6cc':'#ffcf98'),SUN_I);
+const SUN_I=(NIGHT?0.22:WINTER?2.2:3.0)*LPI,HEMI_I=(NIGHT?0.5:WINTER?1.05:0.8)*LPI;
+const hemi=new THREE.HemisphereLight(C(NIGHT?'#506a96':WINTER?'#c9d6e6':'#b3c9e6'),C(NIGHT?'#323d52':WINTER?'#c8ccd2':'#5b4f3b'),HEMI_I);scene.add(hemi);
+const sun=new THREE.DirectionalLight(C(NIGHT?'#aab9d6':WINTER?'#ffe6cc':'#ffcf98'),SUN_I);
 sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
 const sc=sun.shadow.camera;sc.left=-50;sc.right=50;sc.top=50;sc.bottom=-50;sc.near=1;sc.far=280;
 sun.shadow.bias=-0.0002;sun.shadow.normalBias=0.03;
@@ -1726,7 +1727,7 @@ const cloudsOK=await CLOUD.init();(()=>{try{window.__CLOUD=CLOUD;}catch(_){}})()
 const SUN_DISC={R:0.004625,L:NIGHT?700:2.0e4};   // (at night the moon: the same size, far fainter)
 // sky with drifting clouds
 const skyMat=(()=>{const {Fn,If,Loop,float,vec2,vec3,uniform,positionLocal,normalize,mix,smoothstep,pow,max,dot,clamp,fract,sin,floor,cross,length,sqrt,exp,fwidth}=TSL;
-  const U={top:uniform(C(NIGHT?'#020509':'#2a62b8')),horizon:uniform(C(NIGHT?'#121b29':'#b7cde6')),ground:uniform(FOG.clone()),sunC:uniform(NIGHT?C('#c8d4ec').multiplyScalar(0.05):C('#ffe4bc')),sunDir:uniform(sunDir),uTime:uniform(0),disc:uniform(1)};
+  const U={top:uniform(C(NIGHT?'#050d1c':'#2a62b8')),horizon:uniform(C(NIGHT?'#1b3358':'#b7cde6')),ground:uniform(FOG.clone()),sunC:uniform(NIGHT?C('#c8d4ec').multiplyScalar(0.05):C('#ffe4bc')),sunDir:uniform(sunDir),uTime:uniform(0),disc:uniform(1)};
   const h2=p=>fract(sin(dot(p,vec2(127.1,311.7))).mul(43758.5453));
   const vn=p=>{const i=floor(p),f0=fract(p),f=f0.mul(f0).mul(float(3).sub(f0.mul(2)));
     return mix(mix(h2(i),h2(i.add(vec2(1,0))),f.x),mix(h2(i.add(vec2(0,1))),h2(i.add(vec2(1,1))),f.x),f.y);};
@@ -2083,6 +2084,13 @@ function bakeGroup(g){const by=new Map();
     const gg=c.geometry.clone().applyMatrix4(c.matrix);if(!gg.attributes.normal)gg.computeVertexNormals();
     let e=by.get(c.material);if(!e)by.set(c.material,e={l:[],cast:false});e.l.push(gg);e.cast=e.cast||c.castShadow;g.remove(c);}
   for(const[m,e]of by){const me=new THREE.Mesh(mergeGeos(e.l),m);me.castShadow=e.cast;me.receiveShadow=true;g.add(me);}}
+// winter: snow stuck to trunks and limbs, in patches on the windward side (the wind from the north-west) and on all
+// that faces up (the bark's own colour and map kept under it)
+function snowyBark(m,k=1){if(!WINTER)return m;const {mix,smoothstep,normalWorld,positionWorld,texture,vec2,vec3,dot,normalize,materialColor}=TSL;
+  const n=texture(detailTex,positionWorld.xz.mul(0.37).add(positionWorld.y.mul(0.21))).x;
+  // (a streak down the windward side, not half the trunk; k thins it for twigs)
+  const wind=smoothstep(0.35,0.85,dot(normalize(normalWorld.xz.add(vec2(1e-4,0))),vec2(-0.6,-0.8))).mul(smoothstep(0.5,0.8,n));
+  m.colorNode=mix(materialColor,vec3(0.78,0.82,0.88),wind.max(smoothstep(0.6,0.9,normalWorld.y).mul(0.85)).mul(k).clamp(0,1));return m;}
 function mergeGeos(list){
   let n=0;const gs=list.map(g=>{const t=g.index?g.toNonIndexed():g;n+=t.attributes.position.count;return t;});
   const hasC=gs.every(g=>g.attributes.color);
@@ -2105,7 +2113,9 @@ function fadeTree(mat,imp){if(mat.userData.fadeT)return mat;mat.userData.fadeT=1
   const dith=fract(float(52.9829189).mul(fract(dot(screenCoordinate.xy,vec2(0.06711056,0.00583715)))));
   mat.alphaToCoverage=true;const op=mat.opacityNode||float(1);
   if(imp){mat.opacityNode=op.mul(f);const pn=mat.positionNode||TSL.positionLocal;mat.positionNode=select(f.greaterThan(0.0001),pn,ip);}
-  else mat.opacityNode=op.mul(float(1).sub(f));
+  // (and a tree the camera is in, or right beside, dithered away: in a dense stand the chase camera often ends up in a
+  // crown. Its shadow stays, as the shadow pass measures from the light)
+  else mat.opacityNode=op.mul(float(1).sub(f)).mul(smoothstep(2.2,4.8,length(ip.xz.sub(TSL.cameraPosition.xz))));
   return mat;}
 function nearSet(list,parts){
   const n=list.length,cap=Math.max(1,Math.min(n,9000)),GS=16,cells=new Map(),M=new THREE.Matrix4(),c=new THREE.Color();
@@ -2224,6 +2234,20 @@ const tgIdx=(x,z)=>Math.floor((x+OHALF)/TG)+Math.floor((z+OHALF)/TG)*TGN;
     const q=roadNear(x,z,RQ3);if(q.r&&q.d<q.r.cls.edge+9)continue;if(trailDist(x,z)<9)continue;
     const broad=ht<30?RF()<0.35:RF()<0.06;
     const t={x,z,y:terrainH(x,z),r:broad?0.26:0.3,s:1.05+RF()*0.75,rot:RF()*TAU,shade:0.78+RF()*0.34,broad,fo:1};trees.push(t);treeGrid[tgIdx(x,z)].push(t);}}})();
+// winter: the forests far denser, a tree every few metres where they stand (the valley's groves filled in as well):
+// bare broadleaf trunks among spruce, close enough that they wall the view off into the haze. Kept 2.8 m from any tree
+// already there, and off the roads, trails, water, fields and the start, as the stands above
+if(WINTER)(()=>{const RW=rng(9191),G=6,W0=Math.floor((OHALF-24)/G);
+  const clear=(x,z)=>{const ci=Math.floor((x+OHALF)/TG),cj=Math.floor((z+OHALF)/TG);for(let j=cj-1;j<=cj+1;j++)for(let i=ci-1;i<=ci+1;i++){if(i<0||j<0||i>=TGN||j>=TGN)continue;for(const t of treeGrid[i+j*TGN])if((t.x-x)**2+(t.z-z)**2<7.8)return false;}return true;};
+  for(let gz=-W0;gz<=W0;gz++)for(let gx=-W0;gx<=W0;gx++){const x=(gx+RW())*G,z=(gz+RW())*G,u=RW();let f;
+    if(inValley(x,z)){const i=vIdx(x,z);if(trailDist(x,z)<7||wRd[i]>0.02||HT[i]<WATER_Y+0.7||wM[i]>0.3||wR[i]>0.35||SL[i]>0.62||wS[i]>0.5||nearStart(x,z,24))continue;
+      f=smooth(-0.05,0.3,fbm(nC,x*0.009+100,z*0.009,3))*0.85;}
+    else{f=forestAt(x,z);if(f<0.05||u>f*0.95)continue;const mid=inMid(x,z),j=mid?oIdx(x,z):fIdx(x,z),wr=mid?OwR[j]:FwR[j],ht=mid?OHT[j]:FHT[j],sl=mid?OSL[j]:FSL[j],ws=mid?OwS[j]:FwS[j],sf=mid?OSF[j]:FSF[j];
+      if(wr>0.02||ht<WATER_Y+1||sl>0.75||ws>0.35||sf===S_MUD||sf===S_WATER||inPaddy(x,z)||padW(x,z)>0.2||Math.hypot(x-VIL_C[0],z-VIL_C[1])<460)continue;
+      if(badAt(x,z)>0.25||segDist(x,z,WINDR[0],WINDR[1])<260||Math.hypot(x-LK2[0],z-LK2[1])<LK2R+70)continue;
+      const q=roadNear(x,z,RQ3);if(q.r&&q.d<q.r.cls.edge+9)continue;if(trailDist(x,z)<9)continue;}
+    if(u>f*0.95||!clear(x,z))continue;
+    const broad=RW()<0.5,t={x,z,y:terrainH(x,z),r:broad?0.26:0.3,s:0.95+RW()*0.75,rot:RW()*TAU,shade:0.78+RW()*0.34,broad,fo:1};trees.push(t);treeGrid[tgIdx(x,z)].push(t);}})();
 // ---- cherry and ginkgo
 const SPT=[],SPGR=new Map(),spCell=(x,z)=>Math.floor(x/8)+','+Math.floor(z/8);
 const spFree=(x,z,d)=>{const cx=Math.floor(x/8),cz=Math.floor(z/8),n=Math.ceil(d/8);for(let a=-n;a<=n;a++)for(let b=-n;b<=n;b++){const L=SPGR.get((cx+a)+','+(cz+b));
@@ -2507,7 +2531,7 @@ let SHRUB=null;
       const ao=clamp(0.45+0.4*dep+0.2*u,0.35,1.05);quad(vs,vs.map(v=>nOut(v,0,0.4)),[[0,0],[1,0],[1,1],[0,1]],[ao,ao,ao,ao]);}}),
     mat:windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,vertexColors:true,map:leafTex,alphaTest:0.42,alphaToCoverage:true,side:THREE.DoubleSide,roughness:0.9}),0.05,false,true),depth:depthMat(leafTex)};
   const fol=windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,vertexColors:true,map:foliageTex,roughness:0.95}),0.014,false);
-  const bark=new THREE.MeshStandardNodeMaterial({color:0xffffff,roughness:0.95,map:barkTex});
+  const bark=snowyBark(new THREE.MeshStandardNodeMaterial({color:0xffffff,roughness:0.95,map:barkTex}));
   // impostor: render the near model once, unlit albedo x baked AO, into a texture for crossed billboards
   const bake=(parts,h,wh,clear)=>{
     const rt=new THREE.RenderTarget(256,512,{minFilter:THREE.LinearMipmapLinearFilter,magFilter:THREE.LinearFilter,generateMipmaps:true});
@@ -2719,7 +2743,7 @@ let SHRUB=null;
     {key:1,body:ginkgoBody(false),atlas:ginkgoAtlas,bark:ginkgoBark,barkN:ginkgoBarkN,cc:new V3(0,6.5,0),cr:4.2,clear:C('#d6a52c'),seeds:[907,911,929],rough:0.8,far:1e9}];
   const spTint=(key,t,c)=>{const k=(t.rot*5.3)%1;if(key===2)c.setRGB(1.05,0.95+0.04*k,0.95+0.04*k);else{const g=((t.rot*7.7)%1)<0.14;c.setRGB(g?0.86:1,g?1.02:0.96+0.06*k,g?0.6:0.86+0.14*k);}c.multiplyScalar(t.shade*lit(t));};
   const spModel=(S,seed,list,body,cc,cr,far)=>{const G=grow(seed,cc,cr,body,S.key===2?0.66:0.46),[h,wh]=extent([G.cards,G.wood]);
-    const woodMat=new THREE.MeshStandardNodeMaterial({color:0xffffff,map:S.bark,normalMap:S.barkN,roughness:0.92});
+    const woodMat=snowyBark(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:S.bark,normalMap:S.barkN,roughness:0.92}));
     const tex=bake2([[G.wood,flat({map:S.bark,color:new THREE.Color().setRGB(0.8,0.78,0.76)})],...(WINTER?[]:[[G.cards,flat({map:S.atlas,vertexColors:true,alphaTest:0.42,side:THREE.DoubleSide})]])],h,wh,WINTER?C('#6e675f'):S.clear,512);
     const fill=WINTER?(t,M,c)=>{place(t,M);c.setRGB(1,1,1).multiplyScalar(lit(t));}:(t,M,c)=>{place(t,M);spTint(S.key,t,c);};   // (bare in winter)
     NEARSETS.push(nearSet(list,[...(WINTER?[]:[[G.cards,fadeTree(spCardMat(S.atlas,S.rough)),fill]]),[G.wood,fadeTree(windy(woodMat,0.014,false)),(t,M,c)=>{place(t,M);c.setRGB(1,1,1).multiplyScalar(lit(t));}]]));
@@ -2903,6 +2927,30 @@ const bladeT=(()=>{
       const sc=0.7+b*0.65;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.015,z),_gQ,_gS.set(sc,sc*(0.8+((a*7.3)%1)*0.5),sc));
       const d=clamp(gi.wd*0.8+((a*3.7)%1)*0.25,0,1),k=0.74+0.26*gi.sun;col.setRGB((1+0.55*d)*k,(1+0.22*d)*k,(1-0.35*d)*k);return true;}});
 })();
+// winter: the forest floor's clutter round the camera, bare saplings and their twigs and stumps under snow caps, on
+// forest ground only (off the roads, trails and water), out to ~130 m where the haze has swallowed them
+const UNDER=WINTER?(()=>{
+  const forestHere=(x,z)=>{const g=gInfo(x,z);if(g.sf===S_WATER||g.tw>0.25||g.ws>0.5)return 0;
+    if(inValley(x,z))return trailDist(x,z)<6?0:smooth(-0.05,0.3,fbm(nC,x*0.009+100,z*0.009,3))*0.85;
+    const f=forestAt(x,z);if(f<0.05)return 0;const q=roadNear(x,z,RQ3);return q.r&&q.d<q.r.cls.edge+5?0:f;};
+  const stick=(a,b,r0,r1,list)=>{const d=new V3().subVectors(b,a),L=d.length(),g=new THREE.CylinderGeometry(r1,r0,L,5,1,true);g.translate(0,L/2,0);
+    g.applyQuaternion(new QT().setFromUnitVectors(new V3(0,1,0),d.normalize()));g.translate(a.x,a.y,a.z);list.push(g);};
+  // a sapling: a leaning stem 2.6 m tall and seven twigs reaching up and out
+  const R=rng(5150),sp=[],top=new V3(0.18,2.6,0.05);stick(new V3(),top,0.03,0.007,sp);
+  for(let k=0;k<7;k++){const h=0.7+k*0.27,p=new V3(top.x*h/2.6,h,top.z*h/2.6),a=R()*TAU,l=0.35+R()*0.55;stick(p,p.clone().add(new V3(Math.cos(a)*l*0.8,l*0.75,Math.sin(a)*l*0.8)),0.012,0.003,sp);}
+  const sapM=tileCull(snowyBark(new THREE.MeshStandardNodeMaterial({color:C('#2a2420'),roughness:0.95}),0.4),ip=>aheadOf(ip,2).and(within(ip,135)));
+  // (dithered away right at the camera, as the trees are: a twig across the lens reads as a pole)
+  sapM.alphaToCoverage=true;sapM.opacityNode=TSL.smoothstep(2.5,6,TSL.length(TSL.attribute('ipos','vec3').xz.sub(TSL.cameraPosition.xz)));
+  const sap=makeTiler({size:12,radius:11,per:45,seed:31,geo:mergeGeos(sp),mat:sapM,cast:false,
+    place(x,z,a,b,c,M,col){if(c>forestHere(x,z)*0.9)return false;const k=0.55+b*0.9;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.05,z),_gQ,_gS.set(k,k*(0.8+((a*7.1)%1)*0.5),k));col.setRGB(1,1,1);return true;}});
+  // a stump: sawn bark-brown, under a cap of snow
+  const stG=(()=>{const a=new THREE.CylinderGeometry(0.27,0.34,0.5,9),b=new THREE.CylinderGeometry(0.3,0.29,0.08,9);b.translate(0,0.27,0);
+    const col=(g,c)=>{const n=g.attributes.position.count,A=new Float32Array(n*3);for(let i=0;i<n;i++)A.set(c,i*3);g.setAttribute('color',new THREE.BufferAttribute(A,3));};
+    col(a,[0.16,0.12,0.09]);col(b,[0.85,0.88,0.92]);const g=mergeGeos([a,b]);g.translate(0,0.2,0);return g;})();
+  const stM=tileCull(new THREE.MeshStandardNodeMaterial({vertexColors:true,roughness:0.9}),ip=>aheadOf(ip,2).and(within(ip,135)));
+  const stp=makeTiler({size:12,radius:11,per:6,seed:37,geo:stG,mat:stM,cast:false,
+    place(x,z,a,b,c,M,col){if(c>forestHere(x,z)*0.8)return false;const k=0.7+b*0.7;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.15,z),_gQ,_gS.set(k,k*(0.6+((a*5.3)%1)*0.8),k));col.setRGB(1,1,1);return true;}});
+  return{update(){sap.update();stp.update();}};})():{update(){}};
 /* ================= ROAD SURFACES, BRIDGES, VILLAGE ================= */
 // One ribbon per road at the graded height; uv = (offset across, distance along) in metres. The shader paints the
 // asphalt, the shoulders and the markings in Korean colours: yellow centre lines, white lane dashes and edge lines.
@@ -5880,7 +5928,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
+(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -6983,9 +7031,9 @@ function updateCamera(dt){
    _m.copy(car.pos).addScaledVector(SUN_R,Math.round(a/tx)*tx-a).addScaledVector(SUN_U,Math.round(b/tx)*tx-b);
    sun.target.position.copy(_m);sun.position.copy(_m).addScaledVector(sunDir,140);shadowCenter.value.copy(_m);}
   if(!garage.on){const ST=window.__ST;if(ST){let t=performance.now();const m=k=>{const n=performance.now(),d=n-t;t=n;ST[k]=Math.max(ST[k]||0,d);ST[k+'_s']=(ST[k+'_s']||0)+d;};
-    bgPump(2.5);m('bg');if(AP.tick)AP.tick(3);m('ap');if(OUTR.tick)OUTR.tick();m('outr');if(AFF.tick)AFF.tick();m('aff');updateTerrainLOD();m('lod');updateCells();m('cells');grassT.update();grassF.update();m('grass');pebT.update();m('peb');bladeT.update();m('blade');
+    bgPump(2.5);m('bg');if(AP.tick)AP.tick(3);m('ap');if(OUTR.tick)OUTR.tick();m('outr');if(AFF.tick)AFF.tick();m('aff');updateTerrainLOD();m('lod');updateCells();m('cells');grassT.update();grassF.update();m('grass');pebT.update();UNDER.update();m('peb');bladeT.update();m('blade');
     for(const ns of NEARSETS)ns.update(camera.position.x,camera.position.z,uNearR.value);m('near');}
-  else{bgPump(2.5);if(AP.tick)AP.tick(3);if(OUTR.tick)OUTR.tick();if(AFF.tick)AFF.tick();updateTerrainLOD();updateCells();grassT.update();grassF.update();pebT.update();bladeT.update();for(const ns of NEARSETS)ns.update(camera.position.x,camera.position.z,uNearR.value);}
+  else{bgPump(2.5);if(AP.tick)AP.tick(3);if(OUTR.tick)OUTR.tick();if(AFF.tick)AFF.tick();updateTerrainLOD();updateCells();grassT.update();grassF.update();pebT.update();UNDER.update();bladeT.update();for(const ns of NEARSETS)ns.update(camera.position.x,camera.position.z,uNearR.value);}
     if(drive.started)CIRC.tick();}
   uViewPos.value.copy(camera.position);camera.getWorldDirection(uViewDir.value);
 }
@@ -7546,7 +7594,7 @@ const PFX=(()=>{
 // to 140 m and larger far tufts to 350 m (past that a blade is under a pixel: the ground's own grass texture carries on),
 // pebbles to 70 m, the frame at up to 2x the CSS resolution (~8 MP). The status panel shows the frame rate.
 const QUAL=(()=>{
-  const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,grassFar:13,peb:7,near:400,lodK:0};
+  const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,grassFar:13,peb:7,near:WINTER?220:400,lodK:0};
   const Q={fps:0,fa:0,fn:0};
   Q.apply=()=>{const px=Math.max(1,innerWidth*innerHeight);
     renderer.setPixelRatio(Math.max(0.5,Math.min(window.devicePixelRatio||1,t.pr,Math.sqrt(t.px/px))));
@@ -8396,7 +8444,7 @@ try{
     alb.assign(mix(alb,sc,smoothstep(0.15,0.75,snow.add(n2.sub(0.5).mul(0.25)))));
     const L=vec3(sunDir.x,sunDir.y,sunDir.z),ndl=max(dot(Nn,L),0);
     // (the scene's own sun and sky, as the season sets them: by day the same values as ever, at night the moon's)
-    const light=lin(NIGHT?'#a9bde6':WINTER?'#ffe6cc':'#ffdcae').mul(2.8*SUN_I/(3*LPI)).mul(ndl.mul(vis)).add(mix(lin(NIGHT?'#3b424f':WINTER?'#c8ccd2':'#5b4f3b'),lin(NIGHT?'#2c3b57':WINTER?'#c9d6e6':'#b3c9e6'),Nn.y.mul(0.5).add(0.5)).mul(ao.mul(0.8*HEMI_I/(0.8*LPI))));
+    const light=lin(NIGHT?'#aab9d6':WINTER?'#ffe6cc':'#ffdcae').mul(2.8*SUN_I/(3*LPI)).mul(ndl.mul(vis)).add(mix(lin(NIGHT?'#323d52':WINTER?'#c8ccd2':'#5b4f3b'),lin(NIGHT?'#506a96':WINTER?'#c9d6e6':'#b3c9e6'),Nn.y.mul(0.5).add(0.5)).mul(ao.mul(0.8*HEMI_I/(0.8*LPI))));
     return alb.mul(light);};
   const m=new THREE.MeshBasicNodeMaterial({fog:true});m.positionNode=curve();
   m.colorNode=Fn(()=>{
