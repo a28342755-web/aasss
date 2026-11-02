@@ -1968,7 +1968,7 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
   // winter: snow on everything gentle enough to hold it (it slides off past ~40 degrees, thinner on steep shoulders),
   // its surface smooth over the ground's fine relief, the puddles frozen and buried under it
   const snW=WINTER?smoothstep(0.62,0.86,wn.y).mul(det.mul(0.3).add(0.82)).clamp(0,1).toVar():float(0);
-  if(WINTER){m.colorNode=mix(m.colorNode,vec3(0.8,0.84,0.89).mul(det.mul(0.08).add(0.96)),snW);
+  if(WINTER){m.colorNode=mix(m.colorNode,vec3(0.72,0.76,0.82).mul(det.mul(0.1).add(0.95)),snW);
     m.roughnessNode=mix(m.roughnessNode,float(0.6),snW);nw=normalize(mix(nw,wn,snW.mul(0.85)));}
   m.normalNode=normalize(cameraViewMatrix.mul(vec4(nw,0)).xyz);
   const V=normalize(cameraPosition.sub(positionWorld)),rv=reflect(V.negate(),nw),frs=pow(one.sub(clamp(dot(nw,V),0,1)),5).mul(0.98).add(0.02);
@@ -3223,7 +3223,7 @@ let BSTAMP=0;
 
 /* ================= VEHICLE MODEL ================= */
 const carGroup=new THREE.Group();scene.add(carGroup);
-const dirtU={uDirt:TSL.uniform(0),uWet:TSL.uniform(0),uMud:TSL.uniform(C('#4a3a29')),uDirtTex:{value:dirtTex},uCarInv:TSL.uniform(new THREE.Matrix4())};
+const dirtU={uDirt:TSL.uniform(0),uWet:TSL.uniform(0),uMud:TSL.uniform(C(WINTER?'#a9b1ba':'#4a3a29')),uDirtTex:{value:dirtTex},uCarInv:TSL.uniform(new THREE.Matrix4())};
 function dirty(mat,k){
   // mud climbs the body from the sills up with the dirt level, in blotches (car-space position, so it rides with the truck)
   const {vec4,texture,clamp,step,mix,smoothstep,positionWorld,materialColor,materialRoughness,materialMetalness,materialClearcoat}=TSL;
