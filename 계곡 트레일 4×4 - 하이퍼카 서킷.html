@@ -6695,7 +6695,7 @@ function updateVisuals(dt){
         car.dirt=Math.min(1,car.dirt+0.004+v*0.0006);}}
     w.inMud=w.surf===S_MUD&&!inWater;
     layTrack(w,S,!inWater,slip);
-    if(w.surf===S_MUD){car.dirt=Math.min(1,car.dirt+dt*0.005*(Math.min(slip,5)+v*0.35));car.wet=1;   // (per wheel: x4 for the truck)}
+    if(w.surf===S_MUD){car.dirt=Math.min(1,car.dirt+dt*0.005*(Math.min(slip,5)+v*0.35));car.wet=1;}   // (per wheel: x4 for the truck)
     else if((w.surf===S_SAND||w.surf===S_TRAIL||w.surf===S_DIRT)&&car.dirt<0.45)car.dirt=Math.min(0.45,car.dirt+dt*0.0008*v);   // (dust tops up to a film; it never wipes off caked mud)
   });
   if(car.sub>0&&!garage.on)car.dirt=Math.max(0.02,car.dirt-dt*0.08*car.sub*(0.3+sp*0.2));
