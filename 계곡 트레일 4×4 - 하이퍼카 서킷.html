@@ -3036,7 +3036,7 @@ const kaLoad=Fz=>{const f=Math.max(Fz,200)/FZ0;return Math.sin(2*Math.atan(f/1.9
 // tread temperature: grip on rock and pavement is best around 75 °C (the carcass and the air inside follow the
 // tread slowly, and the pressure follows the air); camber thrust per radian relative to cornering stiffness
 const T_AMB=22,KCAM=0.08;
-const RAYS=[-0.95,-0.62,-0.3,0,0.3,0.62,0.95].map(a=>[Math.cos(a),Math.sin(a)]);
+const RAYS=[-0.95,-0.62,-0.3,0,0.3,0.62,0.95].map(a=>[Math.cos(a),Math.sin(a)]),_slb=[0,0,0];
 const BRAKE_F=SC?2600:3650,BRAKE_R=SC?1600:2400,HAND=SC?2400:5900;
 // 4.4 L twin-turbo V8, torque converter (K-factor, lock-up clutch), 8-speed automatic
 const IDLE=SC?950:700,LIMIT=HC?9500:SC?8700:6300,VMAX=SC?97:52,REV_VMAX=SC?8:7;
@@ -5115,24 +5115,32 @@ function wheelContact(w,u){
   const st=w.steer+w.rs,cs=Math.cos(st),sn=Math.sin(st);
   // the rolling plane is tilted with the axle (u = the axle's up direction)
   _fw.copy(car.fwd).multiplyScalar(cs).addScaledVector(car.left,sn);_fw.addScaledVector(u,-_fw.dot(u)).normalize();
-  let best=-1,nx=0,ny=0,nz=0,ws=0;
-  for(let k=0;k<RAYS.length;k++){
-    const rc=RAYS[k][0],rs=RAYS[k][1],dx=-u.x*rc+_fw.x*rs,dy=-u.y*rc+_fw.y*rs,dz=-u.z*rc+_fw.z*rs;
-    if(dy>-0.1)continue;
-    let g=groundH(c.x+dx*RAD,c.z+dz*RAD)-w.sink,t=(c.y-g)/-dy;
-    if(k===3){const t1=clamp(t,0,RAD*1.6);g=groundH(c.x+dx*t1,c.z+dz*t1)-w.sink;t=(c.y-g)/-dy;}
-    const pen=Math.min(RAD-t,RAD);
-    if(pen>best)best=pen;
-    if(pen>0){const q=pen*pen;nx-=dx*q;ny-=dy*q;nz-=dz*q;ws+=q;}
-  }
+  _ax.crossVectors(u,_fw).normalize();
+  // the tread in three slices across its width (inner edge, centre, outer edge), each a fan of rays round the rolling
+  // plane: a tyre can stand on a rock or a kerb with one edge
+  const ow=(SC?TY.width[0]:TY.width[drive.airDown?1:0])*0.36,bs=_slb;
+  let best=-1,nx=0,ny=0,nz=0,ws=0,sum=0,lat=0,lw=0;
+  for(let si=0;si<3;si++){const o=(si-1)*ow,cx=c.x+_ax.x*o,cy=c.y+_ax.y*o,cz=c.z+_ax.z*o;let sb=-1;
+    for(let k=0;k<RAYS.length;k++){
+      const rc=RAYS[k][0],rs=RAYS[k][1],dx=-u.x*rc+_fw.x*rs,dy=-u.y*rc+_fw.y*rs,dz=-u.z*rc+_fw.z*rs;
+      if(dy>-0.1)continue;
+      let g=groundH(cx+dx*RAD,cz+dz*RAD)-w.sink,t=(cy-g)/-dy;
+      if(k===3){const t1=clamp(t,0,RAD*1.6);g=groundH(cx+dx*t1,cz+dz*t1)-w.sink;t=(cy-g)/-dy;}
+      const pen=Math.min(RAD-t,RAD);
+      if(pen>sb)sb=pen;
+      if(pen>0){const q=pen*pen;nx-=dx*q;ny-=dy*q;nz-=dz*q;ws+=q;}
+    }
+    bs[si]=sb;if(sb>best)best=sb;if(sb>0){sum+=sb;const q=sb*sb;lat+=o*q;lw+=q;}}
   if(best<=0||ws<=0){w.contact=false;w.pen=0;return;}
   w.n.set(nx,ny,nz).normalize();
-  // the fan only sees the rolling plane: add the cross-slope from the terrain normal
-  _ax.crossVectors(u,_fw).normalize();
-  groundN(c.x-w.n.x*RAD,c.z-w.n.z*RAD,_n);
-  w.n.addScaledVector(_ax,_n.dot(_ax)).normalize();
-  w.pen=best;w.contact=true;
-  w.cp.copy(c).addScaledVector(w.n,-(RAD-best));
+  // across the tread: the ground's slope from the two edges' penetrations (a gap counts as 5 cm at most), the normal
+  // tilted away from the higher side (the fan alone only sees the rolling plane)
+  const sl=clamp((Math.max(bs[2],-0.05)-Math.max(bs[0],-0.05))/(2*ow),-1.2,1.2);
+  w.n.addScaledVector(_ax,-sl).normalize();
+  // the radial spring sees the tread's mean deflection across its width (one edge on a rock carries a third of it);
+  // the contact point moves toward the slices that carry the load
+  w.pen=sum/3;w.contact=true;
+  w.cp.copy(c).addScaledVector(_ax,lw>0?lat/lw:0).addScaledVector(w.n,-(RAD-best));
   w.fG.copy(_fw).addScaledVector(w.n,-_fw.dot(w.n)).normalize();
   w.sG.crossVectors(w.n,w.fG);
 }
@@ -5562,6 +5570,8 @@ function jpInit(J){
   st.mObjectVsBroadPhaseLayerFilter=new J.ObjectVsBroadPhaseLayerFilterTable(st.mBroadPhaseLayerInterface,2,st.mObjectLayerPairFilter,2);
   const ji=new J.JoltInterface(st);J.destroy(st);
   const ps=ji.GetPhysicsSystem(),bi=ps.GetBodyInterface();ps.SetGravity(new J.Vec3(0,-9.81,0));
+  // (the solver for precision over speed: 16 velocity and 4 position iterations, 1 cm of penetration allowed)
+  try{const s=ps.GetPhysicsSettings();s.mNumVelocitySteps=16;s.mNumPositionSteps=4;s.mPenetrationSlop=0.01;ps.SetPhysicsSettings(s);}catch(e){console.warn('jolt settings',e);}
   const v=(x,y,z)=>new J.Vec3(x,y,z),q0=new J.Quat(0,0,0,1);
   const comp=new J.StaticCompoundShapeSettings();
   const box=(cx,cy,cz,hx,hy,hz)=>comp.AddShape(v(cx,cy,cz),q0,new J.BoxShapeSettings(v(hx,hy,hz),0.04),0);
@@ -5673,6 +5683,8 @@ function jpStep(dt){
   if(Math.abs(car.pos.z)>lim){car.pos.z=Math.sign(car.pos.z)*lim;car.vel.z=0;JP.push=true;}
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
+// (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
+try{window.__vtPhys={car,wheels,drive,axleS,JP,get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -7328,7 +7340,7 @@ function resize(){
 }
 addEventListener('resize',resize);resize();
 let last=performance.now(),acc=0,clock=0;
-const H_STEP=1/360;
+let H_STEP=1/2880;
 // the frame rate, for the status panel
 function adapt(raw){QUAL.tick(raw);}
 /* ================= FLY BRAIN AUTOPILOT ================= */
@@ -8008,7 +8020,10 @@ function tick(now){
   handleInput(dt);
   if(garage.on){poseGarage(dt);acc=0;}
   else{
-    // the physics advances by exactly this frame's time, in equal substeps close to 1/360 s. A fixed step with the
+    // the physics advances by exactly this frame's time, in equal substeps close to 1/2880 s (each ~0.05 ms of CPU; 48 a
+    // frame at 60 Hz). Measured against a 1/5760 s reference on a launch and turn: half a second after pulling away the
+    // speed was off by 0.45 m/s at 1/1440 s and 0.07 m/s at 1/2880 s (the stiff moments - a tyre breaking loose from
+    // standstill, an impact - are what a coarse step gets wrong). A fixed step with the
     // remainder carried over ran 5, 6 or 7 steps in a 60 Hz frame (2 or 3 at 144 Hz): at 110 km/h the truck and the
     // world jumped back and forth by up to 8.5 cm from frame to frame, which reads as stutter on the highway
     if(dt>1e-4){let n=Math.max(1,Math.round(dt/H_STEP));if(dt/n>H_STEP*1.25)n++;const h=dt/n;for(let k=0;k<n;k++)step(h);CIRC.t+=dt;}
