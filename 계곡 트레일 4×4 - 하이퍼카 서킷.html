@@ -1232,6 +1232,18 @@ function padGrade(x,z,h){for(let q=0;q<houses.length;q++){const o=houses[q],dx=x
 // final ground at one point: natural land, graded trails, graded roads and house pads, mud holes, fine relief, river
 // and lake beds. The 1 m valley grid and the 4 m outer grid both use it, so they meet without a seam.
 const LO={h:0,rock:0,mud:0,tw:0,sand:0,dry:0,em:0,rw:0},RQ3={d:1e9,h:0,b:0,r:null,k:0,t:0,u:0};
+// mud bogs beyond the valley: one in two 220 m cells holds one, at a hashed place, 36-112 m along its longer axis,
+// elongated and turned its own way, its edge ragged with noise; a bowl up to 55 cm deep where the rain stands.
+// Faded in past the valley's edge (the valley has mud of its own), and kept off steep ground, roads, fields, paddies,
+// snow, rock and sand by the outer land's builder
+const MUDC=220,mudH=(i,j)=>{let h=Math.imul(i,374761393)+Math.imul(j,668265263)|0;h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;};
+function mudPatch(x,z){const e=Math.max(Math.abs(x),Math.abs(z));if(e<560)return 0;let m=0;const ci=Math.floor(x/MUDC),cj=Math.floor(z/MUDC);
+  for(let j=cj-1;j<=cj+1;j++)for(let i=ci-1;i<=ci+1;i++){if(mudH(i,j)>0.5)continue;
+    const cx=(i+0.15+0.7*mudH(i+71,j-13))*MUDC,cz=(j+0.15+0.7*mudH(i-29,j+47))*MUDC,r=18+38*mudH(i+5,j+9),el=0.45+0.5*mudH(i-3,j+2),a=mudH(i+11,j-7)*Math.PI;
+    const dx=x-cx,dz=z-cz;if(dx*dx+dz*dz>(r*1.6)**2)continue;
+    const ca=Math.cos(a),sa=Math.sin(a),u=(dx*ca+dz*sa)/r,v=(-dx*sa+dz*ca)/(r*el),d=Math.sqrt(u*u+v*v)+0.3*nC(x*0.035+i*3.1,z*0.035+j*1.7)+0.12*nB(x*0.11,z*0.11);
+    m=Math.max(m,smooth(1.05,0.72,d));}
+  return m*smooth(560,640,e);}
 function land(x,z,o){
   let h=natH(x,z);const{dune,td,tw,dR,vin,dL,lin,rock}=T;
   if(td<11){const hg=gradedH(x,z);if(hg!==null)h=lerp(h,hg,smooth(11,3.2,td));}
@@ -1239,12 +1251,13 @@ function land(x,z,o){
   // the road's cut/fill band yields to a trail it meets (their heights agree at the junction) and stays off the riverbank
   if(q.r&&!q.b){rw=smooth(q.r.cls.edge+12,q.r.cls.edge+1.5,q.d)*(td<9?smooth(2.5,9,td):1)*smooth(12,17,dR);if(rw>0)h=lerp(h,q.h-0.03,rw);}
   if(Math.abs(x-VIL_C[0])<300&&Math.abs(z-VIL_C[1])<300)h=padGrade(x,z,h);
-  let mud=smooth(0.14,0.28,fbm(nB,x*0.026+40,z*0.026+11,3))*(1-rock)*(1-dune)*(0.3+0.7*Math.max(vin,tw,lin*0.8))*smooth(8,20,dR)*smooth(56,74,dL);
+  let mud=smooth(0.1,0.24,fbm(nB,x*0.026+40,z*0.026+11,3))*(1-rock)*(1-dune)*(0.3+0.7*Math.max(vin,tw,lin*0.8))*smooth(8,20,dR)*smooth(56,74,dL);
   mud=Math.max(mud,tw*(1-dune)*smooth(0.16,0.3,fbm(nD,x*0.045+7,z*0.045,2)))*(1-rw);
   const dL2=Math.hypot(x-LK2[0],z-LK2[1])+18*nC(x*0.01,z*0.01);
   const sand=Math.max(smooth(16,9,dR),smooth(76,60,dL),smooth(LK2R+22,LK2R+6,dL2),dune)*(1-rock)*(1-rw);
   h+=(0.5*fbm(nD,x*0.085,z*0.085,3)+0.13*nC(x*0.33,z*0.33))*(1-tw*0.85)*(1-mud*0.6)*(1-dune*0.7)*(1-rw);
   h-=tw*0.12*(1-dune)+mud*0.25;
+  const mp=mudPatch(x,z)*(1-rw)*(1-rock);if(mp>0)h-=0.55*mp*mp*(3-2*mp);o.mudP=mp;
   let bed=1e9;
   if(dR<13){const k=0.5+0.5*Math.cos(Math.PI*dR/13);bed=0.5+dR*0.05-2.05*k+0.06*k*nD(x*0.3,z*0.3);}
   if(dL<64){const k=0.5+0.5*Math.cos(Math.PI*dL/64);bed=Math.min(bed,0.45+Math.max(0,dL-58)*0.05-2.0*k);}
@@ -1301,11 +1314,11 @@ for(let iz=0;iz<NV;iz++){const z=-HALF+iz*CELL;for(let ix=0;ix<NV;ix++){const x=
   for(let iz=0;iz<NV;iz++)for(let ix=0;ix<NV;ix++){const i=ix+iz*NV,m=EM[i],d=bil(D,ix/2,iz/2)*m;
     HT[i]+=d;ERO[i]=Math.max(0,-d);DEP[i]=Math.max(0,d);FLW[i]=clamp(Math.log2(1+bil(FL,ix/2,iz/2)/fm)/4.5,0,1)*m;}
 }
-const ONN=ONV*ONV,OHT=new Float32Array(ONN),OSF=new Uint8Array(ONN),OSL=new Float32Array(ONN),OwR=new Float32Array(ONN),OwS=new Float32Array(ONN),OwD=new Float32Array(ONN),OSUNV=new Float32Array(ONN).fill(1);
+const ONN=ONV*ONV,OwM=new Float32Array(ONN),OHT=new Float32Array(ONN),OSF=new Uint8Array(ONN),OSL=new Float32Array(ONN),OwR=new Float32Array(ONN),OwS=new Float32Array(ONN),OwD=new Float32Array(ONN),OSUNV=new Float32Array(ONN).fill(1);
 const oIdx=(x,z)=>clamp(Math.round((x+OHM)/OCELL),0,OSEG)+clamp(Math.round((z+OHM)/OCELL),0,OSEG)*ONV;
 const fIdx=(x,z)=>clamp(Math.round((x-FX0)/FCELL),0,FSEG)+clamp(Math.round((z-FX0)/FCELL),0,FSEG)*FNV;
 const inMid=(x,z)=>x>=-OHM&&x<=OHM&&z>=-OHM&&z<=OHM;
-const FNN=FNV*FNV,FHT=new Float32Array(FNN),FSF=new Uint8Array(FNN),FSL=new Float32Array(FNN),FwR=new Float32Array(FNN),FwS=new Float32Array(FNN),FwD=new Float32Array(FNN),FSUNV=new Float32Array(FNN).fill(1);
+const FNN=FNV*FNV,FwM=new Float32Array(FNN),FHT=new Float32Array(FNN),FSF=new Uint8Array(FNN),FSL=new Float32Array(FNN),FwR=new Float32Array(FNN),FwS=new Float32Array(FNN),FwD=new Float32Array(FNN),FSUNV=new Float32Array(FNN).fill(1);
 const inValley=(x,z)=>x>=-HALF&&x<=HALF&&z>=-HALF&&z<=HALF;
 function terrainH(x,z){
   if(!inValley(x,z)){
@@ -1408,9 +1421,9 @@ const inPaddy=(x,z)=>padW(x,z)>0.5;
 const paddyField=(x,z)=>{const fu=Math.floor((x-PADDY.x0)/36),fw=Math.floor((z-PADDY.z0)/24),hsh=(((fu*73856093)^(fw*19349663))>>>0)%1000/1000;
   const cx=PADDY.x0+(fu+0.5)*36,cz=PADDY.z0+(fw+0.5)*24,grp=fbm(nC,cx*0.0035+4,cz*0.0035-6,2);return grp>0.12&&hsh<0.8?hsh*0.4:0.45+hsh*0.55;};
 {
-  const grids=[{seg:OSEG,nv:ONV,cell:OCELL,x0:-OHM,HT:OHT,SF:OSF,SL:OSL,wR:OwR,wS:OwS,wD:OwD,COL:OCOL,NRM:ONRM,SPL:OSPL,skip:(x,z)=>Math.max(Math.abs(x),Math.abs(z))<HALF-8},
-    {seg:FSEG,nv:FNV,cell:FCELL,x0:FX0,HT:FHT,SF:FSF,SL:FSL,wR:FwR,wS:FwS,wD:FwD,COL:FCOL,NRM:FNRM,SPL:FSPL,skip:(x,z)=>Math.max(Math.abs(x),Math.abs(z))<OHM-2*FCELL}];
-  const cGrass=C('#5b6b31'),cDry=C('#8f8953'),cDirt=C('#7a5f44'),cGravel=C('#8a7a64'),cRock=C('#7a7469'),cRock2=C('#534f47'),cSand=C('#bba47a'),cBed=C('#4b4436');
+  const grids=[{seg:OSEG,nv:ONV,cell:OCELL,x0:-OHM,HT:OHT,SF:OSF,SL:OSL,wR:OwR,wS:OwS,wD:OwD,wM:OwM,COL:OCOL,NRM:ONRM,SPL:OSPL,skip:(x,z)=>Math.max(Math.abs(x),Math.abs(z))<HALF-8},
+    {seg:FSEG,nv:FNV,cell:FCELL,x0:FX0,HT:FHT,SF:FSF,SL:FSL,wR:FwR,wS:FwS,wD:FwD,wM:FwM,COL:FCOL,NRM:FNRM,SPL:FSPL,skip:(x,z)=>Math.max(Math.abs(x),Math.abs(z))<OHM-2*FCELL}];
+  const cMud=C('#3a2b1e'),cMudR=C('#4a3a28'),cGrass=C('#5b6b31'),cDry=C('#8f8953'),cDirt=C('#7a5f44'),cGravel=C('#8a7a64'),cRock=C('#7a7469'),cRock2=C('#534f47'),cSand=C('#bba47a'),cBed=C('#4b4436');
   const cRed=C('#a4613b'),cRedR=C('#94573a'),cAlp=C('#4d5c33'),cSnow=C('#e9edf0'),cRice=C('#6c9234'),cFlood=C('#4d5d57'),cGink=C('#c99a1f'),cPetal=C('#e3b9bf');
   const crops=[C('#5a3f2c'),C('#5f7d2c'),C('#b39a4a'),C('#76933c'),C('#4d6a2a'),C('#8c7a3e')];
   const tc=new THREE.Color(),tr=new THREE.Color(),tr2=new THREE.Color(),fa=0.35,fc=Math.cos(fa),fs=Math.sin(fa),AM=new Float32Array(6);
@@ -1418,7 +1431,7 @@ const paddyField=(x,z)=>{const fu=Math.floor((x-PADDY.x0)/36),fw=Math.floor((z-P
   const LK=new Float32Array(FNN),LKK=new Uint8Array(FNN),OLK=new Float32Array(ONN),OLKK=new Uint8Array(ONN);
   for(const G of grids){const {nv,seg,cell,x0,HT:H}=G,leaf=G===grids[0]?OLK:LK,leafK=G===grids[0]?OLKK:LKK;
     for(let iz=0;iz<nv;iz++){const z=x0+iz*cell;for(let ix=0;ix<nv;ix++){const x=x0+ix*cell;if(G.skip(x,z))continue;const i=ix+iz*nv;
-      land(x,z,LO);H[i]=LO.h;G.wR[i]=LO.rw;G.wS[i]=LO.sand;G.wD[i]=LO.dry;
+      land(x,z,LO);H[i]=LO.h;G.wR[i]=LO.rw;G.wS[i]=LO.sand;G.wD[i]=LO.dry;G.wM[i]=LO.mudP||0;
       // grid points beside a road sit a little below its surface: on these coarse grids a triangle spanning the road
       // would otherwise rise through the pavement where the road is cut into a slope (saw-tooth steps along its edges,
       // and a hump the truck's body would strike)
@@ -1443,6 +1456,9 @@ const paddyField=(x,z)=>{const fu=Math.floor((x-PADDY.x0)/36),fw=Math.floor((z-P
       // paddies: flooded fields (they read as standing water) and green rice, bunds between
       const pad=inPaddy(x,z)?(1-rw)*(1-smooth(0.05,0.12,slope)):0,ph=pad>0?paddyField(x,z):0,flood=pad*(ph<0.45?1:0);
       if(pad>0){tr.copy(flood>0?cFlood:cRice);if(!flood)tr.multiplyScalar(0.88+0.24*ph);tc.lerp(tr,pad*0.9);}
+      // mud bogs, only on gentle open ground (no road, field, paddy, snow, Alps, badlands, rock or sand)
+      const md=G.wM[i]*(1-smooth(0.2,0.38,slope))*(1-rw)*(1-fv)*(1-pad)*(1-snow)*(1-aw)*(1-Math.min(1,bad*2))*(1-rockW)*(1-sand);G.wM[i]=md;
+      if(md>0){tc.lerp(cMudR,smooth(0,0.5,md)*0.7).lerp(cMud,smooth(0.35,0.8,md)*0.9);}
       // fallen ginkgo leaves and cherry petals on the avenues' verges
       const lf=(G===grids[0]?OLK:LK)[i],lk=(G===grids[0]?OLKK:LKK)[i];if(lf>0)tc.lerp(lk===1?cGink:cPetal,lf*(lk===1?0.45:0.18));
       if(rockW>0){tr.copy(cRock).lerp(cRock2,0.5+0.5*nA(x*0.1,z*0.1));if(bad>0)tr.lerp(cRedR,bad*0.85);tc.lerp(tr,rockW);}
@@ -1457,11 +1473,11 @@ const paddyField=(x,z)=>{const fu=Math.floor((x-PADDY.x0)/36),fw=Math.floor((z-P
       const avg=(H[Math.min(ix+1,seg)+iz*nv]+H[Math.max(ix-1,0)+iz*nv]+H[ix+Math.min(iz+1,seg)*nv]+H[ix+Math.max(iz-1,0)*nv])*0.25;
       tc.multiplyScalar(clamp(1+(h-avg)*0.25,0.75,1.1)*(1+0.07*nB(x*0.7,z*0.7)));
       G.COL[i*3]=tc.r;G.COL[i*3+1]=tc.g;G.COL[i*3+2]=tc.b;
-      const sd=Math.max(sand,snow*0.8)*(1-rockW)*(1-under)*(1-flood),dr=Math.max(dirtW,rw,dry*0.3,under,fv*0.5,bad*0.8,lf*0.5)*(1-rockW)*(1-sd)*(1-flood);
+      const sd=Math.max(sand,snow*0.8)*(1-rockW)*(1-under)*(1-flood)*(1-md),dr=Math.max(dirtW,rw,dry*0.3,under,fv*0.5,bad*0.8,lf*0.5)*(1-rockW)*(1-sd)*(1-flood)*(1-md);
       // flooded paddies carry no layer at all: the shader reads that as mud with standing water
-      G.SPL[i*4]=Math.max(0,1-rockW-sd-dr-flood);G.SPL[i*4+1]=dr;G.SPL[i*4+2]=rockW;G.SPL[i*4+3]=sd;
+      G.SPL[i*4]=Math.max(0,1-rockW-sd-dr-flood-md);G.SPL[i*4+1]=dr;G.SPL[i*4+2]=rockW;G.SPL[i*4+3]=sd;
       if(aw>0){const rk=lerp(rockW,AM[4],aw),sn=lerp(sd,AM[2],aw),d2=dr*(1-aw);G.SPL[i*4]=Math.max(0,1-rk-sn-d2);G.SPL[i*4+1]=d2;G.SPL[i*4+2]=rk;G.SPL[i*4+3]=sn;}
-      G.SF[i]=h<WATER_Y&&WET(x,z)?S_WATER:rockW>0.5?S_ROCK:flood>0.5?S_MUD:(sand>0.55&&snow<0.5)?S_SAND:rw>0.55?S_TRAIL:(dirtW>0.5||dry>0.65||fv>0.5||bad>0.6)?S_DIRT:S_GRASS;}}
+      G.SF[i]=h<WATER_Y&&WET(x,z)?S_WATER:rockW>0.5?S_ROCK:flood>0.5||md>0.45?S_MUD:(sand>0.55&&snow<0.5)?S_SAND:rw>0.55?S_TRAIL:(dirtW>0.5||dry>0.65||fv>0.5||bad>0.6)?S_DIRT:S_GRASS;}}
 }
 
 
@@ -2670,16 +2686,16 @@ function gInfo(x,z){
   // the hypercar circuit: no grass anywhere inside it (worn to nothing: tw 1 leaves no tufts or blades)
   if(CIRC.on){const s=CIRC.sf(x,z);if(s>=0||CIRC.inArea(x,z)){GI.sf=s>=0?s:S_GRASS;GI.tw=1;GI.ws=0;GI.wd=0.3;GI.wm=0;GI.sun=1;return GI;}}
   if(inValley(x,z)){const i=vIdx(x,z);GI.sf=SF[i];GI.tw=Math.max(wT[i],wRd[i]);GI.ws=wS[i];GI.wd=wD[i];GI.wm=wM[i];GI.sun=SUNV[i];}
-  else if(inMid(x,z)){const j=oIdx(x,z);GI.sf=OSF[j];GI.tw=OwR[j];GI.ws=OwS[j];GI.wd=OwD[j];GI.wm=0;GI.sun=OSUNV[j];}
+  else if(inMid(x,z)){const j=oIdx(x,z);GI.sf=OSF[j];GI.tw=OwR[j];GI.ws=OwS[j];GI.wd=OwD[j];GI.wm=OwM[j];GI.sun=OSUNV[j];}
   else if(SF_OUT!==null&&!inSq(x,z)){GI.sf=SF_OUT(x,z);GI.tw=0;GI.ws=AMO[2];GI.wd=clamp(0.25+AMO[4]*0.5,0,1);GI.wm=0;GI.sun=AMO[0];}
-  else{const j=fIdx(x,z);GI.sf=FSF[j];GI.tw=FwR[j];GI.ws=FwS[j];GI.wd=FwD[j];GI.wm=0;GI.sun=FSUNV[j];}return GI;}
+  else{const j=fIdx(x,z);GI.sf=FSF[j];GI.tw=FwR[j];GI.ws=FwS[j];GI.wd=FwD[j];GI.wm=FwM[j];GI.sun=FSUNV[j];}return GI;}
 // The card grass comes in two layers: the near one (14 m tiles, to ~140 m) and a far one (28 m tiles of larger,
 // sparser tufts, to ~280 m), handing over in a dithered band (GX0..GX1 m) and the far one fading out at GF0..GF1 m,
 // in circles round the camera, so the meadow thins with distance instead of stopping at a square of tiles
 const GX0=108,GX1=128,GF0=235,GF1=275;
 const grassBand=(mat,a,b,inv)=>{const {attribute,length,smoothstep,float,cameraPosition}=TSL,d=length(attribute('ipos','vec3').xz.sub(cameraPosition.xz)),f=smoothstep(a,b,d);
   mat.opacityNode=(mat.opacityNode||float(1)).mul(inv?float(1).sub(f):f);return mat;};
-const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z),sf=g.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;pr*=(1-g.tw)*(1-g.ws)*k;if(c>pr)return false;
+const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z),sf=g.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;pr*=(1-g.tw)*(1-g.ws)*(1-g.wm)*k;if(c>pr)return false;
     const sc=(0.75+b*0.7)*s,kk=(a*7.3)%1;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.03*s,z),_gQ,_gS.set(sc,sc*hs*(0.85+kk*0.7),sc));col.copy(gA).lerp(gB,clamp(g.wd*0.6+kk*0.3,0,1)).multiplyScalar(0.72+0.28*g.sun);return true;};
 const grassT=makeTiler({size:14,radius:10,per:840,seed:1,geo:tuftGeo(4,1.25,0.62),
   mat:tileCull(grassBand(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),GX0,GX1,true),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45))).and(within(ip,GX1+1))),
@@ -5684,7 +5700,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-try{window.__vtPhys={car,wheels,drive,axleS,JP,get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}
+try{window.__vtPhys={car,wheels,drive,axleS,JP,sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
