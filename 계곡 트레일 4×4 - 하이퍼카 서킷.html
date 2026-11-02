@@ -424,7 +424,7 @@ function makeNoise(seed){
   for(let i=0;i<512;i++)perm[i]=p[i&255];
   // the eight gradients as tables (x+y, -x+y, x-y, -x-y, x, -x, y, -y), each corner's worked out once
   const GX=new Float64Array([1,-1,1,-1,1,-1,0,0]),GY=new Float64Array([1,1,-1,-1,0,0,1,-1]);
-  return (x,y)=>{
+  const f=(x,y)=>{
     const X=Math.floor(x),Y=Math.floor(y),xf=x-X,yf=y-Y,xi=X&255,yi=Y&255;
     const u=xf*xf*xf*(xf*(xf*6-15)+10),v=yf*yf*yf*(yf*(yf*6-15)+10);
     const pa=perm[xi]+yi,pb=perm[xi+1]+yi,aa=perm[pa]&7,ab=perm[pa+1]&7,ba=perm[pb]&7,bb=perm[pb+1]&7,xg=xf-1,yg=yf-1;
@@ -432,6 +432,8 @@ function makeNoise(seed){
     const x1=gaa+(gba-gaa)*u,x2=gab+(gbb-gab)*u;
     return x1+(x2-x1)*v;
   };
+  f.seed=seed;   // (a worker makes the same noise from it)
+  return f;
 }
 function fbm(n,x,y,o){let a=.5,f=1,s=0,nm=0;for(let i=0;i<o;i++){s+=a*n(x*f,y*f);nm+=a;a*=.5;f*=2.03;}return s/nm;}
 function ridged(n,x,y,o){let a=.5,f=1,s=0,nm=0;for(let i=0;i<o;i++){let v=1-Math.abs(n(x*f,y*f));v*=v;s+=a*v;nm+=a;a*=.5;f*=2.1;}return s/nm;}
@@ -1293,9 +1295,57 @@ function land(x,z,o){
   o.em=smooth(5,22,td)*(1-vin)*(1-lin)*(1-dune)*(1-0.9*rock)*smooth(8,24,dR)*(1-rw)*smooth(500,470,Math.max(Math.abs(x),Math.abs(z)));
 }
 const wRd=new Float32Array(NN);
-(()=>{for(let iz=0;iz<NV;iz++){const z=-HALF+iz*CELL;for(let ix=0;ix<NV;ix++){const x=-HALF+ix*CELL,i=ix+iz*NV;
-  land(x,z,LO);HT[i]=LO.h;wR[i]=LO.rock;wM[i]=LO.mud;wT[i]=LO.tw;wS[i]=LO.sand;wD[i]=LO.dry;EM[i]=LO.em;wRd[i]=LO.rw;
-}}})();
+// land() over rows iz0..iz1-1 of the 1 m valley grid into o's arrays (row iz0 at index 0): here, or on a worker
+function valleyRows(iz0,iz1,o,LO){for(let iz=iz0;iz<iz1;iz++){const z=-HALF+iz*CELL;for(let ix=0;ix<NV;ix++){const x=-HALF+ix*CELL,i=ix+(iz-iz0)*NV;
+  land(x,z,LO);o.HT[i]=LO.h;o.wR[i]=LO.rock;o.wM[i]=LO.mud;o.wT[i]=LO.tw;o.wS[i]=LO.sand;o.wD[i]=LO.dry;o.EM[i]=LO.em;o.wRd[i]=LO.rw;}}}
+// the same for the first pass over the 4 m and 8 m grids beyond the valley (g: one of LGRIDS): heights and the weights
+// land() gives. Grid points beside a road sit a little below its surface: on these coarse grids a triangle spanning the
+// road would otherwise rise through the pavement where the road is cut into a slope (saw-tooth steps along its edges,
+// and a hump the truck's body would strike)
+function outerRows(g,iz0,iz1,o,LO){const nv=g.nv,cell=g.cell,x0=g.x0,skipR=g.skipR;
+  for(let iz=iz0;iz<iz1;iz++){const z=x0+iz*cell;for(let ix=0;ix<nv;ix++){const x=x0+ix*cell;if(Math.max(Math.abs(x),Math.abs(z))<skipR)continue;const i=ix+(iz-iz0)*nv;
+    land(x,z,LO);o.H[i]=LO.h;o.wR[i]=LO.rw;o.wS[i]=LO.sand;o.wD[i]=LO.dry;o.wM[i]=LO.mudP||0;
+    if(LO.rk&&!LO.rb&&LO.rd<LO.re+cell*1.3)o.H[i]=Math.min(o.H[i],LO.rh-0.1);
+    if(LO.rk==='gk'||LO.rk==='cb'){o.leaf[i]=smooth(17,6,LO.rd);o.leafK[i]=LO.rk==='gk'?1:2;}}}}
+const LGRIDS=[{nv:ONV,cell:OCELL,x0:-OHM,skipR:HALF-8},{nv:FNV,cell:FCELL,x0:FX0,skipR:OHM-2*FCELL}];
+// land() on worker threads: the valley's rows, then the outer grids', in bands of 16 rows dealt round up to 8 workers.
+// Each worker runs this page's own functions (their source read off them here) on the data they read (sent once), so it
+// works out what this thread would. The bands are all handed out at once (this thread is busy eroding and colouring the
+// valley while the workers do the outer grids, and could not hand out more). Where workers can't start, or one fails,
+// the rows are worked out here instead
+function landWorkers(){
+  const K=Math.min(8,(navigator.hardwareConcurrency||2)-1);
+  if(K<1||typeof Worker!=='function'||window.__vtNoLandW)return null;
+  const FN={clamp,lerp,smooth,rng,makeNoise,fbm,ridged,demAt,R1,R2,riverZ,dist,trailDist,natH,badAt,padW,segDist,canyonDist,farLand,
+    smoothArr,gradeClampF,gradeClamp,ringAt,waterCap,ringProfile,gradedH,RRG,roadNear,padGrade,mudH,mudPatch,land,valleyRows,outerRows};
+  const D={TAU,ALPS_R0,WATER_Y,CONN,DUNE,LAKE,ROCKZ,T,LK2,LK2R,WINDR,CANYON,MESAS,PN,GRADE,PR1,PR2,PCON,FX0,roads,VIL_T,VIL_C,
+    RGO,RGC,RGCN,rcell,RQ,houses,RQ3,MUDC,HALF,CELL,NV},keys=Object.keys(D);
+  const src="'use strict';let "+keys.join(',')+";\n"+Object.entries(FN).map(([k,f])=>{const s=String(f);return /^function\b/.test(s)?s:'const '+k+'='+s+';';}).join('\n')+
+    '\nconst nA=makeNoise('+nA.seed+'),nB=makeNoise('+nB.seed+'),nC=makeNoise('+nC.seed+'),nD=makeNoise('+nD.seed+');'+
+    '\nconst LO={h:0,rock:0,mud:0,tw:0,sand:0,dry:0,em:0,rw:0};'+
+    '\nself.onmessage=e=>{const m=e.data;if(m.D){'+keys.map(k=>k+'=m.D.'+k+';').join('')+'return;}'+
+    'try{const o={};for(const a of m.arrs)o[a[0]]=new self[a[1]](a[2]);if(m.g)outerRows(m.g,m.iz0,m.iz1,o,LO);else valleyRows(m.iz0,m.iz1,o,LO);'+
+    'self.postMessage({id:m.id,o},Object.values(o).map(a=>a.buffer));}catch(err){self.postMessage({id:m.id,err:String(err&&err.stack||err)});}};';
+  const B=16,F='Float32Array',VK=['HT','wR','wM','wT','wS','wD','EM','wRd'],OK=[['H',F],['wR',F],['wS',F],['wD',F],['wM',F],['leaf',F],['leafK','Uint8Array']];
+  const VOUT={HT,wR,wM,wT,wS,wD,EM,wRd},GOUT=LGRIDS.map(g=>{const o={};for(const[k,t]of OK)o[k]=new self[t](g.nv*g.nv);return o;});
+  const jobs=[];for(let iz=0;iz<NV;iz+=B){const iz1=Math.min(NV,iz+B);jobs.push({part:0,iz0:iz,iz1,arrs:VK.map(k=>[k,F,(iz1-iz)*NV])});}
+  LGRIDS.forEach((g,gi)=>{for(let iz=0;iz<g.nv;iz+=B){const iz1=Math.min(g.nv,iz+B);jobs.push({part:1,g,gi,iz0:iz,iz1,arrs:OK.map(([k,t])=>[k,t,(iz1-iz)*g.nv])});}});
+  const left=[0,0];for(const j of jobs)left[j.part]++;
+  let res0,rej0,res1,rej1,dead=false,url=null;const ws=[];
+  const valley=new Promise((a,b)=>{res0=a;rej0=b;}),outer=new Promise((a,b)=>{res1=a;rej1=b;});valley.catch(()=>{});outer.catch(()=>{});
+  const end=()=>{for(const w of ws)w.terminate();if(url)URL.revokeObjectURL(url);};
+  const fail=e=>{if(dead)return;dead=true;end();rej0(e);rej1(e);};
+  const onmsg=e=>{if(dead)return;const m=e.data,j=jobs[m.id];if(m.err){fail(new Error(m.err));return;}
+    if(j.part===0){for(const k in m.o)VOUT[k].set(m.o[k],j.iz0*NV);if(--left[0]===0)res0(true);}
+    else{const G=GOUT[j.gi];for(const k in m.o)G[k].set(m.o[k],j.iz0*j.g.nv);if(--left[1]===0){res1(GOUT);end();}}};
+  try{url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    for(let k=0;k<K;k++){const w=new Worker(url);w.onmessage=onmsg;w.onerror=e=>{if(e.preventDefault)e.preventDefault();fail(new Error('land worker: '+(e.message||'failed')));};ws.push(w);w.postMessage({D});}
+    jobs.forEach((j,id)=>ws[id%K].postMessage({id,g:j.part?j.g:null,iz0:j.iz0,iz1:j.iz1,arrs:j.arrs}));}
+  catch(e){fail(e);return null;}
+  return{valley,outer};}
+let LANDW=landWorkers();   // (let go of once the outer grids are in: it holds their copies)
+{const ok=LANDW&&await LANDW.valley.then(()=>true,e=>{console.warn('land workers',e);return false;});
+  if(!ok)valleyRows(0,NV,{HT,wR,wM,wT,wS,wD,EM,wRd},LO);}
 // hydraulic erosion: rain droplets carve gullies into the hills and drop sediment in the hollows.
 // Runs on a 2 m grid; the height change is masked away from trails, water and dunes.
 (()=>{{
@@ -1445,6 +1495,7 @@ const FCOL=new Float32Array(FNN*3),FNRM=new Float32Array(FNN*3),FSPL=new Float32
 const inPaddy=(x,z)=>padW(x,z)>0.5;
 const paddyField=(x,z)=>{const fu=Math.floor((x-PADDY.x0)/36),fw=Math.floor((z-PADDY.z0)/24),hsh=(((fu*73856093)^(fw*19349663))>>>0)%1000/1000;
   const cx=PADDY.x0+(fu+0.5)*36,cz=PADDY.z0+(fw+0.5)*24,grp=fbm(nC,cx*0.0035+4,cz*0.0035-6,2);return grp>0.12&&hsh<0.8?hsh*0.4:0.45+hsh*0.55;};
+let OUTL=LANDW?await LANDW.outer.catch(e=>{console.warn('land workers',e);return null;}):null;
 (()=>{{
   const grids=[{seg:OSEG,nv:ONV,cell:OCELL,x0:-OHM,HT:OHT,SF:OSF,SL:OSL,wR:OwR,wS:OwS,wD:OwD,wM:OwM,COL:OCOL,NRM:ONRM,SPL:OSPL,skip:(x,z)=>Math.max(Math.abs(x),Math.abs(z))<HALF-8},
     {seg:FSEG,nv:FNV,cell:FCELL,x0:FX0,HT:FHT,SF:FSF,SL:FSL,wR:FwR,wS:FwS,wD:FwD,wM:FwM,COL:FCOL,NRM:FNRM,SPL:FSPL,skip:(x,z)=>Math.max(Math.abs(x),Math.abs(z))<OHM-2*FCELL}];
@@ -1454,14 +1505,8 @@ const paddyField=(x,z)=>{const fu=Math.floor((x-PADDY.x0)/36),fw=Math.floor((z-P
   const tc=new THREE.Color(),tr=new THREE.Color(),tr2=new THREE.Color(),fa=0.35,fc=Math.cos(fa),fs=Math.sin(fa),AM=new Float32Array(6);
   const cMdw0=C('#3e5a1c'),cMdw1=C('#56642a'),cMdw2=C('#5d6231'),cMdw3=C('#77703f'),cFor0=C('#17240f'),cFor1=C('#223214'),cRk0=C('#5d5a55'),cRk1=C('#7b746a'),cRk2=C('#45423f'),cSn=C('#eef1f5'),cIce=C('#bfd0dc'),cFlr=C('#2c3a1d');
   const LK=new Float32Array(FNN),LKK=new Uint8Array(FNN),OLK=new Float32Array(ONN),OLKK=new Uint8Array(ONN);
-  for(const G of grids){const {nv,seg,cell,x0,HT:H}=G,leaf=G===grids[0]?OLK:LK,leafK=G===grids[0]?OLKK:LKK;
-    for(let iz=0;iz<nv;iz++){const z=x0+iz*cell;for(let ix=0;ix<nv;ix++){const x=x0+ix*cell;if(G.skip(x,z))continue;const i=ix+iz*nv;
-      land(x,z,LO);H[i]=LO.h;G.wR[i]=LO.rw;G.wS[i]=LO.sand;G.wD[i]=LO.dry;G.wM[i]=LO.mudP||0;
-      // grid points beside a road sit a little below its surface: on these coarse grids a triangle spanning the road
-      // would otherwise rise through the pavement where the road is cut into a slope (saw-tooth steps along its edges,
-      // and a hump the truck's body would strike)
-      if(LO.rk&&!LO.rb&&LO.rd<LO.re+cell*1.3)H[i]=Math.min(H[i],LO.rh-0.1);
-      if(LO.rk==='gk'||LO.rk==='cb'){leaf[i]=smooth(17,6,LO.rd);leafK[i]=LO.rk==='gk'?1:2;}}}
+  for(const G of grids){const {nv,seg,cell,x0,HT:H}=G,gi=G===grids[0]?0:1,leaf=gi?LK:OLK,leafK=gi?LKK:OLKK;
+    {const o={H,wR:G.wR,wS:G.wS,wD:G.wD,wM:G.wM,leaf,leafK},W=OUTL&&OUTL[gi];if(W)for(const k in o)o[k].set(W[k]);else outerRows(LGRIDS[gi],0,nv,o,LO);}
     for(let iz=0;iz<nv;iz++)for(let ix=0;ix<nv;ix++){const x=x0+ix*cell,z=x0+iz*cell;if(G.skip(x,z))continue;const i=ix+iz*nv;
       const gx=(H[Math.min(ix+1,seg)+iz*nv]-H[Math.max(ix-1,0)+iz*nv])/(2*cell),gz=(H[ix+Math.min(iz+1,seg)*nv]-H[ix+Math.max(iz-1,0)*nv])/(2*cell);
       const nl=1/Math.sqrt(gx*gx+1+gz*gz);G.NRM[i*3]=-gx*nl;G.NRM[i*3+1]=nl;G.NRM[i*3+2]=-gz*nl;
@@ -1504,6 +1549,7 @@ const paddyField=(x,z)=>{const fu=Math.floor((x-PADDY.x0)/36),fw=Math.floor((z-P
       if(aw>0){const rk=lerp(rockW,AM[4],aw),sn=lerp(sd,AM[2],aw),d2=dr*(1-aw);G.SPL[i*4]=Math.max(0,1-rk-sn-d2);G.SPL[i*4+1]=d2;G.SPL[i*4+2]=rk;G.SPL[i*4+3]=sn;}
       G.SF[i]=h<WATER_Y&&WET(x,z)?S_WATER:rockW>0.5?S_ROCK:flood>0.5||md>0.45?S_MUD:(sand>0.55&&snow<0.5)?S_SAND:rw>0.55?S_TRAIL:(dirtW>0.5||dry>0.65||fv>0.5||bad>0.6)?S_DIRT:S_GRASS;}}
 }})();
+LANDW=OUTL=null;
 
 
 /* ================= RENDERER / SCENE ================= */
