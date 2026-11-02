@@ -361,6 +361,7 @@ kbd{font-family:var(--f-disp);font-weight:600;font-size:11px;display:inline-bloc
       <p class="eyebrow">물리 기반 4×4 험로 주행</p>
       <h1>계곡 트레일 <span>4×4</span></h1>
       <div class="veh" id="vehPick" role="group" aria-label="차량 선택"><button type="button" data-veh="4x4" aria-pressed="true"><b>트레일마스터 4×4</b><small>V8 트윈터보 · 솔리드 액슬 · 35인치 머드 타이어 · 오프로드 모델</small></button><button type="button" data-veh="hypercar" aria-pressed="false"><b>레부엘토 하이퍼카</b><small>V12 하이브리드 1,000 PS · 하이퍼카 서킷 그리드 출발</small></button></div>
+      <div class="veh" id="seasonPick" role="group" aria-label="계절 선택"><button type="button" data-season="base" aria-pressed="true"><b>기본 계절</b><small>벚꽃과 노란 은행잎 · 늦은 오후의 햇살</small></button><button type="button" data-season="winter" aria-pressed="false"><b>혹한기 겨울</b><small>영하 24°C · 눈 덮인 산과 계곡 · 얼어붙은 강과 호수 위로 주행 · 눈길과 빙판</small></button></div>
       <p class="lede">6 km × 6 km 산악 지대입니다. 가운데 1 km 계곡에는 모래 사구와 암석 협곡, 호수 둑길, 강 도하가 있는 순환 트레일이, 그 둘레에는 4차선 고속도로와 순환 국도, 강변도로, 들마을이 있습니다. 바깥으로는 북쪽 산맥을 넘는 굽잇길 고개와 전망대, 서쪽 메사 협곡과 황무지, 남쪽 논 평야의 은행나무 가로수길과 회전교차로, 동쪽 벚꽃 호수 순환로와 정자, 풍력단지 능선이 여러 갈림길로 이어집니다. 강변도로와 호숫가, 고갯길 아래에는 벚나무가, 순환 국도와 마을길에는 은행나무가 줄지어 서 있고, 동쪽과 북쪽 산에는 산벚꽃이 피었으며, 마을 한가운데에는 금줄을 두른 오래된 은행나무 보호수가 있습니다. 지도 바깥은 실측 고도로 만든 알프스입니다 — 오트사부아 콩블루 일대를 둘러싼 40 km, 남동쪽 19 km에 몽블랑 산군(해발 4,808 m)의 설원과 빙하가 서 있고, 언덕마다 가문비나무 숲이 덮여 있습니다. 지도 끝을 넘어 알프스로 차를 몰고 들어갈 수 있고, N 지도에서 산을 누르면 초파리가 지형을 읽어 오프로드 길을 찾아 갑니다. 하늘의 적운은 햇빛이 구름 속을 지나는 길을 한 걸음씩 따라가며 그린 입체 구름입니다. 4링크 솔리드 액슬의 링크 기하(앤티 스쿼트·롤 스티어·트랙바), 질소 충전 쇽, 하중·공기압·온도·캠버를 반영하는 TMeasy 타이어(Project Chrono 검증 모델), 모래·진흙 침하, 토크 컨버터와 디퍼렌셜이 매 1/360초마다 계산되고, 차체의 강체 운동과 지형·바위·나무·건물·가드레일 충돌은 Jolt Physics 솔버가 풉니다. 서스펜션은 차고(G)에서 세팅하고 차체를 투시해 볼 수 있으며(나사산 코일오버와 스패너 칼라, 벤틸레이티드 디스크와 4피스톤 캘리퍼, 앞바퀴 수동 로킹 허브), J 키로 서스펜션·타이어 텔레메트리를 봅니다.</p>
       <p class="lede"><b>F</b> 키를 누르면 초파리 뇌가 운전합니다. FlyWire 커넥톰의 뉴런 6,865개가 실제 연결대로 발화하고, 그 하강 뉴런이 핸들과 페달을 움직입니다. 뇌 아래 신경삭에는 초파리의 평형곤처럼 뇌를 거치지 않는 빠른 반사 회로가 있어 차선 유지와 속도 조절, 다가오는 장애물 앞 제동을 맡고, 바위·진흙·물·모래나 가파른 비탈이 다가오면 미리 4L과 디퍼렌셜 잠금을 걸고, 벗어나면 4H로 돌아옵니다. 운전석의 초파리는 깃허브 flybody(TuragaLab, Apache-2.0)의 3D 모델 그대로입니다. 메쉬(낱눈 하나하나 솟은 겹눈, 강모, 날개맥)와 골격(몸 마디 67개, MuJoCo 관절의 축·가동 범위)을 그대로 써서, 다리 관절을 역기구학으로 움직여 앞다리로 핸들을 잡고 가운뎃다리로 좌석을 짚고 뒷다리로 페달을 밟습니다 (<b>C</b> 운전석 시점이 조수석 시점으로 바뀝니다). <b>N</b> 키로 목적지를 고르세요.</p>
       <div class="spec" id="introSpec"></div>
@@ -405,9 +406,14 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 const smooth=(e0,e1,x)=>{let t=(x-e0)/(e1-e0);t=t<0?0:t>1?1:t;return t*t*(3-2*t);};
 const C=h=>new THREE.Color(h);
 // which vehicle this load drives (chosen on the start screen; the page reloads with it): the 4x4 or the hypercar
-let VEH='4x4';try{const h=(location.hash||'').slice(1);VEH=h==='4x4'||h==='hypercar'?h:(sessionStorage.getItem('vtVeh')||'4x4');}catch(_){}
+let VEH='4x4';try{const h=(location.hash||'').slice(1).split('~')[0];VEH=h==='4x4'||h==='hypercar'?h:(sessionStorage.getItem('vtVeh')||'4x4');}catch(_){}
 if(VEH!=='4x4'&&VEH!=='hypercar')VEH='4x4';   // (the supercar is no longer offered)
 if(window.__vtVeh)VEH=window.__vtVeh;
+// the season, chosen on the start screen the same way (the page reloads with it; '~winter' after the vehicle on the
+// link's #): the usual one, or a harsh winter: snow over the land, the rivers and lakes frozen hard enough to drive on
+let SEASON='base';try{const p=(location.hash||'').slice(1).split('~');SEASON=p[0]?(p[1]==='winter'?'winter':'base'):(sessionStorage.getItem('vtSeason')||'base');}catch(_){}
+if(window.__vtSeason)SEASON=window.__vtSeason;
+const WINTER=SEASON==='winter';
 // the hypercar runs on the supercar's chassis (wishbones, tyres, aero, gearbox) with a hybrid V12 and the Revuelto's body
 const HC=VEH==='hypercar',SC=VEH==='supercar'||HC;
 const HCP=[];   // the hypercar body's paint materials (they follow the paint swatches)
@@ -895,6 +901,15 @@ const SURF=[
   {name:'하천 자갈',smK:1.6,fsK:0.92,tread:1,E:0.35,mu:0.62,crr:0.035,shape:1.4,zc:0.018,coh:0,dig:0.006,track:null,dust:C('#dfe8e6'),loose:true},
   {name:'아스팔트',smK:1,fsK:0,tread:0.82,pave:1,E:-0.25,mu:0.92,crr:0.012,shape:1.6,zc:0,coh:0,dig:0,track:null,dust:C('#cfcfca'),loose:false},
 ];
+// winter: the ground frozen under 20-40 cm of snow (a tyre sinks a little and the snow packs into its tread: grip near
+// 0.4), the roads ploughed to packed snow with polished ice in the wheel paths, rock iced over, and the water frozen to
+// clear ice (0.14). Every surface throws up snow, and leaves a pressed track in it
+if(WINTER){const SNW=C('#eef3f8'),TRK=C('#aab6c4');
+  SURF.forEach((s,i)=>{
+    if(i===S_ASPH)Object.assign(s,{name:'눈길·빙판',mu:0.36,crr:0.02,E:-0.1,dust:SNW,track:C('#c4ccd6')});
+    else if(i===S_WATER)Object.assign(s,{name:'얼음',smK:1,fsK:0,tread:0.84,E:-0.2,mu:0.14,crr:0.01,shape:1.6,zc:0,coh:0,dig:0,track:null,dust:SNW,loose:false});
+    else if(i===S_ROCK)Object.assign(s,{name:'얼어붙은 암반',mu:0.5,dust:SNW});
+    else Object.assign(s,{name:'눈 덮인 '+s.name,mu:i===S_TRAIL?0.4:0.42,crr:s.crr+0.022,E:Math.max(s.E,0.35),zc:Math.max(s.zc,0.03),coh:Math.max(s.coh,1800),dig:Math.max(s.dig,0.008),track:TRK,dust:SNW,loose:true});});}
 const nA=makeNoise(11),nB=makeNoise(23),nC=makeNoise(37),nD=makeNoise(51);
 const R1=t=>330+60*Math.sin(2*t+1)+30*Math.sin(5*t+0.4);
 const R2=t=>150+35*Math.sin(3*t+2)+15*Math.sin(7*t+1);
@@ -1427,7 +1442,8 @@ function rockTop(x,z){
 // deck — physY is the height of the truck's body during a physics step, so it can still ford the river underneath
 let physY=1e9;const RQ2={d:1e9,h:0,b:0,r:null,k:0,t:0,u:0};
 const onRoad=(x,z)=>{const q=roadNear(x,z,RQ2);return q.r&&q.d<q.r.cls.edge+0.3&&(!q.b||physY>q.h-2.4)?q:null;};
-function groundH(x,z){if(CIRC.on){const c=CIRC.surf(x,z);if(c!==null)return c;}let h=terrainH(x,z);const q=onRoad(x,z);if(q)h=q.b||q.d<q.r.cls.edge-0.25?q.h+0.03:Math.max(h,q.h+0.03);
+function groundH(x,z){if(CIRC.on){const c=CIRC.surf(x,z);if(c!==null)return c;}let h=terrainH(x,z);if(WINTER&&h<WATER_Y+0.05&&WET(x,z))h=WATER_Y+0.05;   // (winter: the ice)
+  const q=onRoad(x,z);if(q)h=q.b||q.d<q.r.cls.edge-0.25?q.h+0.03:Math.max(h,q.h+0.03);
   else if(OUTR_AT!==null&&(Math.abs(x)>3500||Math.abs(z)>3500)){const o=OUTR_AT(x,z,1);if(o&&(physY>1e8||(o.h<physY+0.4&&o.h>physY-4))){if(o.fl&1){if(o.d<o.hw+0.4)h=o.h+0.03;}else if(o.d<o.hw+0.3)h=Math.max(h,o.h+0.03);}}const r=rockTop(x,z);return r>h?r:h;}
 function groundN(x,z,out){const e=0.3;out.set(groundH(x-e,z)-groundH(x+e,z),2*e,groundH(x,z-e)-groundH(x,z+e));return out.normalize();}
 const sfAt=(x,z)=>inValley(x,z)?SF[vIdx(x,z)]:inMid(x,z)?OSF[oIdx(x,z)]:SF_OUT!==null&&!inSq(x,z)?SF_OUT(x,z):FSF[fIdx(x,z)];
@@ -1593,7 +1609,7 @@ renderer.domElement.className='gl';
 renderer.domElement.tabIndex=0;
 app.prepend(renderer.domElement);
 const scene=new THREE.Scene();
-const FOG=C('#a9c0d8');
+const FOG=C(WINTER?'#c4cfdb':'#a9c0d8');
 scene.fog=new THREE.FogExp2(FOG,0.0016);
 const camera=new THREE.PerspectiveCamera(62,app.clientWidth/app.clientHeight,0.12,60000);
 // a late-afternoon sun, 22 degrees up: long shadows, warm light raking across the valley
@@ -1602,7 +1618,7 @@ const sunDir=new V3(-0.66,0.36,-0.62).normalize();
 // haze lit from behind), bluer looking up. Its extinction is per channel (Rayleigh-like: blue fades into the haze first,
 // red last; green as before), so ridges behind ridges layer into blue while warm sunlit faces keep their colour longer
 (()=>{{const {Fn,float,vec3,vec4,uniform,positionWorld,cameraPosition,length,exp,abs,max,dot,pow,mix,smoothstep,clamp,select,output}=TSL;
- const fogC=uniform(FOG),dens=uniform(3.4e-5),SD=vec3(sunDir.x,sunDir.y,sunDir.z);
+ const fogC=uniform(FOG),dens=uniform(WINTER?5.5e-5:3.4e-5),SD=vec3(sunDir.x,sunDir.y,sunDir.z);
  scene.fogNode=Fn(()=>{const fv=positionWorld.sub(cameraPosition).toVar(),fd=length(fv).toVar(),vd=fv.div(max(fd,1e-3)).toVar();
    const HF=1/1500,dy=fv.y.mul(HF).toVar();
    const integ=select(abs(dy).greaterThan(1e-3),float(1).sub(exp(dy.negate())).div(dy),float(1).sub(dy.mul(0.5)));
@@ -1614,9 +1630,10 @@ const sunDir=new V3(-0.66,0.36,-0.62).normalize();
    return vec4(mix(output.rgb,fc,fogF),output.a);})();}})();
 const LPI=Math.PI,PL=137;   // legacy -> physical light units (studio points: legacy falloff at ~8 m)
 // the world's sun and sky (one pair of values: the garage puts these back on the way out)
-const SUN_I=3.0*LPI,HEMI_I=0.8*LPI;
-const hemi=new THREE.HemisphereLight(C('#b3c9e6'),C('#5b4f3b'),HEMI_I);scene.add(hemi);
-const sun=new THREE.DirectionalLight(C('#ffcf98'),SUN_I);
+// (winter: the sun weaker and whiter through the haze, the sky's light stronger, and the snow throwing light back up)
+const SUN_I=(WINTER?2.2:3.0)*LPI,HEMI_I=(WINTER?1.05:0.8)*LPI;
+const hemi=new THREE.HemisphereLight(C(WINTER?'#c9d6e6':'#b3c9e6'),C(WINTER?'#c8ccd2':'#5b4f3b'),HEMI_I);scene.add(hemi);
+const sun=new THREE.DirectionalLight(C(WINTER?'#ffe6cc':'#ffcf98'),SUN_I);
 sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
 const sc=sun.shadow.camera;sc.left=-50;sc.right=50;sc.top=50;sc.bottom=-50;sc.near=1;sc.far=280;
 sun.shadow.bias=-0.0002;sun.shadow.normalBias=0.03;
@@ -1948,9 +1965,14 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
   {const pN=photoN.mul(near).mul(one.sub(rk)).mul(one.sub(wet.mul(0.5))).mul(one.sub(smoothstep(0.12,0.3,slopeK)));nw=normalize(nw.add(vec3(pN.x,0,pN.y.negate())));}
   const rp=puddle.yz;
   nw=normalize(mix(nw,vec3(rp.x.mul(0.05),1,rp.y.mul(0.05)),pud));
+  // winter: snow on everything gentle enough to hold it (it slides off past ~40 degrees, thinner on steep shoulders),
+  // its surface smooth over the ground's fine relief, the puddles frozen and buried under it
+  const snW=WINTER?smoothstep(0.62,0.86,wn.y).mul(det.mul(0.3).add(0.82)).clamp(0,1).toVar():float(0);
+  if(WINTER){m.colorNode=mix(m.colorNode,vec3(0.8,0.84,0.89).mul(det.mul(0.08).add(0.96)),snW);
+    m.roughnessNode=mix(m.roughnessNode,float(0.6),snW);nw=normalize(mix(nw,wn,snW.mul(0.85)));}
   m.normalNode=normalize(cameraViewMatrix.mul(vec4(nw,0)).xyz);
   const V=normalize(cameraPosition.sub(positionWorld)),rv=reflect(V.negate(),nw),frs=pow(one.sub(clamp(dot(nw,V),0,1)),5).mul(0.98).add(0.02);
-  m.emissiveNode=mix(skyMat.uniforms.horizon,skyMat.uniforms.top,pow(clamp(rv.y,0,1),0.45)).mul(frs).mul(pud);
+  m.emissiveNode=mix(skyMat.uniforms.horizon,skyMat.uniforms.top,pow(clamp(rv.y,0,1),0.45)).mul(frs).mul(pud).mul(one.sub(snW));
   const baked=mix(1,sunv,smoothstep(30,44,length(wp.xz.sub(shadowCenter.xz))));
   m.receivedShadowNode=Fn(([sh])=>sh.mul(baked));
   return m;})();
@@ -2030,7 +2052,16 @@ const waterMat=(()=>{const {float,vec2,vec3,vec4,uniform,texture,positionWorld,c
   m.colorNode=vec4(pre.div(max(a,1e-3)),a.mul(smoothstep(3120,3040,max(abs(w.x),abs(w.z)))));
   m.uniforms=U;return m;})();
 waterMat.uniforms.uNorm.value=waterNormals;waterMat.uniforms.uInfo.value=waterInfo;
-const water=W(new THREE.Mesh(new THREE.PlaneGeometry(2*OHALF+400,2*OHALF+400,1,1),waterMat));
+// winter: the water frozen to a sheet of ice, clear and dark blue where deep, milky in the shallows, under drifted snow
+// in patches (from the water's own normal map at two scales), polished where the wind has swept it
+const ICE_MAT=WINTER?(()=>{const {float,vec3,texture,positionWorld,mix,smoothstep,max,abs}=TSL;
+  const m=new THREE.MeshStandardNodeMaterial({transparent:true,depthWrite:true,roughness:0.2,metalness:0,envMapIntensity:1});
+  const w=positionWorld,depth=texture(waterInfo,w.xz.add(OHALF).div(2*OHALF)).x.mul(3);
+  const n1=texture(waterNormals,w.xz.div(23)).x,n2=texture(waterNormals,w.xz.div(5.3)).y,snowy=smoothstep(0.5,0.72,n1.mul(0.7).add(n2.mul(0.3)));
+  const clear=mix(vec3(0.5,0.62,0.7),vec3(0.16,0.27,0.36),smoothstep(0.3,2.5,depth));
+  m.colorNode=mix(clear,vec3(0.84,0.88,0.92),snowy);m.roughnessNode=mix(float(0.1).add(n2.mul(0.12)),float(0.65),snowy);
+  m.opacityNode=smoothstep(0,0.05,depth).mul(smoothstep(3120,3040,max(abs(w.x),abs(w.z))));return m;})():null;
+const water=W(new THREE.Mesh(new THREE.PlaneGeometry(2*OHALF+400,2*OHALF+400,1,1),WINTER?ICE_MAT:waterMat));
 water.rotation.x=-Math.PI/2;water.position.y=WATER_Y;scene.add(water);
 
 /* ================= PROPS ================= */
@@ -2059,7 +2090,7 @@ function fadeTree(mat,imp){if(mat.userData.fadeT)return mat;mat.userData.fadeT=1
   else mat.opacityNode=op.mul(float(1).sub(f));
   return mat;}
 function nearSet(list,parts){
-  const n=list.length,cap=Math.max(1,Math.min(n,4500)),GS=16,cells=new Map(),M=new THREE.Matrix4(),c=new THREE.Color();
+  const n=list.length,cap=Math.max(1,Math.min(n,9000)),GS=16,cells=new Map(),M=new THREE.Matrix4(),c=new THREE.Color();
   const PM=parts.map(()=>new Float32Array(n*16)),PC=parts.map(()=>new Float32Array(n*3));
   list.forEach((t,i)=>{parts.forEach(([,,fill],j)=>{fill(t,M,c);M.toArray(PM[j],i*16);c.toArray(PC[j],i*3);});
     const k=Math.floor(t.x/GS)+','+Math.floor(t.z/GS);if(!cells.has(k))cells.set(k,[]);cells.get(k).push(i);});
@@ -2091,7 +2122,7 @@ function cellInstanced(geo,mat,items,fill,opt={}){
     let lo=null;
     if(opt.lo){const g2=new THREE.BufferGeometry();for(const nm in opt.lo.attributes)g2.setAttribute(nm,opt.lo.attributes[nm]);if(opt.lo.index)g2.setIndex(opt.lo.index);g2.boundingSphere=g.boundingSphere.clone();
       lo=W(new THREE.InstancedMesh(g2,opt.loMat||mat,list.length));lo.instanceMatrix=m.instanceMatrix;lo.instanceColor=m.instanceColor;lo.castShadow=!!opt.cast;lo.receiveShadow=true;scene.add(lo);}
-    propCells.push({m,lo,x:cx,z:cz,off:CS*0.7,far:opt.far===undefined?420:opt.far,near:opt.near||60,min:opt.min===undefined?-1e9:opt.min});
+    propCells.push({m,lo,x:cx,z:cz,off:CS*0.7,far:opt.far===undefined?1e9:opt.far,near:opt.near||60,min:opt.min===undefined?-1e9:opt.min});
   }
 }
 const R=rng(99);
@@ -2360,6 +2391,9 @@ let SHRUB=null;
       for(let k=0;k<len/30;k++){const s=r()*len,px=x0+Math.cos(ang)*s,py=y0+Math.sin(ang)*s;x.strokeStyle=rgb([126,92,58]);x.lineWidth=1.2;x.beginPath();x.moveTo(px,py);x.lineTo(px+(r()-0.5)*10,py+(r()-0.5)*10);x.stroke();}};
     dead(6,384,0,480,4,2);
   });
+  if(WINTER){const cv=needleTex.image,x=cv.getContext('2d'),r=rng(4711);x.save();x.globalCompositeOperation='source-atop';
+    for(let k=0;k<1500;k++){x.fillStyle=`rgba(${232+r()*20|0},${238+r()*14|0},${246+r()*9|0},${0.55+r()*0.4})`;x.beginPath();x.ellipse(r()*cv.width,r()*cv.height,3+r()*11,2+r()*5,(r()-0.5)*0.6,0,TAU);x.fill();}
+    x.restore();needleTex.needsUpdate=true;}   // (winter: snow on the needles)
   const leafTex=sprite(256,256,(x,r)=>{
     x.strokeStyle=rgb([88,72,58]);x.lineWidth=2.4;
     for(let k=0;k<8;k++){const a=r()*TAU;x.beginPath();x.moveTo(128,128);x.quadraticCurveTo(128+Math.cos(a+0.3)*50,128+Math.sin(a+0.3)*50,128+Math.cos(a)*96,128+Math.sin(a)*96);x.stroke();}
@@ -2458,8 +2492,9 @@ let SHRUB=null;
   // cards and impostors carry real colour, so the per-tree tint is only a light shade/hue shift
   const tint=(t,c,warm)=>{const k=(t.rot*5.3)%1;c.setRGB(0.92+0.16*k*warm,0.95+0.1*((t.rot*3.1)%1),0.9+0.12*(1-k)).multiplyScalar(t.shade*lit(t));};
   const NEAR_T=LOWQ?-1e9:45;
-  // hand-over distance between the crossed impostors and the far billboards (per tree, dithered over 40 m)
-  const FARF=[],FAR0=520;
+  // hand-over distance between the crossed impostors and the far billboards (per tree, dithered over 40 m): past the
+  // map's edge, so the impostors carry every tree to the horizon
+  const FARF=[],FAR0=1e6;
   const farOut=mat=>{const {attribute,length,smoothstep,float}=TSL,ip=attribute('ipos','vec3');mat.opacityNode=(mat.opacityNode||float(1)).mul(float(1).sub(smoothstep(FAR0-40,FAR0,length(ip.xz.sub(uViewPos.xz)))));return mat;};
   for(let v=0;v<2;v++){
     const con=trees.filter(t=>!t.sp&&!t.broad&&(Math.floor(t.rot*1000)%2)===v),brd=trees.filter(t=>!t.sp&&t.broad&&(Math.floor(t.rot*1000)%2)===v);
@@ -2472,15 +2507,15 @@ let SHRUB=null;
     const cparts=[[cc,fadeTree(cardMat(needleTex)),conFill],[core,fadeTree(fol),conCore],[trunk,fadeTree(bark),(t,M,c)=>{place(t,M);c.setRGB(1,0.92,0.86).multiplyScalar(lit(t));}]];
     NEARSETS.push(nearSet(con,cparts));
     const cimg=impGeo(ch,cw),cimm=farOut(fadeTree(impMat(ctex),true));
-    cellInstanced(cimg,cimm,con,conFill,{cast:false,h:16,far:760,cs:384,ipos:true});
+    cellInstanced(cimg,cimm,con,conFill,{cast:false,h:16,far:1e9,cs:384,ipos:true});
     if(v===0){CONI={parts:cparts,impGeo:cimg,impMat:cimm,fill:conFill};ALPFAR={tex:ctex,h:ch,w:cw};}
     FARF.push({list:con,tex:ctex,h:ch,w:cw,fill:conFill});
     const BR=BRV[v],bc=broadCards(BR,512+v*77),bw=broadWood(BR,33+v),bcore=broadGeo(BR.map(([a,b,c,d])=>[a,b,c,d*0.5]),1);
     const[bh,bwid]=extent([bc,bw]);
-    const btex=bake([[bw,flat({map:barkTex,color:new THREE.Color().setRGB(0.6902,0.6667,0.6275)})],[bcore,flat({map:foliageTex,vertexColors:true,color:C('#3a5226')})],[bc,flat({map:leafTex,vertexColors:true,alphaTest:0.42,side:THREE.DoubleSide})]],bh,bwid,C('#4a6030'));
+    const btex=bake([[bw,flat({map:barkTex,color:new THREE.Color().setRGB(0.6902,0.6667,0.6275)})],...(WINTER?[]:[[bcore,flat({map:foliageTex,vertexColors:true,color:C('#3a5226')})],[bc,flat({map:leafTex,vertexColors:true,alphaTest:0.42,side:THREE.DoubleSide})]])],bh,bwid,WINTER?C('#6e675f'):C('#4a6030'));   // (bare in winter)
     const brdFill=(t,M,c)=>{place(t,M);tint(t,c,1.4);},brdCore=(t,M,c)=>{place(t,M);c.copy(b1).lerp(b2,(t.rot*3)%1).multiplyScalar(t.shade*lit(t)*0.8);};
-    NEARSETS.push(nearSet(brd,[[bc,fadeTree(cardMat(leafTex)),brdFill],[bcore,fadeTree(fol),brdCore],[bw,fadeTree(bark),(t,M,c)=>{place(t,M);c.setRGB(0.95,0.95,0.97).multiplyScalar(lit(t));}]]));
-    cellInstanced(impGeo(bh,bwid),farOut(fadeTree(impMat(btex),true)),brd,brdFill,{cast:false,h:10,far:760,cs:384,ipos:true});
+    NEARSETS.push(nearSet(brd,[...(WINTER?[]:[[bc,fadeTree(cardMat(leafTex)),brdFill],[bcore,fadeTree(fol),brdCore]]),[bw,fadeTree(bark),(t,M,c)=>{place(t,M);c.setRGB(0.95,0.95,0.97).multiplyScalar(lit(t));}]]));
+    cellInstanced(impGeo(bh,bwid),farOut(fadeTree(impMat(btex),true)),brd,brdFill,{cast:false,h:10,far:1e9,cs:384,ipos:true});
     FARF.push({list:brd,tex:btex,h:bh,w:bwid,fill:brdFill});
   }
   // ---- far forest: one camera-facing billboard per tree past ~480 m, grouped in 1 km cells (culled as cells)
@@ -2639,14 +2674,14 @@ let SHRUB=null;
   const spImpMat=tex=>{const m=windy(new THREE.MeshStandardNodeMaterial({color:new THREE.Color().setRGB(0.93,0.93,0.93),map:tex,alphaTest:0.45,alphaToCoverage:true,side:THREE.DoubleSide,roughness:0.9}),0.014,false,true);
     const {cameraPosition,positionWorld,cameraViewMatrix,vec3,vec4,normalize}=TSL,d=normalize(cameraPosition.xz.sub(positionWorld.xz));
     m.normalNode=normalize(cameraViewMatrix.mul(vec4(normalize(vec3(d.x.mul(0.62),0.62,d.y.mul(0.62))),0)).xyz);return m;};
-  const SPEC=[{key:2,body:cherryBody,atlas:blossomAtlas,bark:cherryBark,barkN:cherryBarkN,cc:new V3(0,4.3,0),cr:4.6,clear:C('#e8ccd3'),seeds:[811,823,857],rough:0.75,far:1150},
-    {key:1,body:ginkgoBody(false),atlas:ginkgoAtlas,bark:ginkgoBark,barkN:ginkgoBarkN,cc:new V3(0,6.5,0),cr:4.2,clear:C('#d6a52c'),seeds:[907,911,929],rough:0.8,far:1050}];
+  const SPEC=[{key:2,body:cherryBody,atlas:blossomAtlas,bark:cherryBark,barkN:cherryBarkN,cc:new V3(0,4.3,0),cr:4.6,clear:C('#e8ccd3'),seeds:[811,823,857],rough:0.75,far:1e9},
+    {key:1,body:ginkgoBody(false),atlas:ginkgoAtlas,bark:ginkgoBark,barkN:ginkgoBarkN,cc:new V3(0,6.5,0),cr:4.2,clear:C('#d6a52c'),seeds:[907,911,929],rough:0.8,far:1e9}];
   const spTint=(key,t,c)=>{const k=(t.rot*5.3)%1;if(key===2)c.setRGB(1.05,0.95+0.04*k,0.95+0.04*k);else{const g=((t.rot*7.7)%1)<0.14;c.setRGB(g?0.86:1,g?1.02:0.96+0.06*k,g?0.6:0.86+0.14*k);}c.multiplyScalar(t.shade*lit(t));};
   const spModel=(S,seed,list,body,cc,cr,far)=>{const G=grow(seed,cc,cr,body,S.key===2?0.66:0.46),[h,wh]=extent([G.cards,G.wood]);
     const woodMat=new THREE.MeshStandardNodeMaterial({color:0xffffff,map:S.bark,normalMap:S.barkN,roughness:0.92});
-    const tex=bake2([[G.wood,flat({map:S.bark,color:new THREE.Color().setRGB(0.8,0.78,0.76)})],[G.cards,flat({map:S.atlas,vertexColors:true,alphaTest:0.42,side:THREE.DoubleSide})]],h,wh,S.clear,512);
-    const fill=(t,M,c)=>{place(t,M);spTint(S.key,t,c);};
-    NEARSETS.push(nearSet(list,[[G.cards,fadeTree(spCardMat(S.atlas,S.rough)),fill],[G.wood,fadeTree(windy(woodMat,0.014,false)),(t,M,c)=>{place(t,M);c.setRGB(1,1,1).multiplyScalar(lit(t));}]]));
+    const tex=bake2([[G.wood,flat({map:S.bark,color:new THREE.Color().setRGB(0.8,0.78,0.76)})],...(WINTER?[]:[[G.cards,flat({map:S.atlas,vertexColors:true,alphaTest:0.42,side:THREE.DoubleSide})]])],h,wh,WINTER?C('#6e675f'):S.clear,512);
+    const fill=WINTER?(t,M,c)=>{place(t,M);c.setRGB(1,1,1).multiplyScalar(lit(t));}:(t,M,c)=>{place(t,M);spTint(S.key,t,c);};   // (bare in winter)
+    NEARSETS.push(nearSet(list,[...(WINTER?[]:[[G.cards,fadeTree(spCardMat(S.atlas,S.rough)),fill]]),[G.wood,fadeTree(windy(woodMat,0.014,false)),(t,M,c)=>{place(t,M);c.setRGB(1,1,1).multiplyScalar(lit(t));}]]));
     cellInstanced(impGeo(h,wh),fadeTree(spImpMat(tex),true),list,fill,{cast:false,h:h+2,far,cs:768,ipos:true});};
   for(const S of SPEC)for(let vi=0;vi<3;vi++){const list=trees.filter(t=>t.sp===S.key&&!t.old&&t.v===vi);if(list.length)spModel(S,S.seeds[vi],list,S.body,S.cc,S.cr,S.far);}
   if(GUARD)spModel(SPEC[1],977,[GUARD],ginkgoBody(true),new V3(0,9,0),7,2400);
@@ -2696,9 +2731,9 @@ const tuftGeo=(n,w,h)=>{const planes=[];for(let k=0;k<n;k++){const q=new THREE.P
   const dryTint=C('#c9b27a');
   cellInstanced(SHRUB.geo,SHRUB.mat,shrubs,(o,M,c)=>{
     q.setFromEuler(new THREE.Euler(o.a*0.3,o.b,o.c*0.3));M.compose(p.set(o.x,o.y+o.r*0.15,o.z),q,s.set(o.r*1.3,o.r*0.75,o.r*1.2));c.setRGB(1,1,1).lerp(dryTint,o.k*0.35).multiplyScalar(0.62+0.38*SUNV[vIdx(o.x,o.z)]);},
-    {cast:true,h:3,far:230,near:LOWQ?-1e9:50,lo:shrubG,loMat:windy(new THREE.MeshStandardNodeMaterial({color:C('#556633'),roughness:1,map:foliageTex}),0.05,false),depth:SHRUB.depth});
-  cellInstanced(tuftGeo(2,1.2,0.65),fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:bladeTex,alphaTest:0.4,roughness:1,envMapIntensity:0.55}),0.1,true)),grass,(o,M,c)=>{
-    q.setFromAxisAngle(new V3(0,1,0),o.rot);M.compose(p.set(o.x,o.y-0.04,o.z),q,s.set(o.s,o.s*(0.8+o.k*0.6),o.s));c.copy(gA).lerp(gB,clamp(o.dry*0.8+o.k*0.3,0,1)).multiplyScalar(0.6+0.4*SUNV[vIdx(o.x,o.z)]);},{h:2,far:110});
+    {cast:true,h:3,far:700,near:LOWQ?-1e9:50,lo:shrubG,loMat:windy(new THREE.MeshStandardNodeMaterial({color:C('#556633'),roughness:1,map:foliageTex}),0.05,false),depth:SHRUB.depth});
+  if(!WINTER)cellInstanced(tuftGeo(2,1.2,0.65),fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:bladeTex,alphaTest:0.4,roughness:1,envMapIntensity:0.55}),0.1,true)),grass,(o,M,c)=>{
+    q.setFromAxisAngle(new V3(0,1,0),o.rot);M.compose(p.set(o.x,o.y-0.04,o.z),q,s.set(o.s,o.s*(0.8+o.k*0.6),o.s));c.copy(gA).lerp(gB,clamp(o.dry*0.8+o.k*0.3,0,1)).multiplyScalar(0.6+0.4*SUNV[vIdx(o.x,o.z)]);},{h:2,far:260});
 }})();
 // instanced detail that lives in tiles around the camera (dense grass, pebbles); tiles refill as you move
 const _gM=new THREE.Matrix4(),_gQ=new QT(),_gS=new V3(),_gP=new V3(),_gC=new THREE.Color(),_gY=new V3(0,1,0),_gE=new THREE.Euler();
@@ -2763,7 +2798,7 @@ function gInfo(x,z){
 // The card grass comes in two layers: the near one (14 m tiles, to ~140 m) and a far one (28 m tiles of larger,
 // sparser tufts, to ~280 m), handing over in a dithered band (GX0..GX1 m) and the far one fading out at GF0..GF1 m,
 // in circles round the camera, so the meadow thins with distance instead of stopping at a square of tiles
-const GX0=108,GX1=128,GF0=235,GF1=275;
+const GX0=108,GX1=128,GF0=300,GF1=350;
 const grassBand=(mat,a,b,inv)=>{const {attribute,length,smoothstep,float,cameraPosition}=TSL,d=length(attribute('ipos','vec3').xz.sub(cameraPosition.xz)),f=smoothstep(a,b,d);
   mat.opacityNode=(mat.opacityNode||float(1)).mul(inv?float(1).sub(f):f);return mat;};
 const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z),sf=g.sf;let pr=sf===S_GRASS?1:sf===S_DIRT?0.3:0;pr*=(1-g.tw)*(1-g.ws)*(1-g.wm)*k;if(c>pr)return false;
@@ -2771,7 +2806,7 @@ const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z),sf=g.sf;let pr
 const grassT=makeTiler({size:14,radius:10,per:840,seed:1,geo:tuftGeo(4,1.25,0.62),
   mat:tileCull(grassBand(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),GX0,GX1,true),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45))).and(within(ip,GX1+1))),
   place:grassPlace(1,1,1)});
-const grassF=makeTiler({size:28,radius:10,per:900,seed:5,geo:tuftGeo(3,1.25,0.62),
+const grassF=makeTiler({size:28,radius:13,per:900,seed:5,geo:tuftGeo(3,1.25,0.62),
   mat:tileCull(grassBand(grassBand(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true),GX0,GX1,false),GF0,GF1,true),
     ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(GX0-1)).and(within(ip,GF1+1))),
   place:grassPlace(0.6,1.9,0.7)});   // (wider, not much taller: a far tuft covers more ground, it is no bush)
@@ -2873,6 +2908,8 @@ const BAR=[],RDMESH=[];let RDMAT=null;const RQT={d:1e9,h:0,b:0,r:null,k:0,t:0,u:
     rc=mix(rc,select(cls.lessThan(5.5),vec3(0.62,0.44,0.05),vec3(0.86,0.66,0.7)).mul(sp.mul(0.3).add(0.8)),drift);}
    const shoulder=smoothstep(hp.add(0.2),hp.add(0.45),au),paint=max(yl,wl);
    mat.colorNode=rc;mat.roughnessNode=mix(mix(float(0.9).sub(n2.mul(0.12)).sub(TSL.dot(at,vec3(0.33)).sub(1).mul(0.06)),0.74,wheel.mul(one.sub(shoulder))),0.6,paint);
+   if(WINTER){const pk=float(0.66).sub(wheel.mul(0.46)).add(shoulder.mul(0.3)).clamp(0,0.94);   // (winter: packed snow, the wheel paths polished to ice)
+     mat.colorNode=mix(rc,vec3(0.76,0.8,0.85),pk);mat.roughnessNode=mix(mat.roughnessNode,mix(float(0.58),float(0.12),wheel),float(0.85));}
    // aggregate relief from the asphalt normal map (tangents from the road's u/v), flatter under paint and in the wheel
    // paths; none on gravel shoulders
    mat.normalNode=TSL.normalMap(texture(PHOTO.tex.asph_n,auv),TSL.vec2(on.mul(0.85).mul(one.sub(paint.mul(0.7))).mul(one.sub(wheel.mul(0.4))).mul(one.sub(shoulder.mul(select(hw,0,1)))).mul(select(gvR,0,1))));}
@@ -2933,8 +2970,8 @@ const BAR=[],RDMESH=[];let RDMAT=null;const RQT={d:1e9,h:0,b:0,r:null,k:0,t:0,u:
     g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex([0,2,1,0,3,2, 4,6,5,4,7,6, 8,10,9, 11,13,12]);g.computeVertexNormals();return g;})();
   const wm=new THREE.MeshStandardNodeMaterial({color:0xffffff,map:wallTex,roughness:0.85}),rm=new THREE.MeshStandardNodeMaterial({color:0xffffff,roughness:0.45,metalness:0.35,side:THREE.DoubleSide});
   const q=new QT(),Y=new V3(0,1,0),tmp=new THREE.Color();
-  cellInstanced(wallG,wm,houses,(o,M,c)=>{q.setFromAxisAngle(Y,o.yaw);M.compose(new V3(o.x,o.y-0.3,o.z),q,new V3(o.w,o.hgt*(o.twoF?1:0.62)+0.3,o.d));c.copy(tmp.set(o.wall));},{cast:true,h:10,far:900});
-  cellInstanced(roofG,rm,houses,(o,M,c)=>{q.setFromAxisAngle(Y,o.yaw);M.compose(new V3(o.x,o.y+o.hgt*(o.twoF?1:0.62),o.z),q,new V3(o.w*1.12,o.d*0.55,o.d*1.1));c.copy(tmp.set(o.roof));},{cast:true,h:10,far:900});
+  cellInstanced(wallG,wm,houses,(o,M,c)=>{q.setFromAxisAngle(Y,o.yaw);M.compose(new V3(o.x,o.y-0.3,o.z),q,new V3(o.w,o.hgt*(o.twoF?1:0.62)+0.3,o.d));c.copy(tmp.set(o.wall));},{cast:true,h:10,far:1e9});
+  cellInstanced(roofG,rm,houses,(o,M,c)=>{q.setFromAxisAngle(Y,o.yaw);M.compose(new V3(o.x,o.y+o.hgt*(o.twoF?1:0.62),o.z),q,new V3(o.w*1.12,o.d*0.55,o.d*1.1));c.copy(tmp.set(o.roof));if(WINTER)c.lerp(tmp.setRGB(0.86,0.89,0.93),0.85);},{cast:true,h:10,far:1e9});
 }})();
 // wind turbines: tapered tower, nacelle, three blades turning at ~13 rpm (rotors are one instanced mesh)
 const windTick=(()=>{if(!TURB.length)return()=>{};
@@ -2959,7 +2996,7 @@ const windTick=(()=>{if(!TURB.length)return()=>{};
     if(ok(x+18,z)&&ok(x+18,z-3)&&ok(x+18,z+3))B.push({x:x+18,z,len:36,rot:0,y:terrainH(x+18,z)});
     if(ok(x,z+12)&&ok(x-3,z+12)&&ok(x+3,z+12))B.push({x,z:z+12,len:24,rot:Math.PI/2,y:terrainH(x,z+12)});}
   const bm=new THREE.MeshStandardNodeMaterial({color:C('#5e7a31'),roughness:0.95});const q=new QT(),Y=new V3(0,1,0);
-  cellInstanced(gB,bm,B,(o,M,c)=>{M.compose(new V3(o.x,o.y-0.12,o.z),q.setFromAxisAngle(Y,o.rot),new V3(o.len,0.4,0.6));c.setRGB(0.9+((o.x*0.37)%0.2),1,0.9);},{cast:false,h:2,far:700,cs:256});}})();
+  cellInstanced(gB,bm,B,(o,M,c)=>{M.compose(new V3(o.x,o.y-0.12,o.z),q.setFromAxisAngle(Y,o.rot),new V3(o.len,0.4,0.6));c.setRGB(0.9+((o.x*0.37)%0.2),1,0.9);},{cast:false,h:2,far:1e9,cs:256});}})();
 // a pavilion (정자) on the lake's north-west shore: stone plinth, red-lacquered posts, curved tiled hip roof
 (()=>{{const px=LK2[0]-(LK2R+30)*0.72,pz=LK2[1]-(LK2R+30)*0.69,py=terrainH(px,pz),g=new THREE.Group();g.position.set(px,py,pz);g.rotation.y=0.8;scene.add(W(g));
   const stone=new THREE.MeshStandardNodeMaterial({color:C('#a39d92'),roughness:0.9}),lac=new THREE.MeshStandardNodeMaterial({color:C('#8c2b1d'),roughness:0.55}),
@@ -2997,6 +3034,17 @@ const windTick=(()=>{if(!TURB.length)return()=>{};
   for(const[a,b]of[[-1.15,-0.75],[0,-0.75],[1.15,-0.75],[-1.15,0.75],[0,0.75],[1.15,0.75]])add(rbox(0.1,0.45,0.1,0.02),wood,px+a*ca+b*sa,0.22,pz-a*sa+b*ca);}})();
 // falling petals and leaves near the camera: each drifts down from a nearby crown, tumbling and swinging in the breeze,
 // lies a moment where it lands, then starts again from another tree
+// winter: snowfall. 24,000 flakes in a 70 m box that follows the camera, each falling at its own pace (0.7-1.3 m/s),
+// drifting with the wind and swaying; worked out on the GPU from the flake's index and the time, so the CPU does nothing
+const SNOWFALL=WINTER?(()=>{const {float,vec2,vec3,vec4,hash,instanceIndex,mod,sin,cos,uv,length,smoothstep,cameraPosition}=TSL;
+  const N=24000,B=70,t=windU.uTime,i=float(instanceIndex),sp=hash(i.add(3.7)).mul(0.6).add(0.7);
+  const base=vec3(hash(i),hash(i.add(17.3)),hash(i.add(41.9))).mul(B);
+  const sway=vec3(sin(t.mul(sp.mul(1.7)).add(i)).mul(0.35),0,cos(t.mul(sp.mul(1.3)).add(i.mul(1.7))).mul(0.35));
+  const raw=base.add(vec3(t.mul(0.9),t.mul(sp).negate(),t.mul(0.45))).add(sway),o=cameraPosition.sub(B/2);
+  const m=new THREE.SpriteNodeMaterial({transparent:true,depthWrite:false,fog:true});
+  m.positionNode=mod(raw.sub(o),B).add(o);m.scaleNode=hash(i.add(9.1)).mul(0.035).add(0.03);
+  m.colorNode=vec4(0.96,0.97,1,smoothstep(0.5,0.18,length(uv().sub(0.5))).mul(0.9));
+  const s=W(new THREE.Sprite(m));s.count=N;s.frustumCulled=false;s.renderOrder=5;scene.add(s);return s;})():null;
 const PETALS=(()=>{
   const mk=draw=>{const cv=document.createElement('canvas');cv.width=cv.height=64;draw(cv.getContext('2d'));const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;return t;};
   const pt=mk(x=>{const g=x.createLinearGradient(32,62,32,4);g.addColorStop(0,'#eeb2c2');g.addColorStop(0.45,'#fde4ea');g.addColorStop(1,'#fff7f9');x.fillStyle=g;
@@ -3010,7 +3058,7 @@ const PETALS=(()=>{
   const spawn=(S,P,now,fresh)=>{P.h=S.H[(Math.random()*S.H.length)|0];const h=P.h,k=h.s*(h.old?1.5:1),a=Math.random()*TAU,rr=Math.sqrt(Math.random())*S.cr*k;
     P.x=Math.cos(a)*rr;P.z=Math.sin(a)*rr;P.y=(S.crown[0]+Math.random()*(S.crown[1]-S.crown[0]))*k;const ft=P.y/S.fall;
     P.gy=groundH(h.x+P.x+wx*ft,h.z+P.z+wz*ft)-h.y;P.dur=ft+2.5+Math.random()*3;P.t0=now-(fresh?Math.random()*P.dur:0);};
-  return{tick(){const now=performance.now()/1000,dt=Math.min(0.1,Math.max(0,now-T));T=now;hostT-=dt;const cx=camera.position.x,cz=camera.position.z;
+  return{tick(){if(WINTER)return;const now=performance.now()/1000,dt=Math.min(0.1,Math.max(0,now-T));T=now;hostT-=dt;const cx=camera.position.x,cz=camera.position.z;
     if(hostT<=0){hostT=0.6;const i0=Math.floor((cx+OHALF)/TG),j0=Math.floor((cz+OHALF)/TG),n=Math.ceil(70/TG);
       for(const S of sets){S.H.length=0;for(let j=j0-n;j<=j0+n;j++)for(let i=i0-n;i<=i0+n;i++){if(i<0||j<0||i>=TGN||j>=TGN)continue;
         for(const t of treeGrid[i+j*TGN])if(t.sp===S.sp&&(t.x-cx)**2+(t.z-cz)**2<4900)S.H.push(t);}S.HS=new Set(S.H);}}
@@ -3131,7 +3179,7 @@ const IE=SC?0.21:0.32,KTC=95,KTC_R=118,TC_LU=SC?120:45;
 const GEARS=SC?[0,3.91,2.44,1.81,1.46,1.19,0.97,0.86]:[0,4.70,3.14,2.10,1.67,1.29,1.00,0.84,0.67],NG=SC?7:8,REV=SC?2.9:3.3,FINAL=SC?2.86:4.30,LOW=SC?1:2.93,EFF=SC?0.92:0.9;   // (4x4 low range as the G-Class's transfer case: 59:1 crawl)
 // low range: highest gear the gearbox will use (about 60 km/h), fastest the transfer case can be shifted into 4L,
 // hill-descent target speed; steering: the cornering load a held steering key asks for at speed
-const LOW_TOP=4,LOW_SHIFT_V=3,HDC_V=1.5,STEER_G=SC?9.5:5.2,MAXLOCK=SC?0.5:0.6;
+const LOW_TOP=4,LOW_VMAX=4300*TAU/60/(GEARS[4]*FINAL*LOW)*RAD,LOW_SHIFT_V=3,HDC_V=1.5,STEER_G=SC?9.5:5.2,MAXLOCK=SC?0.5:0.6;
 // crawl traction control (4L): wheel slip speed allowed before it brakes a tyre and trims the engine, m/s + per m/s
 const TC_LOW=[0.3,0.1];
 const TQ=SC?[[0,0],[800,330],[1500,420],[2500,500],[3500,580],[4500,640],[5500,690],[6750,720],[7500,712],[8250,684],[8700,650],[9200,420]]:[[0,0],[600,300],[1000,560],[1500,780],[2500,850],[3500,850],[4500,820],[5500,750],[6000,670],[6500,450]];   // (4x4: as the G 63's biturbo V8)
@@ -5052,7 +5100,7 @@ const FOAM=(()=>{const N=320,S=128,cv=document.createElement('canvas');cv.width=
     update(dt){for(let i=0;i<N;i++){const f=st[i];if(f.life<=0){fa[i]=0;continue;}f.t+=dt;const u=f.t/f.life;if(u>=1){f.life=0;fa[i]=0;me.setMatrixAt(i,M_.makeScale(0,0,0));continue;}
         const sz=f.s0+(f.s1-f.s0)*(1-Math.pow(1-u,2.2));me.setMatrixAt(i,M_.compose(V_.set(f.x,WATER_Y+0.025,f.z),f.q,S_.set(sz,1,sz)));fa[i]=f.a*Math.pow(1-u,1.6)*Math.min(1,u*10);}
       me.instanceMatrix.needsUpdate=true;geo.attributes.falpha.needsUpdate=true;}};})();
-const WATER_C=C('#e4edf1'),MIST_C=C('#f2f5f6'),MUD_C=[C('#3b2a1b'),C('#4a3725'),C('#2e2216')],MUDMIST_C=C('#6b5a46');let bowT=0,splCD=0;
+const WATER_C=C('#e4edf1'),MIST_C=C('#f2f5f6'),MUD_C=WINTER?[C('#f2f6fa'),C('#e3e9f0'),C('#d7dee7')]:[C('#3b2a1b'),C('#4a3725'),C('#2e2216')],MUDMIST_C=C(WINTER?'#eef2f6':'#6b5a46');let bowT=0,splCD=0;
 // the plunge: a crown of drops thrown up and out round the hull, sheets of spray rising and spreading, a ring of foam and
 // big rings on the water - all as strong as the plunge (k 0..1: its sinking speed and its speed through the water)
 function splashBurst(k){const _b=new V3(),n=Math.round(160+560*k),m=Math.round(8+24*k);
@@ -5622,7 +5670,7 @@ function environment(){
   {const vf=Math.max(0,car.vel.dot(car.fwd)),q=0.6125*vf*vf,lf=SC?-0.3:0.12,lr=SC?-(0.26+0.32*AERO.wing+0.2*AERO.brake):0.18;
     _p.copy(car.pos).addScaledVector(car.fwd,AXZ[0]);_F.copy(car.up).multiplyScalar(q*lf);addForceAt(_F,_p);
     _p.copy(car.pos).addScaledVector(car.fwd,AXZ[1]);_F.copy(car.up).multiplyScalar(q*lr);addForceAt(_F,_p);}
-  if(WET(car.pos.x,car.pos.z)&&terrainH(car.pos.x,car.pos.z)<WATER_Y+0.4){
+  if(!WINTER&&WET(car.pos.x,car.pos.z)&&terrainH(car.pos.x,car.pos.z)<WATER_Y+0.4){
     const sub=clamp((WATER_Y-(car.pos.y-0.8))/1.7,0,1);car.sub=sub;
     if(sub>0){car.force.y+=MASS*9.81*0.28*sub;car.force.addScaledVector(car.vel,-(700+650*sp)*sub);car.torque.addScaledVector(car.w,-3000*sub);}
   }else car.sub=0;
@@ -5775,7 +5823,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
+(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -5962,7 +6010,7 @@ const cam={mode:0,pos:new V3(),look:new V3(),flat:new V3(0,0,1),yaw:2.4,pitch:0.
 function toggleOrbit(){if(cam.mode===3){cam.mode=cam.prev===3?0:cam.prev;}else{cam.prev=cam.mode;cam.mode=3;cam.dragT=0;}cam.init=false;toast(CAMS[cam.mode]);}
 function cycleCam(){cam.mode=(cam.mode+1)%CAMS.length;cam.init=false;toast(cam.mode===1&&FD.G.visible?'조수석 시점 · 운전하는 초파리':CAMS[cam.mode]);}
 function toggleHelp(){$('help').hidden=!$('help').hidden;if(!$('help').hidden&&tele.on)toggleTele();}
-function start(){if(garage.on)exitGarage();if(drive.started)return;drive.started=true;drive.we=IDLE*TAU/60;snd.crankT=0.75;$('intro').hidden=true;initAudio();renderer.domElement.focus();toast(`시동 ON · ${HC?'V12 하이브리드':SC?'V12':'V8'} ${Math.round(PEAK.kw)} kW${HC&&CIRC.on?' · 하이퍼카 서킷 그리드':''}`);setTimeout(()=>{try{flyLoad();}catch(_){}},2500);}
+function start(){if(garage.on)exitGarage();if(drive.started)return;drive.started=true;if(WINTER)setTimeout(()=>toast('혹한기 겨울 · 영하 24°C · 눈길과 빙판, 접지력이 절반 · 강과 호수는 얼어 있어 위로 달릴 수 있습니다'),2800);drive.we=IDLE*TAU/60;snd.crankT=0.75;$('intro').hidden=true;initAudio();renderer.domElement.focus();toast(`시동 ON · ${HC?'V12 하이브리드':SC?'V12':'V8'} ${Math.round(PEAK.kw)} kW${HC&&CIRC.on?' · 하이퍼카 서킷 그리드':''}`);setTimeout(()=>{try{flyLoad();}catch(_){}},2500);}
 function toggleGarage(){if(garage.on){if(garage.fromIntro&&!drive.started)start();else exitGarage();}else enterGarage();}
 addEventListener('keydown',e=>{
   if(e.target&&e.target.tagName==='INPUT')return;
@@ -5986,8 +6034,11 @@ addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
 $('start').addEventListener('click',start);
 // the vehicle: chosen here, kept for the tab (or in the address's #), the page reloads to build it
 document.querySelectorAll('#vehPick button').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.veh===VEH));b.addEventListener('click',()=>{const v=b.dataset.veh;if(v===VEH)return;
-  try{sessionStorage.setItem('vtVeh',v);}catch(_){}try{history.replaceState(null,'','#'+v);}catch(_){try{location.hash=v;}catch(__){}}
-  document.querySelectorAll('#vehPick button').forEach(x=>{x.disabled=true;});$('start').textContent='차량 바꾸는 중…';location.reload();});});
+  const hs=v+(WINTER?'~winter':'');try{sessionStorage.setItem('vtVeh',v);}catch(_){}try{history.replaceState(null,'','#'+hs);}catch(_){try{location.hash=hs;}catch(__){}}
+  document.querySelectorAll('#vehPick button,#seasonPick button').forEach(x=>{x.disabled=true;});$('start').textContent='차량 바꾸는 중…';location.reload();});});
+document.querySelectorAll('#seasonPick button').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.season===SEASON));b.addEventListener('click',()=>{const v=b.dataset.season;if(v===SEASON)return;
+  const hs=VEH+(v==='winter'?'~winter':'');try{sessionStorage.setItem('vtSeason',v);}catch(_){}try{history.replaceState(null,'','#'+hs);}catch(_){try{location.hash=hs;}catch(__){}}
+  document.querySelectorAll('#vehPick button,#seasonPick button').forEach(x=>{x.disabled=true;});$('start').textContent='계절 바꾸는 중…';location.reload();});});
 (()=>{if(SC){document.querySelectorAll('#intro .lede').forEach(p=>{p.innerHTML=p.innerHTML.replace(/4링크 솔리드 액슬[^<]*?봅니다\./,'레부엘토는 바퀴마다 독립된 더블 위시본(바퀴별 비스프링 질량, 스트로크에 따라 변하는 캠버·토·롤 센터, 앤티 다이브·앤티 스쿼트, 앞뒤 스태빌라이저), 앞뒤 따로 맞춘 로우 프로파일 TMeasy 타이어, 차축별 다운포스와 액티브 윙·에어 브레이크, 7단 듀얼 클러치와 런치 컨트롤, 전자식 센터 커플링과 후륜 LSD, 온도에 따라 성능이 변하는 카본 세라믹 브레이크가 매 1/360초마다 계산됩니다. 차체의 강체 운동과 충돌은 Jolt Physics 솔버가 풉니다. 차고(G)에서 차체를 투시하면 V12 엔진과 위시본이 보이고, J 키로 서스펜션·타이어 텔레메트리를 봅니다. 낮은 차라 흙길과 바위는 피하세요 — 포장도로 위에서 출발합니다.');});
 }})();
 (()=>{if(HC){document.title='계곡 트레일 · 하이퍼카 서킷';{const b=document.querySelector('#status .brand');if(b)b.innerHTML='계곡 트레일 <b>HYPER</b>';}const e=document.querySelector('#intro .eyebrow');if(e)e.textContent='하이퍼카 전용 서킷 주행';
@@ -6035,8 +6086,11 @@ const AERO={wing:0,brake:0};
 function scGearbox(dt,vF){
   if(drive.gear>0&&drive.shift<=0&&drive.gearT>0.3&&!drive.flooded){
     const eng=Math.abs(vF)/RAD*GEARS[drive.gear]*FINAL*60/TAU,upAt=2300+6200*Math.pow(drive.thrS,1.4),dnAt=1400+2800*drive.thrS;
-    if(eng>upAt&&drive.gear<NG){drive.gear++;drive.shift=0.09;drive.gearT=0;}
-    else if(eng<dnAt&&drive.gear>1){drive.gear--;drive.shift=0.09;drive.gearT=0;}}
+    // (under the fly: a gear held 1 s, 2 s before going back; no upshift on a lift-off ahead of a slower stretch)
+    const FLY=fly.on&&fly.phase==='drive',av=Math.abs(vF),dwell=d=>drive.gearT>(drive.lastDir===-d&&Math.abs(av-(drive.shiftV??av))<2.5?2:1);
+    const upOK=!FLY||eng>LIMIT-400||(dwell(1)&&!(fly.P.vT<av-1.5&&ctl.throttle<0.1)),dnOK=!FLY||eng<1200||(dwell(-1)&&(fly.P.vT-av>2.5||eng<1800));
+    if(eng>upAt&&drive.gear<NG&&upOK){drive.gear++;drive.shift=0.09;drive.gearT=0;drive.lastDir=1;drive.shiftV=av;}
+    else if(eng<dnAt&&drive.gear>1&&dnOK){drive.gear--;drive.shift=0.09;drive.gearT=0;drive.lastDir=-1;drive.shiftV=av;}}
   const av=Math.abs(vF);AERO.wing+=((av>19.4||(AERO.wing>0.5&&av>13.9)?1:0)-AERO.wing)*Math.min(1,dt*2.5);
   AERO.brake+=((ctl.brake>0.5&&av>36?1:0)-AERO.brake)*Math.min(1,dt*6);
   if(!drive.started||drive.flooded||drive.gear===0){drive.lu=0;return;}
@@ -6083,7 +6137,12 @@ function handleInput(dt){
   ctl.throttle=thr;ctl.brake=brk;
   // the gearbox reads the pedal through a lag (as a real one does), so a foot that hovers doesn't make it hunt; a pedal
   // pushed past 85% kicks down at once
-  drive.thrF=(drive.thrF||0)+(thr-(drive.thrF||0))*Math.min(1,dt*1.4);drive.thrS=thr>0.85?thr:drive.thrF;
+  // The fly's foot flickers with its brain's output, so for the fly the gearbox reads its intent instead: the pedal
+  // averaged over two seconds, or how far short of the planned speed the truck is (brisk, not flat out), whichever asks
+  // for more
+  drive.thrF=(drive.thrF||0)+(thr-(drive.thrF||0))*Math.min(1,dt*1.4);
+  if(flying&&fly.phase==='drive'){drive.flyT=(drive.flyT??thr)+(thr-(drive.flyT??thr))*Math.min(1,dt*0.5);drive.thrS=Math.max(drive.flyT,clamp((fly.P.vT-Math.abs(vF))/10,0,0.7));}
+  else{drive.flyT=drive.thrF;drive.thrS=thr>0.85?thr:drive.thrF;}
   if(garage.on)return;
   let sIn=(lf?1:0)-(rt?1:0);
   if(gp.active&&on&&Math.abs(gp.lx)>0.08)sIn=-gp.lx;
@@ -6106,9 +6165,16 @@ function handleInput(dt){
     // engine from over-revving) and in low range steps down early; low range tops out in 4th
     const coastDown=drive.mode===2&&ctl.throttle<0.05&&gAlong>0.035,maxG=drive.mode===2?LOW_TOP:NG;
     const upAt=coastDown?4800:upR,dnAt=coastDown&&drive.mode===2?1900:dnR;
-    if(drive.gear>maxG){drive.gear--;drive.shift=0.2;drive.gearT=0;drive.lu=0;}
-    else if(sr>upAt&&drive.gear<maxG){drive.gear++;drive.shift=0.25;drive.gearT=0;drive.lu=0;}
-    else if(sr<dnAt&&drive.gear>1){drive.gear--;drive.shift=0.2;drive.gearT=0;drive.lu=0;}
+    // under the fly: a gear held 1.5 s at least, and 3 s before shifting back the other way unless the speed has moved
+    // 2.5 m/s since (hunting happens at a steady speed; pulling away after a corner is not hunting); no upshift on a
+    // lift-off ahead of a slower stretch (the engine brakes) or on a climb; a downshift for a real shortfall in speed or
+    // for low revs. The revs' limits overrule it all (up within 300 rpm of the limiter, down under 1000)
+    const FLY=fly.on&&fly.phase==='drive',av=Math.abs(vF),vT=fly.P.vT,dwell=d=>drive.gearT>(drive.lastDir===-d&&Math.abs(av-(drive.shiftV??av))<2.5?3:1.5);
+    const upOK=!FLY||sr>LIMIT-300||(dwell(1)&&!(vT<av-1.5&&ctl.throttle<0.1)&&!(gAlong<-0.06&&sr<upAt+400));
+    const dnOK=!FLY||sr<1000||(dwell(-1)&&(vT-av>2.5||sr<1300));
+    if(drive.gear>maxG){drive.gear--;drive.shift=0.2;drive.gearT=0;drive.lu=0;drive.lastDir=-1;drive.shiftV=av;}
+    else if(sr>upAt&&drive.gear<maxG&&upOK){drive.gear++;drive.shift=0.25;drive.gearT=0;drive.lu=0;drive.lastDir=1;drive.shiftV=av;}
+    else if(sr<dnAt&&drive.gear>1&&dnOK){drive.gear--;drive.shift=0.2;drive.gearT=0;drive.lu=0;drive.lastDir=-1;drive.shiftV=av;}
   }
   // converter lock-up clutch: engages in the cruising gears once the converter is nearly coupled; in low range
   // it also locks on the overrun, so the engine holds the truck back on a descent instead of the fluid slipping
@@ -6731,7 +6797,7 @@ function updateVisuals(dt){
     const S=SURF[w.surf];
     const slip=Math.abs(w.omega*RAD-w.vx)+Math.abs(w.vy)*0.6,v=Math.abs(w.vx);
     slipSum+=slip;if(S.loose||w.surf===S_TRAIL||w.surf===S_DIRT)loose=true;
-    const inWater=WET(w.cp.x,w.cp.z)&&w.center.y-RAD*0.3<WATER_Y&&terrainH(w.cp.x,w.cp.z)<WATER_Y;
+    const inWater=!WINTER&&WET(w.cp.x,w.cp.z)&&w.center.y-RAD*0.3<WATER_Y&&terrainH(w.cp.x,w.cp.z)<WATER_Y;
     let rate=0;
     if(inWater){rate=v*30+slip*16;splash+=v+slip;
       // where the tyre cuts the surface: rings spreading behind it (with the hull's, a wake), mist off it at speed
@@ -6764,10 +6830,10 @@ function updateVisuals(dt){
       if(v>5&&Math.random()<dt*v*0.9){const k=Math.random();emit(w.cp.x,w.cp.y+0.3,w.cp.z,car.vel.x*0.45+w.sG.x*(k-0.5)*2.5,0.7+k*1.2,car.vel.z*0.45+w.sG.z*(k-0.5)*2.5,MUDMIST_C,0.6,2+v*0.08,1+k*0.7,0.22,0.3,1.3,3);}
       if(!w.inMud&&v>4){const n=Math.round(14+v*2.2);for(let q=0;q<n;q++){const a=(Math.random()-0.5)*2.6,out=1+Math.random()*(1.5+v*0.18),fw=Math.cos(a)*out*0.6,sw=Math.sin(a)*out;
           emit(w.cp.x,w.cp.y+0.1,w.cp.z,car.vel.x*0.55+w.fG.x*fw+w.sG.x*sw,1.5+Math.random()*(2+v*0.15),car.vel.z*0.55+w.fG.z*fw+w.sG.z*sw,MUD_C[q%3],0.03,0.04+Math.random()*0.06,0.8+Math.random()*0.6,0.95,9.8,0.3,2);}
-        car.dirt=Math.min(1,car.dirt+0.004+v*0.0006);}}
+        if(!WINTER)car.dirt=Math.min(1,car.dirt+0.004+v*0.0006);}}
     w.inMud=w.surf===S_MUD&&!inWater;
     layTrack(w,S,!inWater,slip);
-    if(w.surf===S_MUD){car.dirt=Math.min(1,car.dirt+dt*0.005*(Math.min(slip,5)+v*0.35));car.wet=1;}   // (per wheel: x4 for the truck)
+    if(w.surf===S_MUD&&!WINTER){car.dirt=Math.min(1,car.dirt+dt*0.005*(Math.min(slip,5)+v*0.35));car.wet=1;}   // (per wheel: x4 for the truck)
     else if((w.surf===S_SAND||w.surf===S_TRAIL||w.surf===S_DIRT)&&car.dirt<0.45)car.dirt=Math.min(0.45,car.dirt+dt*0.0008*v);   // (dust tops up to a film; it never wipes off caked mud)
   });
   if(car.sub>0&&!garage.on)car.dirt=Math.max(0.02,car.dirt-dt*0.08*car.sub*(0.3+sp*0.2));
@@ -7254,7 +7320,7 @@ const PFX=(()=>{
   // in by Fresnel, fading at the frame's edges, with the ray's length and where the ray turns back toward the camera
   // (depth is read without an explicit level, as the motion blur does: on WebGL three emits a level-0 depth read as a vec4)
   const uVM=uniform(new THREE.Matrix4()),uPM=uniform(new THREE.Matrix4()),uSSR=uniform(0);
-  P.ssr={k:1};   // k: 0..1, how much of the found reflection goes in
+  P.ssr={k:WINTER?0:1};   // k: 0..1, how much of the found reflection goes in (none on winter's ice)
   P.addFX('water reflections',60,(x,S)=>{const {If}=TSL,u=S.u,o=x.toVar();
     const d0=S.dep.sample(u).x,sky=renderer.reversedDepthBuffer?step(d0,0.00001):step(0.99999,d0);
     const Pv=getViewPosition(u,LOGZ?viewZToPerspectiveDepth(viewZ(d0),uNear,uFar):d0,uPInv).toVar(),Pw=uCWm.mul(vec4(Pv,1)).xyz.toVar(),dv=length(Pv);
@@ -7417,17 +7483,20 @@ const PFX=(()=>{
   };
   return P;
 })();
-// ---- graphics quality: always the highest, no tiers and no stepping down. Past the old 울트라: grass blades to 42 m,
-// grass to 140 m and larger far tufts to 275 m, pebbles to 70 m, near trees to 240 m, the finest terrain 2x as far, the frame at up to 2x the CSS
-// resolution (~8 MP). The status panel shows the frame rate.
+// ---- graphics quality: always the highest, no tiers and no stepping down, and no step down with distance either: the
+// terrain at its full resolution over the whole map, every tree drawn out to the map's edge (full models to 400 m, past
+// that crossed impostors baked from them), houses, rocks, fences and bales to the edge too. Grass blades to 42 m, grass
+// to 140 m and larger far tufts to 350 m (past that a blade is under a pixel: the ground's own grass texture carries on),
+// pebbles to 70 m, the frame at up to 2x the CSS resolution (~8 MP). The status panel shows the frame rate.
 const QUAL=(()=>{
-  const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,grassFar:10,peb:7,near:240,lodK:0.0036};
+  const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,grassFar:13,peb:7,near:400,lodK:0};
   const Q={fps:0,fa:0,fn:0};
   Q.apply=()=>{const px=Math.max(1,innerWidth*innerHeight);
     renderer.setPixelRatio(Math.max(0.5,Math.min(window.devicePixelRatio||1,t.pr,Math.sqrt(t.px/px))));
     PFX.useAO=PFX.useSh=PFX.useBl=true;if(PFX.setMSAA)PFX.setMSAA(t.msaa);
-    uNearR.value=t.near;LOD_K=t.lodK;FAR_MAX=1e9;PHOTO.hi.value=1;uGB.value.set(t.gb[0],t.gb[1]);
+    uNearR.value=t.near;LOD_K=t.lodK;FAR_MAX=0;PHOTO.hi.value=1;uGB.value.set(t.gb[0],t.gb[1]);
     bladeT.setRadius(t.blades);if(bladeT.mesh)bladeT.mesh.visible=true;grassT.setRadius(t.grass);grassF.setRadius(t.grassFar);pebT.setRadius(t.peb);
+    if(WINTER)for(const g of[bladeT,grassT,grassF,pebT]){g.setRadius(0);if(g.mesh)g.mesh.visible=false;}   // (winter: under the snow)
     resize();Q.show();};
   Q.show=()=>{const el=$('gfx');if(el)el.textContent=`${t.name} · ${Q.fps||'—'} fps`;};
   Q.tick=raw=>{if(raw>0.25)return;
@@ -7613,7 +7682,7 @@ function buildRoute(ids,goal,tail){
   // rough going (where the fly wants low range): off the pavement on rock, mud, water or sand, or up or down a grade
   // steeper than 14% — not every slow dirt stretch, which 4H in a low gear handles
   const RG_=new Uint8Array(n);for(let i=0;i<n;i++){if(pts[i].pv)continue;const j=Math.min(n-1,i+1),k=Math.max(0,i-1),gr=Math.abs(pts[j].h-pts[k].h)/Math.max(1,S[j]-S[k]),sf=surfaceAt(X[i],Z[i]);
-    RG_[i]=gr>0.14||sf===S_ROCK||sf===S_MUD||sf===S_WATER||sf===S_SAND?1:0;}
+    RG_[i]=gr>0.24||sf===S_ROCK||sf===S_MUD||sf===S_WATER?2:gr>0.14||sf===S_SAND?1:0;}   // (2: needs low range; 1: rough, 4H will do)
   for(let i=n-2;i>=0;i--)V[i]=Math.min(V[i],Math.sqrt(V[i+1]*V[i+1]+2*(pts[i].pv===3?(SC?9:5):pts[i].pv===2?clamp((SC?5.2:3.2)-7*(pts[i].h-pts[i+1].h)/Math.max(0.5,S[i+1]-S[i]),1.6,SC?6.2:3.8):pts[i].pv?(SC?6.2:4):3)*(S[i+1]-S[i])));   // gentler off pavement: descents eat braking
   const TT=new Float32Array(n);for(let i=1;i<n;i++)TT[i]=TT[i-1]+(S[i]-S[i-1])/Math.max(1.5,(V[i]+V[i-1])/2);
   const PV=Uint8Array.from(pts,p=>p.pv===3?3:p.pv===2?2:p.pv?1:0);
@@ -7711,10 +7780,12 @@ function flyPursue(){
   P.u=Math.abs(alpha)>1.3?Math.sign(alpha)*1.2:clamp(delta/fsA+P.eI,-1.3,1.3);P.alpha=alpha;P.eLat=eLat;
   let vT=R.v[bi];for(let q=bi;q<R.n-1&&R.s[q]-R.s[bi]<v*1.2+4;q++)vT=Math.min(vT,R.v[q]);
   {const lm=Math.max(LOOM.L,LOOM.R);if(lm>0.05)vT=Math.min(vT,Math.max(1.5,v*(1-0.55*lm)));}
-  if(R.rough&&drive.mode!==2)for(let q=bi;q<R.n&&R.s[q]-R.s[bi]<45;q++)if(R.rough[q]){vT=Math.min(vT,Math.max(6.5,Math.sqrt(2*3*Math.max(0,R.s[q]-R.s[bi]-6))+6.5));break;}
+  if(R.rough&&drive.mode!==2)for(let q=bi;q<R.n&&R.s[q]-R.s[bi]<45;q++)if(R.rough[q]===2){vT=Math.min(vT,Math.max(6.5,Math.sqrt(2*3*Math.max(0,R.s[q]-R.s[bi]-6))+6.5));break;}
   // and no faster than the turn being made right now allows (the path's plan runs ahead of a truck still mid-corner)
   const latNow=R.pv&&R.pv[bi]===3?(SC?9:4):SC?2.2:2.8,kNow=Math.abs(2*Math.sin(alpha)/Math.max(ld,dist));if(kNow>0.02)vT=Math.min(vT,Math.max(2.5,Math.sqrt(latNow/kNow)));
   if(Math.abs(alpha)>0.9)vT=Math.min(vT,3.5);
+  if(drive.mode===2&&!SC)vT=Math.min(vT,LOW_VMAX);
+  if(WINTER)vT*=0.72;   // (on snow and ice: about half the grip, so a third less speed through the same bends)   // (low range tops out near 35 km/h: for more, the range goes back to 4H)
   P.rem=R.s[R.n-1]-R.s[bi]+(bi>=R.n-1?P.xte:0);if(!R.goal.loop)vT=Math.min(vT,Math.sqrt(2*1.8*Math.max(0,P.rem-5)));
   P.vT=vT;P.head=Math.atan2(car.fwd.x,-car.fwd.z);P.goalB=Math.atan2(dx,-dz);
 }
@@ -7770,6 +7841,10 @@ function flyReflex(v){
   return clamp(delta/maxA,-1,1);}
 // the speed loop: pedals trimmed toward the planned speed (proportional plus a slow integral), braking harder the
 // further over it the truck is
+// the gear for this speed in the range now selected: the highest that keeps the engine over 1500 rpm (first, below that)
+function flyGear(v){if(SC||drive.gear<0)return;const k=FINAL*(drive.mode===2?LOW:1),maxG=drive.mode===2?LOW_TOP:NG;let g=1;
+  for(let i=maxG;i>=1;i--)if(v/RAD*GEARS[i]*k*60/TAU>=1500){g=i;break;}
+  if(g!==drive.gear){drive.lastDir=Math.sign(g-drive.gear);drive.gear=g;drive.shift=0.25;drive.gearT=0;drive.lu=0;drive.shiftV=v;}}
 function flySpeedLoop(vT,v,dt){const e=vT-v;FX.vI=clamp(FX.vI+e*dt*0.1,-0.3,0.6);const u=0.32*e+FX.vI;return{fwd:clamp(u,0,1),brk:clamp(-u*0.7,0,1)};}
 // ---- the loop: senses → brain → descending neurons → pedals and steering
 function flyUpdate(dt){
@@ -7789,11 +7864,15 @@ function flyUpdate(dt){
     else if(recent>=2&&(drive.mode!==2||!drive.lock)){drive.mode=2;drive.lock=true;toast('초파리 · 막힘 → 4L 저속 · 디퍼렌셜 잠금');}
     else toast('초파리 · 막힘 → LPC1 → MDN 후진');flyPanelState();}
   if(fly.phase==='back'){fly.phaseT-=dt;if(fly.phaseT<=0){fly.phase='drive';flyPanelState();}}
-  if(fly.phase==='drive'&&fly.route&&fly.route.rough){const R=fly.route;fly.rgT=(fly.rgT||0)-dt;
-    if(fly.rgT<=0){fly.rgT=0.4;let near=false,far=false;for(let i=fly.ri;i<R.n&&R.s[i]-R.s[fly.ri]<90;i++)if(R.rough[i]){if(R.s[i]-R.s[fly.ri]<40)near=true;far=true;}
-      if(near&&drive.mode!==2&&v<6){drive.mode=2;drive.lock=true;toast('초파리 · 앞길이 험함 → 4L 저속 · 디퍼렌셜 잠금');}
-      else if(!far&&drive.mode===2&&!fly.stuckLog.some(t=>fly.clk-t<30)&&wheels.every(w=>w.surf!==S_WATER&&w.surf!==S_MUD&&w.surf!==S_ROCK)){drive.mode=1;drive.lock=false;}}}
-  if(drive.mode===2&&fly.phase==='drive'&&wheels.every(w=>w.surf===S_ASPH)&&!fly.stuckLog.some(t=>fly.clk-t<30)){drive.mode=1;drive.lock=false;}
+  // the transfer case: low range for what needs it (a pitch over 24%, mud, water or rock within 35 m, or after being stuck),
+  // taken at walking pace; back to 4H once the next 80 m are clear of it. Never a change within 6 s of the last (no
+  // flip-flopping), and each change picks the gear for the speed at once. The lockers go in only after being stuck
+  if(fly.phase==='drive'&&fly.route&&fly.route.rough&&!SC){const R=fly.route;fly.rgT=(fly.rgT||0)-dt;
+    if(fly.rgT<=0){fly.rgT=0.4;let hard=1e9;for(let i=fly.ri;i<R.n&&R.s[i]-R.s[fly.ri]<90;i++)if(R.rough[i]===2){hard=R.s[i]-R.s[fly.ri];break;}
+      const stuck=fly.stuckLog.some(t=>fly.clk-t<30),since=fly.clk-(fly.rangeT??-1e9);
+      if(drive.mode!==2&&v<6&&since>6&&(hard<35||stuck)){drive.mode=2;fly.rangeT=fly.clk;flyGear(v);toast('초파리 · 앞길이 험함 → 4L 저속');}
+      else if(drive.mode===2&&since>6&&!stuck&&hard>80&&wheels.every(w=>w.surf!==S_WATER&&w.surf!==S_MUD&&w.surf!==S_ROCK)){drive.mode=1;drive.lock=false;fly.rangeT=fly.clk;flyGear(v);toast('초파리 · 길이 순해짐 → 4H');}}}
+  if(drive.mode===2&&fly.phase==='drive'&&!SC&&wheels.every(w=>w.surf===S_ASPH)&&!fly.stuckLog.some(t=>fly.clk-t<30)&&fly.clk-(fly.rangeT??-1e9)>6){drive.mode=1;drive.lock=false;fly.rangeT=fly.clk;flyGear(v);}
   // senses → input neuron rates (20 Hz)
   fly.sendT-=dt;
   if(fly.sendT<=0){fly.sendT=0.05;const I=fly.inR,e=P.vT-v;flyLoom();
@@ -8229,7 +8308,7 @@ try{
     const d2=vec2(vn(q2.add(vec2(0.37,0))).sub(vn(q2.sub(vec2(0.37,0)))),vn(q2.add(vec2(0,0.37))).sub(vn(q2.sub(vec2(0,0.37))))).mul(det.mul(0.3));
     const d3=vec2(vn(q3.add(vec2(0.37,0))).sub(vn(q3.sub(vec2(0.37,0)))),vn(q3.add(vec2(0,0.37))).sub(vn(q3.sub(vec2(0,0.37))))).mul(det.mul(smoothstep(900,150,dist)).mul(0.22));
     Nn.assign(normalize(Nn.add(vec3(d2.x.add(d3.x),0,d2.y.add(d3.y)))));
-    const vis=A.x,ao=A.y,snow=A.z,forest=B.x,rock=B.y,ice=B.z;
+    const vis=A.x,ao=A.y,snow=WINTER?A.z.max(smoothstep(0.55,0.82,Nn.y).mul(float(1).sub(B.x.mul(0.55)))):A.z,forest=B.x,rock=B.y,ice=B.z;
     const n1=vn(g.xz.div(170)),n2=vn(g.xz.div(41).add(vec2(5.2,1.3))),n3=vn(g.xz.div(7.5).add(vec2(2.1,7.7)));
     // alpine pasture, drier and more golden high up
     const up=smoothstep(900,2000,g.y);
