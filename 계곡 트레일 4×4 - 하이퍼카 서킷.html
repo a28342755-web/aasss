@@ -1641,6 +1641,7 @@ const hemi=new THREE.HemisphereLight(C(NIGHT?'#506a96':WINTER?'#c9d6e6':'#b3c9e6
 const sun=new THREE.DirectionalLight(C(NIGHT?'#aab9d6':WINTER?'#ffe6cc':'#ffcf98'),SUN_I);
 sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
 const sc=sun.shadow.camera;sc.left=-50;sc.right=50;sc.top=50;sc.bottom=-50;sc.near=1;sc.far=280;
+sc.layers.enable(1);   // (layer 1: shadow-only copies of models, which the cameras don't see)
 sun.shadow.bias=-0.0002;sun.shadow.normalBias=0.03;
 const SUN_R=new V3().crossVectors(sunDir,new V3(0,1,0)).normalize(),SUN_U=new V3().crossVectors(SUN_R,sunDir).normalize();
 scene.add(sun);scene.add(sun.target);
@@ -2117,25 +2118,49 @@ function fadeTree(mat,imp){if(mat.userData.fadeT)return mat;mat.userData.fadeT=1
   // crown. Its shadow stays, as the shadow pass measures from the light)
   else mat.opacityNode=op.mul(float(1).sub(f)).mul(smoothstep(2.2,4.8,length(ip.xz.sub(TSL.cameraPosition.xz))));
   return mat;}
-function nearSet(list,parts){
+function nearSet(list,parts,opt={}){
+  // (opt.R: a radius of its own instead of the trees' one; opt.cast false: no shadow copies)
   const n=list.length,cap=Math.max(1,Math.min(n,9000)),GS=16,cells=new Map(),M=new THREE.Matrix4(),c=new THREE.Color();
   const PM=parts.map(()=>new Float32Array(n*16)),PC=parts.map(()=>new Float32Array(n*3));
   list.forEach((t,i)=>{parts.forEach(([,,fill],j)=>{fill(t,M,c);M.toArray(PM[j],i*16);c.toArray(PC[j],i*3);});
     const k=(Math.floor(t.x/GS)+4096)*8192+Math.floor(t.z/GS)+4096;if(!cells.has(k))cells.set(k,[]);cells.get(k).push(i);});
   const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3).setUsage(THREE.DynamicDrawUsage);
+  const shadows=[];
   const meshes=parts.map(([geo,mat])=>{const g=new THREE.BufferGeometry();for(const nm in geo.attributes)g.setAttribute(nm,geo.attributes[nm]);if(geo.index)g.setIndex(geo.index);g.setAttribute('ipos',ipa);
-    const m=W(new THREE.InstancedMesh(g,mat,cap));m.count=0;m.frustumCulled=false;m.castShadow=true;m.receiveShadow=true;
-    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3).setUsage(THREE.DynamicDrawUsage);scene.add(m);return m;});
-  let lx=1e9,lz=1e9,lr=-1;
-  // (refilled every 10 m of camera travel, with the trees out to R + 12 m: any within R of where the camera has got to
-  // since are in; numeric cell keys, as a 400 m radius visits ~2,600 cells per set each time)
-  return{meshes,reset(){lx=1e9;},update(x,z,R){if(Math.hypot(x-lx,z-lz)<10&&R===lr)return;lx=x;lz=z;lr=R;
-    const Rr=R+12,R2=Rr*Rr;let k=0;
+    const m=W(new THREE.InstancedMesh(g,mat,cap));m.name='near trees '+n+' part';m.count=0;m.frustumCulled=false;m.receiveShadow=true;
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3).setUsage(THREE.DynamicDrawUsage);scene.add(m);
+    // its shadow: the same model, material and instance buffers, seen only by the sun's shadow camera (layer 1) and
+    // drawn only as far as the trees that can reach the shadow map, which come first in the buffers. (The trees cast
+    // none themselves: every one out to 400 m went through the shadow pass, for a shadow map 100 m across.)
+    const s=W(new THREE.InstancedMesh(g,mat,cap));s.name=m.name+' shadow';s.instanceMatrix=m.instanceMatrix;s.instanceColor=m.instanceColor;
+    if(opt.cast!==false){s.count=0;s.frustumCulled=false;s.castShadow=true;s.layers.set(1);scene.add(s);shadows.push(s);}return m;});
+  const DEF=new Int32Array(n),DK=new Float64Array(n),KS=2**Math.ceil(Math.log2(n+1));
+  // (copied element by element: a subarray per tree and part was thousands of throwaway objects every refill)
+  const MA=meshes.map(m=>m.instanceMatrix.array),CA=meshes.map(m=>m.instanceColor.array),NM=meshes.length;
+  const put=(i,k)=>{const t=list[i],i16=i*16,k16=k*16,i3=i*3,k3=k*3;
+    for(let j=0;j<NM;j++){const A=MA[j],P=PM[j],B=CA[j],Q=PC[j];for(let q=0;q<16;q++)A[k16+q]=P[i16+q];B[k3]=Q[i3];B[k3+1]=Q[i3+1];B[k3+2]=Q[i3+2];}
+    IP[k3]=t.x;IP[k3+1]=t.y!==undefined?t.y:PM[0][i16+13];IP[k3+2]=t.z;};
+  let lx=1e9,lz=1e9,lr=-1,sx=1e9,sy=0,sz=1e9;
+  // (refilled every 10 m of camera or truck travel, with the trees out to R + 12 m: any within R of where the camera
+  // has got to since are in; numeric cell keys, as a 400 m radius visits ~2,600 cells per set each time)
+  return{meshes,reset(){lx=1e9;},update(x,z,R){const C=car.pos;R=opt.R||R;
+    if(Math.hypot(x-lx,z-lz)<10&&Math.hypot(C.x-sx,C.z-sz)<10&&Math.abs(C.y-sy)<10&&R===lr)return;lx=x;lz=z;lr=R;sx=C.x;sy=C.y;sz=C.z;
+    const Rr=R+12,R2=Rr*Rr;let k=0,nd=0;
+    // the shadow map is a 100 m box round the truck in the sun's frame (across the sun, up its light, and along it to
+    // the shadow camera's depth range): a tree is in it if any of it (crown 8 m, up to 30 m tall) is, with 14 m to spare
+    // for the truck's travel until the next refill
+    const ar=SUN_R.x,az=SUN_R.z,ux=SUN_U.x,uy=SUN_U.y,uz=SUN_U.z,dx=sunDir.x,dy=sunDir.y,dz=sunDir.z;
     for(let cz=Math.floor((z-Rr)/GS);cz<=Math.floor((z+Rr)/GS);cz++)for(let cx=Math.floor((x-Rr)/GS);cx<=Math.floor((x+Rr)/GS);cx++){const L=cells.get((cx+4096)*8192+cz+4096);if(!L)continue;
-      for(const i of L){const t=list[i];if((t.x-x)**2+(t.z-z)**2>R2||k>=cap)continue;
-        for(let j=0;j<meshes.length;j++){meshes[j].instanceMatrix.array.set(PM[j].subarray(i*16,i*16+16),k*16);meshes[j].instanceColor.array.set(PC[j].subarray(i*3,i*3+3),k*3);}
-        IP[k*3]=t.x;IP[k*3+1]=t.y;IP[k*3+2]=t.z;k++;}}
-    for(const m of meshes){m.count=k;m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;}ipa.needsUpdate=true;}};
+      for(const i of L){const t=list[i],d2=(t.x-x)**2+(t.z-z)**2;if(d2>R2)continue;
+        const ex=t.x-sx,ey=(t.y!==undefined?t.y:PM[0][i*16+13])-sy,ez=t.z-sz,a=ex*ar+ez*az,u=ex*ux+ey*uy+ez*uz,w=ex*dx+ey*dy+ez*dz;
+        if(Math.abs(a)<72&&u<72&&u>-100&&w>-175&&w<162&&k<cap)put(i,k++);else{DK[nd]=Math.floor(d2)*KS+nd;DEF[nd++]=i;}}}
+    const ns=k;
+    // the rest after them; nearest first when there are more than the meshes hold
+    if(ns+nd>cap){const ks=DK.subarray(0,nd).sort();for(let j=0;j<nd&&k<cap;j++)put(DEF[ks[j]%KS],k++);}
+    else for(let j=0;j<nd;j++)put(DEF[j],k++);
+    // (only the instances in use are uploaded; a range still pending from an earlier refill is inside this one or past the count)
+    for(const m of meshes){m.count=k;if(k){for(const A of[m.instanceMatrix,m.instanceColor])A.clearUpdateRanges();m.instanceMatrix.addUpdateRange(0,k*16);m.instanceColor.addUpdateRange(0,k*3);m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;}}
+    for(const s of shadows)s.count=ns;if(k){ipa.clearUpdateRanges();ipa.addUpdateRange(0,k*3);ipa.needsUpdate=true;}}};
 }
 function cellInstanced(geo,mat,items,fill,opt={}){
   // drawn out to the map's edge with one look (no near/far pair of models): one instanced mesh for the lot. Every mesh
@@ -2149,13 +2174,15 @@ function cellInstanced(geo,mat,items,fill,opt={}){
   // in all (with the shadow pass) where one per cell for each pass took ~200 a frame; the far one casts no shadow (the
   // shadow map only covers the ground round the truck, well inside opt.near)
   if(opt.lo&&!(opt.far<1e9)&&!window.__vtCells){const n=items.length;if(!n)return;const NR=opt.near||60;
-    const M=new THREE.Matrix4(),c=new THREE.Color(),ip=new THREE.InstancedBufferAttribute(new Float32Array(n*3),3);let hi=null;
-    const mk=(g0,m0,nearSide,cast)=>{const g=new THREE.BufferGeometry();for(const nm in g0.attributes)g.setAttribute(nm,g0.attributes[nm]);if(g0.index)g.setIndex(g0.index);g.setAttribute('ipos',ip);
-      const mm=tileCull(m0.clone(),q=>{const d=q.xz.sub(TSL.cameraPosition.xz).length();return nearSide?d.lessThan(NR):d.greaterThanEqual(NR);});
-      const m=W(new THREE.InstancedMesh(g,mm,n));m.frustumCulled=false;m.castShadow=cast;m.receiveShadow=true;
-      if(hi){m.instanceMatrix=hi.instanceMatrix;m.instanceColor=hi.instanceColor;}else items.forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);ip.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);});
-      scene.add(m);return m;};
-    hi=mk(geo,mat,true,!!opt.cast);mk(opt.lo,opt.loMat||mat,false,false);return;}
+    const M=new THREE.Matrix4(),c=new THREE.Color(),ip=new THREE.InstancedBufferAttribute(new Float32Array(n*3),3);
+    const g=new THREE.BufferGeometry();for(const nm in opt.lo.attributes)g.setAttribute(nm,opt.lo.attributes[nm]);if(opt.lo.index)g.setIndex(opt.lo.index);g.setAttribute('ipos',ip);
+    const mm=tileCull((opt.loMat||mat).clone(),q=>q.xz.sub(TSL.cameraPosition.xz).length().greaterThanEqual(NR));
+    const m=W(new THREE.InstancedMesh(g,mm,n));m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;
+    items.forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);ip.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);});scene.add(m);
+    // the near model: only the items round the camera, as the near trees are (refilled as it moves, with shadow-only
+    // copies of those that can reach the shadow map), the GPU keeping the ones inside NR. (One mesh over every item
+    // ran the detailed model's vertices for all of them, in the shadow pass too, to show the few close by.)
+    if(NR>0)NEARSETS.push(nearSet(items,[[geo,tileCull(mat.clone(),q=>q.xz.sub(TSL.cameraPosition.xz).length().lessThan(NR)),fill]],{R:NR,cast:!!opt.cast}));return;}
   const CS=one?1e7:opt.cs||128,NCs=Math.ceil(2*OHALF/CS),buckets=new Map();
   for(const it of items){const k=Math.floor((it.x+OHALF)/CS)+Math.floor((it.z+OHALF)/CS)*NCs;if(!buckets.has(k))buckets.set(k,[]);buckets.get(k).push(it);}
   const M=new THREE.Matrix4(),c=new THREE.Color();
@@ -2803,47 +2830,75 @@ const tuftGeo=(n,w,h)=>{const planes=[];for(let k=0;k<n;k++){const q=new THREE.P
 // instanced detail that lives in tiles around the camera (dense grass, pebbles); tiles refill as you move
 const _gM=new THREE.Matrix4(),_gQ=new QT(),_gS=new V3(),_gP=new V3(),_gC=new THREE.Color(),_gY=new V3(0,1,0),_gE=new THREE.Euler();
 function makeTiler(o){
-  // every tile around the camera owns a fixed slot of o.per instances (unused ones collapsed to nothing), so the
-  // whole field is one draw and only the slots of tiles that change are uploaded
-  const RMAX=o.radius,N=(2*RMAX+1)**2,per=o.per,cap=N*per;
+  // The tiles round the camera share one pool of instances in pages of 64: a tile takes as many pages as it has
+  // instances to show (a forest floor's few tufts one page, a meadow's a dozen), and the one draw covers the pages in
+  // use. (With a fixed slot of o.per instances for every tile, mostly empty, the vertex stage ran through every one of
+  // them all the same: millions of vertices a frame for nothing.) Only pages that change are uploaded: a tile's when it
+  // is filled, a freed one's when it is cleared, never the whole pool, and the top page moves into the lowest hole so
+  // the draw stays short as tiles come and go.
+  // (a layer of only a few per tile, the winter stumps' six, has pages that size: one page a tile)
+  const RMAX=o.radius,per=o.per,PG=Math.min(64,per),NP=(2*RMAX+1)**2*Math.ceil(per/PG),cap=NP*PG;
   const g=new THREE.BufferGeometry();for(const nm in o.geo.attributes)g.setAttribute(nm,o.geo.attributes[nm]);if(o.geo.index)g.setIndex(o.geo.index);
   // each instance's origin rides along (ipos) so the vertex stage can drop whole instances behind the camera or out of range
   const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3).setUsage(THREE.DynamicDrawUsage);g.setAttribute('ipos',ipa);
-  const m=W(new THREE.InstancedMesh(g,o.mat,cap)),zero=new THREE.Matrix4().makeScale(0,0,0),white=new THREE.Color(1,1,1);
-  for(let i=0;i<cap;i++){m.setMatrixAt(i,zero);m.setColorAt(i,white);}
+  const m=W(new THREE.InstancedMesh(g,o.mat,cap));m.name='tiles '+o.size+'m x'+o.per;
+  const MA=m.instanceMatrix.array;MA.fill(0);   // (every instance starts collapsed to nothing)
+  m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3).fill(1),3);const CA=m.instanceColor.array;
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);m.instanceColor.setUsage(THREE.DynamicDrawUsage);
-  m.frustumCulled=false;m.receiveShadow=true;m.castShadow=!!o.cast;scene.add(m);
-  const slots=[];for(let k=0;k<N;k++)slots.push({k,key:null,tx:0,tz:0,todo:false,d:0});
-  let last='',rad=RMAX,queue=[];const dirtyK=new Set();
-  const upd=k=>{dirtyK.add(k);};
-  const clear=sl=>{const b=sl.k*per;for(let i=0;i<per;i++)m.setMatrixAt(b+i,zero);sl.key=null;sl.todo=false;upd(sl.k);};
-  // the dirty slots' uploads: one write per run of neighbouring slots (one span when there are many)
-  const flush=()=>{if(!dirtyK.size)return;const ks=[...dirtyK].sort((a,b)=>a-b);dirtyK.clear();
-    for(const A of[m.instanceMatrix,m.instanceColor,ipa])A.clearUpdateRanges();
-    const add=(k0,k1)=>{const n=k1-k0+1;m.instanceMatrix.addUpdateRange(k0*per*16,n*per*16);m.instanceColor.addUpdateRange(k0*per*3,n*per*3);ipa.addUpdateRange(k0*per*3,n*per*3);};
-    if(ks.length>6)add(ks[0],ks[ks.length-1]);else{let a=ks[0],b=a;for(let i=1;i<ks.length;i++){if(ks[i]===b+1)b=ks[i];else{add(a,b);a=b=ks[i];}}add(a,b);}
-    m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;ipa.needsUpdate=true;};
-  const fill=(sl,tx,tz)=>{sl.todo=false;const b=sl.k*per,r=rng(((tx*73856093)^(tz*19349663)^o.seed)>>>0);let n=0;
-    for(let k=0;k<per;k++){const x=(tx+r())*o.size,z=(tz+r())*o.size,a=r(),bb=r(),c=r();
-      if((Math.abs(x)>OHALF-2||Math.abs(z)>OHALF-2)&&OUTER_H===null)continue;if(o.place(x,z,a,bb,c,_gM,_gC)){m.setMatrixAt(b+n,_gM);m.setColorAt(b+n,_gC);IP[(b+n)*3]=_gM.elements[12];IP[(b+n)*3+1]=_gM.elements[13];IP[(b+n)*3+2]=_gM.elements[14];n++;}}
-    for(;n<per;n++)m.setMatrixAt(b+n,zero);upd(sl.k);};
+  m.count=0;m.frustumCulled=false;m.receiveShadow=true;m.castShadow=!!o.cast;scene.add(m);
+  const used=new Uint8Array(NP),own=new Array(NP).fill(null),dirtyA=new Set(),dirtyM=new Set();let top=0,low=0,nUsed=0;
+  const alloc=()=>{while(low<NP&&used[low])low++;if(low>=NP)return -1;const p=low++;used[p]=1;nUsed++;if(p>=top)top=p+1;return p;};
+  // a freed page under the top is cleared (the draw still covers it); the top one needs nothing, the draw stops short of it
+  const release=p=>{used[p]=0;own[p]=null;nUsed--;if(p<low)low=p;
+    if(p<top-1){MA.fill(0,p*PG*16,(p+1)*PG*16);dirtyM.add(p);}
+    while(top>0&&!used[top-1])top--;};
+  const TM=new Float32Array(per*16),TC=new Float32Array(per*3),TI=new Float32Array(per*3);
+  const fill=tl=>{tl.todo=false;const r=rng(((tl.tx*73856093)^(tl.tz*19349663)^o.seed)>>>0);let n=0;
+    for(let k=0;k<per;k++){const x=(tl.tx+r())*o.size,z=(tl.tz+r())*o.size,a=r(),bb=r(),c=r();
+      if((Math.abs(x)>OHALF-2||Math.abs(z)>OHALF-2)&&OUTER_H===null)continue;
+      if(o.place(x,z,a,bb,c,_gM,_gC)){const e=_gM.elements;TM.set(e,n*16);TC[n*3]=_gC.r;TC[n*3+1]=_gC.g;TC[n*3+2]=_gC.b;TI[n*3]=e[12];TI[n*3+1]=e[13];TI[n*3+2]=e[14];n++;}}
+    tl.pages=[];
+    for(let j=0;j*PG<n;j++){const p=alloc();if(p<0)break;tl.pages.push(p);own[p]=tl;const k0=j*PG,k1=Math.min(n,k0+PG),b=p*PG;
+      MA.set(TM.subarray(k0*16,k1*16),b*16);if(k1-k0<PG)MA.fill(0,(b+k1-k0)*16,(b+PG)*16);
+      CA.set(TC.subarray(k0*3,k1*3),b*3);IP.set(TI.subarray(k0*3,k1*3),b*3);dirtyA.add(p);}};
+  const drop=tl=>{tl.dead=true;if(tl.pages)for(const p of tl.pages)release(p);tl.pages=null;};
+  // the top page into the lowest hole, a few a frame, while the holes are more than a sixteenth of the pages in use
+  const compact=()=>{for(let it=0;it<6&&top-nUsed>Math.max(4,nUsed>>4);it++){
+    while(low<NP&&used[low])low++;const s=top-1,d=low,tl=own[s];if(d>=s||!tl)break;
+    MA.copyWithin(d*PG*16,s*PG*16,top*PG*16);CA.copyWithin(d*PG*3,s*PG*3,top*PG*3);IP.copyWithin(d*PG*3,s*PG*3,top*PG*3);
+    used[d]=1;own[d]=tl;tl.pages[tl.pages.indexOf(s)]=d;dirtyA.add(d);dirtyA.delete(s);dirtyM.delete(s);
+    used[s]=0;own[s]=null;while(top>0&&!used[top-1])top--;}};
+  // the changed pages' uploads: one write per run of neighbouring pages (the renderer clears the ranges as it writes them)
+  const runs=set=>{const ks=[...set].sort((a,b)=>a-b),out=[];let a=ks[0],b=a;for(let i=1;i<ks.length;i++){if(ks[i]===b+1)b=ks[i];else{out.push(a,b);a=b=ks[i];}}out.push(a,b);return out;};
+  let full=false;
+  const flush=()=>{for(const p of dirtyA)dirtyM.delete(p);if(!dirtyA.size&&!dirtyM.size&&!full)return;
+    // (nothing takes the ranges while the mesh is hidden, so they pile up: past a few hundred, one whole upload instead)
+    if(full||m.instanceMatrix.updateRanges.length>400){full=!m.visible;for(const A of[m.instanceMatrix,m.instanceColor,ipa]){A.clearUpdateRanges();A.needsUpdate=true;}dirtyA.clear();dirtyM.clear();return;}
+    if(dirtyA.size){const R=runs(dirtyA);for(let i=0;i<R.length;i+=2){const a=R[i]*PG,n=(R[i+1]-R[i]+1)*PG;
+        m.instanceMatrix.addUpdateRange(a*16,n*16);m.instanceColor.addUpdateRange(a*3,n*3);ipa.addUpdateRange(a*3,n*3);}
+      m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;ipa.needsUpdate=true;dirtyA.clear();}
+    if(dirtyM.size){const R=runs(dirtyM);for(let i=0;i<R.length;i+=2)m.instanceMatrix.addUpdateRange(R[i]*PG*16,(R[i+1]-R[i]+1)*PG*16);
+      m.instanceMatrix.needsUpdate=true;dirtyM.clear();}};
+  const tiles=new Map(),key=(tx,tz)=>(tx+32768)*65536+tz+32768;let last='',rad=RMAX,queue=[];
   return{mesh:m,reset(){last='';},setRadius(r){r=Math.max(0,Math.min(RMAX,r|0));if(r!==rad){rad=r;last='';}},update(){
     // centred a little ahead along the truck's motion
     const px=camera.position.x+clamp(car.vel.x*0.3,-30,30),pz=camera.position.z+clamp(car.vel.z*0.3,-30,30);
     const cx=Math.floor(px/o.size),cz=Math.floor(pz/o.size),ck=cx+','+cz+','+rad;
     if(ck!==last){last=ck;
-      // only the first (2r+1)^2 slots are in use, so the draw covers exactly those instances
-      const act=(2*rad+1)**2,need=new Map();for(let j=-rad;j<=rad;j++)for(let i=-rad;i<=rad;i++)need.set((cx+i)+','+(cz+j),[cx+i,cz+j]);
-      const free=[];for(let k=0;k<N;k++){const sl=slots[k];if(k<act&&sl.key&&need.has(sl.key))need.delete(sl.key);else if(k<act)free.push(sl);else if(sl.key)clear(sl);}
-      for(const[key,[tx,tz]]of need){const sl=free.pop();if(!sl)break;if(sl.key)clear(sl);sl.key=key;sl.tx=tx;sl.tz=tz;sl.todo=true;}
-      for(const sl of free)if(sl.key)clear(sl);
-      m.count=act*per;
+      // the tiles that left the square are dropped, the ones that came into it queued, nearest the camera last (popped first);
+      // with o.rc (the radius round the camera the material draws out to) the square's corners past it are left out too,
+      // with a tile and a half to spare for the camera's travel until the next change of tile, and the look-ahead (so the
+      // tiles coming up are still filled in good time at speed)
+      const qx=camera.position.x,qz=camera.position.z,rc=typeof o.rc==='function'?o.rc():o.rc,R2=rc?(rc+1.5*o.size+Math.hypot(px-qx,pz-qz))**2:0;
+      const far=(tx,tz)=>{if(!rc)return false;const x0=tx*o.size,z0=tz*o.size,dx=clamp(qx,x0,x0+o.size)-qx,dz=clamp(qz,z0,z0+o.size)-qz;return dx*dx+dz*dz>R2;};
+      for(const[k,tl]of tiles)if(Math.abs(tl.tx-cx)>rad||Math.abs(tl.tz-cz)>rad||far(tl.tx,tl.tz)){drop(tl);tiles.delete(k);}
+      for(let j=-rad;j<=rad;j++)for(let i=-rad;i<=rad;i++){const k=key(cx+i,cz+j);if(!tiles.has(k)&&!far(cx+i,cz+j))tiles.set(k,{tx:cx+i,tz:cz+j,pages:null,todo:true,dead:false,d:0});}
       const ox=camera.position.x/o.size-0.5,oz=camera.position.z/o.size-0.5;
-      queue=slots.filter(sl=>sl.todo);for(const sl of queue)sl.d=(sl.tx-ox)**2+(sl.tz-oz)**2;queue.sort((a,b)=>a.d-b.d);}
+      queue=[];for(const tl of tiles.values())if(tl.todo){tl.d=(tl.tx-ox)**2+(tl.tz-oz)**2;queue.push(tl);}queue.sort((a,b)=>b.d-a.d);}
     // fill the queued tiles nearest first, within a few milliseconds (more when far behind)
     if(queue.length){const t0=performance.now(),bud=queue.length>60?5:queue.length>2*(2*rad+1)?3:1.5;
-      while(queue.length){const sl=queue.shift();if(sl.todo)fill(sl,sl.tx,sl.tz);if(performance.now()-t0>bud)break;}}
-    flush();}};
+      while(queue.length){const tl=queue.pop();if(tl.todo&&!tl.dead)fill(tl);if(performance.now()-t0>bud)break;}}
+    compact();m.count=top*PG;flush();}};
 }
 const uViewDir=TSL.uniform(new V3(0,0,1));
 // keep(ip) says whether the instance at ip is drawn; otherwise all its vertices fall onto its origin (nothing to raster)
@@ -2868,10 +2923,10 @@ const grassBand=(mat,a,b,inv)=>{const {attribute,length,smoothstep,float,cameraP
   mat.opacityNode=(mat.opacityNode||float(1)).mul(inv?float(1).sub(f):f);return mat;};
 const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z);let pr=smooth(0.3,0.8,g.wg);pr*=(1-g.tw)*(1-g.ws)*(1-g.wm)*k;if(c>pr)return false;
     const sc=(0.75+b*0.7)*s,kk=(a*7.3)%1;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.03*s,z),_gQ,_gS.set(sc,sc*hs*(0.85+kk*0.7),sc));col.copy(gA).lerp(gB,clamp(g.wd*0.6+kk*0.3,0,1)).multiplyScalar(0.72+0.28*g.sun);return true;};
-const grassT=makeTiler({size:14,radius:10,per:1150,seed:1,geo:tuftGeo(4,1.25,0.62),
+const grassT=makeTiler({size:14,radius:10,per:1150,seed:1,rc:GX1+1,geo:tuftGeo(4,1.25,0.62),
   mat:tileCull(grassBand(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),GX0,GX1,true),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45))).and(within(ip,GX1+1))),
   place:grassPlace(1,1,1)});
-const grassF=makeTiler({size:28,radius:13,per:900,seed:5,geo:tuftGeo(3,1.25,0.62),
+const grassF=makeTiler({size:28,radius:13,per:900,seed:5,rc:GF1+1,geo:tuftGeo(3,1.25,0.62),
   mat:tileCull(grassBand(grassBand(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true),GX0,GX1,false),GF0,GF1,true),
     ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(GX0-1)).and(within(ip,GF1+1))),
   place:grassPlace(0.6,1.9,0.7)});   // (wider, not much taller: a far tuft covers more ground, it is no bush)
@@ -2921,7 +2976,7 @@ const bladeT=(()=>{
    mat.alphaToCoverage=true;mat.opacityNode=k;
    mat.normalNode=normalize(mix(normalize(normalViewGeometry),cameraViewMatrix.mul(vec4(0,1,0,0)).xyz,0.6));}
   tileCull(mat,ip=>aheadOf(ip,1).and(within(ip,uGB.y.add(0.6))));
-  return makeTiler({size:6,radius:7,per:680,seed:3,geo:g,mat,
+  return makeTiler({size:6,radius:7,per:680,seed:3,rc:()=>uGB.value.y+0.6,geo:g,mat,
     place(x,z,a,b,c,M,col){const gi=gInfo(x,z);let pr=smooth(0.3,0.8,gi.wg);   // (by the ground's grass weight: soft edges, no square patches)
       pr*=(1-gi.tw)*(1-gi.ws)*(1-gi.wm)*(0.75+0.25*smooth(-0.35,0.35,nB(x*0.13,z*0.13)));if(c>pr)return false;
       const sc=0.7+b*0.65;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.015,z),_gQ,_gS.set(sc,sc*(0.8+((a*7.3)%1)*0.5),sc));
@@ -2941,14 +2996,14 @@ const UNDER=WINTER?(()=>{
   const sapM=tileCull(snowyBark(new THREE.MeshStandardNodeMaterial({color:C('#2a2420'),roughness:0.95}),0.4),ip=>aheadOf(ip,2).and(within(ip,135)));
   // (dithered away right at the camera, as the trees are: a twig across the lens reads as a pole)
   sapM.alphaToCoverage=true;sapM.opacityNode=TSL.smoothstep(2.5,6,TSL.length(TSL.attribute('ipos','vec3').xz.sub(TSL.cameraPosition.xz)));
-  const sap=makeTiler({size:12,radius:11,per:45,seed:31,geo:mergeGeos(sp),mat:sapM,cast:false,
+  const sap=makeTiler({size:12,radius:11,per:45,seed:31,rc:135,geo:mergeGeos(sp),mat:sapM,cast:false,
     place(x,z,a,b,c,M,col){if(c>forestHere(x,z)*0.9)return false;const k=0.55+b*0.9;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.05,z),_gQ,_gS.set(k,k*(0.8+((a*7.1)%1)*0.5),k));col.setRGB(1,1,1);return true;}});
   // a stump: sawn bark-brown, under a cap of snow
   const stG=(()=>{const a=new THREE.CylinderGeometry(0.27,0.34,0.5,9),b=new THREE.CylinderGeometry(0.3,0.29,0.08,9);b.translate(0,0.27,0);
     const col=(g,c)=>{const n=g.attributes.position.count,A=new Float32Array(n*3);for(let i=0;i<n;i++)A.set(c,i*3);g.setAttribute('color',new THREE.BufferAttribute(A,3));};
     col(a,[0.16,0.12,0.09]);col(b,[0.85,0.88,0.92]);const g=mergeGeos([a,b]);g.translate(0,0.2,0);return g;})();
   const stM=tileCull(new THREE.MeshStandardNodeMaterial({vertexColors:true,roughness:0.9}),ip=>aheadOf(ip,2).and(within(ip,135)));
-  const stp=makeTiler({size:12,radius:11,per:6,seed:37,geo:stG,mat:stM,cast:false,
+  const stp=makeTiler({size:12,radius:11,per:6,seed:37,rc:135,geo:stG,mat:stM,cast:false,
     place(x,z,a,b,c,M,col){if(c>forestHere(x,z)*0.8)return false;const k=0.7+b*0.7;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.15,z),_gQ,_gS.set(k,k*(0.6+((a*5.3)%1)*0.8),k));col.setRGB(1,1,1);return true;}});
   return{update(){sap.update();stp.update();}};})():{update(){}};
 /* ================= ROAD SURFACES, BRIDGES, VILLAGE ================= */
@@ -5113,7 +5168,7 @@ const rtiBlocks=[0,3].map(i=>{const m=new THREE.Mesh(rbox(0.72,1,0.66,0.03),new 
 const garage={xray:false,close:false,on:false,yaw:0.75,pitch:0.2,dist:7.6,spin:true,flex:false,flexT:0,steer:false,steerT:0,top:false,turn:0.4,saved:null,fromIntro:false};
 
 /* ================= FX ================= */
-const PMAX=5600;
+const PMAX=5600,PE=[PMAX,-1];   // (PE: the range of particles emitted since the last upload)
 const P={x:new Float32Array(PMAX),y:new Float32Array(PMAX),z:new Float32Array(PMAX),vx:new Float32Array(PMAX),vy:new Float32Array(PMAX),vz:new Float32Array(PMAX),
   life:new Float32Array(PMAX),max:new Float32Array(PMAX),s0:new Float32Array(PMAX),s1:new Float32Array(PMAX),a0:new Float32Array(PMAX),grav:new Float32Array(PMAX),drag:new Float32Array(PMAX),head:0};
 const pPos=new Float32Array(PMAX*3),pCol=new Float32Array(PMAX*3),pSize=new Float32Array(PMAX),pAlpha=new Float32Array(PMAX),pSeed=new Float32Array(PMAX*2);
@@ -5138,7 +5193,8 @@ const pMat=(()=>{const {float,vec2,vec3,vec4,attribute,uv,texture,positionGeomet
   const m=new THREE.MeshBasicNodeMaterial({transparent:true,depthWrite:false});
   const pp=attribute('ppos','vec3'),ps=attribute('psize','float'),pa=attribute('palpha','float'),pc=attribute('pcolor','vec3'),sd=attribute('pseed','vec2');
   const mv=cameraViewMatrix.mul(vec4(pp,1));
-  m.vertexNode=cameraProjectionMatrix.mul(vec4(mv.xy.add(positionGeometry.xy.mul(ps)),mv.z,1));
+  // (a spent particle shrinks to nothing: drawn at its last size with no alpha it still cost every pixel it covered)
+  m.vertexNode=cameraProjectionMatrix.mul(vec4(mv.xy.add(positionGeometry.xy.mul(select(pa.greaterThan(0),ps,float(0)))),mv.z,1));
   const d=vec2(uv().x.sub(0.5),float(0.5).sub(uv().y)),kind=sd.y,cs=cos(sd.x.mul(6.2832)),sn=sin(sd.x.mul(6.2832));
   const q=vec2(cs.mul(d.x).sub(sn.mul(d.y)),sn.mul(d.x).add(cs.mul(d.y))),n=texture(dirtTex,q.mul(0.42).add(sd.xx.mul(vec2(7.1,3.7)))).x;
   // light from above: the top of a puff or clod is brighter than its underside
@@ -5168,6 +5224,7 @@ function emit(x,y,z,vx,vy,vz,col,s0,s1,life,alpha,grav,drag,kind){
   const i=P.head;P.head=(P.head+1)%PMAX;
   P.x[i]=x;P.y[i]=y;P.z[i]=z;P.vx[i]=vx;P.vy[i]=vy;P.vz[i]=vz;P.life[i]=life;P.max[i]=life;P.s0[i]=s0;P.s1[i]=s1;P.a0[i]=alpha;P.grav[i]=grav;P.drag[i]=drag;
   pCol[i*3]=col.r;pCol[i*3+1]=col.g;pCol[i*3+2]=col.b;pSeed[i*2]=Math.random();pSeed[i*2+1]=kind!==undefined?kind:grav>3?1:0;
+  if(i<PE[0])PE[0]=i;if(i>PE[1])PE[1]=i;
 }
 // ripples on the water: flat rings that spread and fade (a wheel or the hull pushing through, a drop landing), drawn as
 // one instanced mesh lying on the surface
@@ -5182,9 +5239,9 @@ const RIP=(()=>{const N=220,S=128,cv=document.createElement('canvas');cv.width=c
   const st=Array.from({length:N},()=>({x:0,y:0,z:0,t:0,life:0,s0:0,s1:0,a:0}));let head=0;const M_=new THREE.Matrix4(),Q_=new QT(),V_=new V3(),S_=new V3();
   for(let i=0;i<N;i++){me.setMatrixAt(i,M_.makeScale(0,0,0));}
   return{add(x,y,z,s0,s1,life,a){const r=st[head];head=(head+1)%N;r.x=x;r.y=y;r.z=z;r.t=0;r.life=life;r.s0=s0;r.s1=s1;r.a=a;},
-    update(dt){for(let i=0;i<N;i++){const r=st[i];if(r.life<=0){ra[i]=0;continue;}r.t+=dt;const u=r.t/r.life;if(u>=1){r.life=0;ra[i]=0;me.setMatrixAt(i,M_.makeScale(0,0,0));continue;}
+    update(dt){let ch=false;for(let i=0;i<N;i++){const r=st[i];if(r.life<=0){ra[i]=0;continue;}ch=true;r.t+=dt;const u=r.t/r.life;if(u>=1){r.life=0;ra[i]=0;me.setMatrixAt(i,M_.makeScale(0,0,0));continue;}
         const s=r.s0+(r.s1-r.s0)*(1-Math.pow(1-u,2));me.setMatrixAt(i,M_.compose(V_.set(r.x,r.y,r.z),Q_,S_.set(s,1,s)));ra[i]=r.a*(1-u)*Math.min(1,u*6);}
-      me.instanceMatrix.needsUpdate=true;geo.attributes.ralpha.needsUpdate=true;}};})();
+      if(ch){me.instanceMatrix.needsUpdate=true;geo.attributes.ralpha.needsUpdate=true;}}};})();   // (nothing to upload with no ripple alive)
 // foam on the water: white, broken patches left where the hull and the tyres churn it up - a wake that spreads and
 // thins over a few seconds - drawn like the ripples, as one instanced mesh lying on the surface (each turned its own way)
 const FOAM=(()=>{const N=320,S=128,cv=document.createElement('canvas');cv.width=cv.height=S;const x=cv.getContext('2d'),img=x.createImageData(S,S),r=rng(1717),G=32,g=new Float32Array(G*G);
@@ -5202,9 +5259,9 @@ const FOAM=(()=>{const N=320,S=128,cv=document.createElement('canvas');cv.width=
   const st=Array.from({length:N},()=>({x:0,z:0,t:0,life:0,s0:0,s1:0,a:0,q:new QT()}));let head=0;const M_=new THREE.Matrix4(),V_=new V3(),S_=new V3(),Y_=new V3(0,1,0);
   for(let i=0;i<N;i++)me.setMatrixAt(i,M_.makeScale(0,0,0));
   return{add(x,z,s0,s1,life,a){const f=st[head];head=(head+1)%N;f.x=x;f.z=z;f.t=0;f.life=life;f.s0=s0;f.s1=s1;f.a=a;f.q.setFromAxisAngle(Y_,Math.random()*TAU);},
-    update(dt){for(let i=0;i<N;i++){const f=st[i];if(f.life<=0){fa[i]=0;continue;}f.t+=dt;const u=f.t/f.life;if(u>=1){f.life=0;fa[i]=0;me.setMatrixAt(i,M_.makeScale(0,0,0));continue;}
+    update(dt){let ch=false;for(let i=0;i<N;i++){const f=st[i];if(f.life<=0){fa[i]=0;continue;}ch=true;f.t+=dt;const u=f.t/f.life;if(u>=1){f.life=0;fa[i]=0;me.setMatrixAt(i,M_.makeScale(0,0,0));continue;}
         const sz=f.s0+(f.s1-f.s0)*(1-Math.pow(1-u,2.2));me.setMatrixAt(i,M_.compose(V_.set(f.x,WATER_Y+0.025,f.z),f.q,S_.set(sz,1,sz)));fa[i]=f.a*Math.pow(1-u,1.6)*Math.min(1,u*10);}
-      me.instanceMatrix.needsUpdate=true;geo.attributes.falpha.needsUpdate=true;}};})();
+      if(ch){me.instanceMatrix.needsUpdate=true;geo.attributes.falpha.needsUpdate=true;}}};})();
 const WATER_C=C('#e4edf1'),MIST_C=C('#f2f5f6'),MUD_C=WINTER?[C('#f2f6fa'),C('#e3e9f0'),C('#d7dee7')]:[C('#3b2a1b'),C('#4a3725'),C('#2e2216')],MUDMIST_C=C(WINTER?'#eef2f6':'#6b5a46');let bowT=0,splCD=0;
 // the plunge: a crown of drops thrown up and out round the hull, sheets of spray rising and spreading, a ring of foam and
 // big rings on the water - all as strong as the plunge (k 0..1: its sinking speed and its speed through the water)
@@ -5226,10 +5283,14 @@ function fxFlame(k){if(!SC)return;for(const e of EXH){_fx.set(e[0],e[1],e[2]).ap
 function fxSparks(px,py,pz,nx,nz,n){for(let i=0;i<n;i++){const sp=2+Math.random()*7;
   emit(px,py,pz,car.vel.x*0.55+nx*sp*0.35+(Math.random()-0.5)*3.5,0.4+Math.random()*3.2,car.vel.z*0.55+nz*sp*0.35+(Math.random()-0.5)*3.5,SPARK_C[i%3],0.03,0.018,0.22+Math.random()*0.35,1,9.8,0.5);}}
 let fxFrame=0;
+// only the particles that moved, faded or died this frame are uploaded (and the colour and seed of new ones): the whole
+// set of buffers went up every frame for the few dozen alive
+const pUpd=(a,lo,hi)=>{if(a.updateRanges.length>64)a.clearUpdateRanges();else a.addUpdateRange(lo*a.itemSize,(hi-lo+1)*a.itemSize);a.needsUpdate=true;};
 function updateParticles(dt){
-  fxFrame++;RIP.update(dt);FOAM.update(dt);
+  fxFrame++;RIP.update(dt);FOAM.update(dt);let lo=PMAX,hi=-1;
   for(let i=0;i<PMAX;i++){
-    if(P.life[i]<=0){pAlpha[i]=0;continue;}
+    if(P.life[i]<=0){if(pAlpha[i]!==0){pAlpha[i]=0;if(i<lo)lo=i;if(i>hi)hi=i;}continue;}
+    if(i<lo)lo=i;if(i>hi)hi=i;
     P.life[i]-=dt;const d=Math.exp(-P.drag[i]*dt);
     P.vx[i]*=d;P.vz[i]*=d;P.vy[i]=P.vy[i]*d-P.grav[i]*dt;
     P.x[i]+=P.vx[i]*dt;P.y[i]+=P.vy[i]*dt;P.z[i]+=P.vz[i]*dt;
@@ -5244,7 +5305,8 @@ function updateParticles(dt){
     pPos[i*3]=P.x[i];pPos[i*3+1]=P.y[i];pPos[i*3+2]=P.z[i];
     pAlpha[i]=P.a0[i]*Math.min(1,t*8)*(1-t);
   }
-  pGeo.attributes.ppos.needsUpdate=true;pGeo.attributes.psize.needsUpdate=true;pGeo.attributes.palpha.needsUpdate=true;pGeo.attributes.pcolor.needsUpdate=true;pGeo.attributes.pseed.needsUpdate=true;
+  const A=pGeo.attributes;if(hi>=lo)for(const a of[A.ppos,A.psize,A.palpha])pUpd(a,lo,hi);
+  if(PE[1]>=PE[0]){for(const a of[A.pcolor,A.pseed])pUpd(a,PE[0],PE[1]);PE[0]=PMAX;PE[1]=-1;}
 }
 // tyre tracks: one continuous ribbon per wheel, sampled every 20 cm and draped onto the ground at both edges,
 // with the tread lug pattern running along its length (ring buffer of quads; the oldest are overwritten)
@@ -5928,7 +5990,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
+(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -8764,7 +8826,8 @@ const nearTrack=(x,z,r)=>{if(!AP.trk)return false;const ci=Math.floor(x/4),cj=Ma
         for(let j=Math.floor((z-Rr+OHALF)/TG);j<=Math.floor((z+Rr+OHALF)/TG);j++)for(let i=Math.floor((x-Rr+OHALF)/TG);i<=Math.floor((x+Rr+OHALF)/TG);i++){const L=ATG.get(atgKey(i,j));if(!L)continue;
           for(const t of L){if((t.x-x)**2+(t.z-z)**2>R2||k>=NC)continue;for(let q=0;q<ms.length;q++){CONI.parts[q][2](t,M,c);M.toArray(ms[q].instanceMatrix.array,k*16);c.toArray(ms[q].instanceColor.array,k*3);}
             IP2[k*3]=t.x;IP2[k*3+1]=t.y;IP2[k*3+2]=t.z;k++;}}
-        for(const m of ms){m.count=k;m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;}ipa2.needsUpdate=true;}};})();
+        for(const m of ms){m.count=k;if(k){for(const A of[m.instanceMatrix,m.instanceColor])A.clearUpdateRanges();m.instanceMatrix.addUpdateRange(0,k*16);m.instanceColor.addUpdateRange(0,k*3);m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;}}
+        if(k){ipa2.clearUpdateRanges();ipa2.addUpdateRange(0,k*3);ipa2.needsUpdate=true;}}};})();   // (only the instances in use)
     if(near)NEARSETS.push(near);
     const M=new THREE.Matrix4(),c=new THREE.Color();
     function* treesJob(cx,cz){const L2=[];let k=0,yc=0;const x0=cx-AP.half,z0=cz-AP.half,G=10;
