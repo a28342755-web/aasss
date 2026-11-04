@@ -4461,12 +4461,14 @@ function hcbMats(){if(HCB.disc)return;
     HCB.cham=env(new THREE.MeshStandardNodeMaterial({color:C('#6a6864'),roughness:0.45,metalness:0,side:THREE.DoubleSide}),0.6);
     HCB.bell=env(new THREE.MeshStandardNodeMaterial({color:C('#4a4d52'),roughness:0.4,metalness:0.85,side:THREE.DoubleSide}),0.9);
     HCB.steel=env(new THREE.MeshStandardNodeMaterial({color:C('#b9bcc0'),roughness:0.28,metalness:1}),1);
-    HCB.cal=env(new THREE.MeshPhysicalNodeMaterial({color:C('#f5b50a'),roughness:0.22,metalness:0,clearcoat:1,clearcoatRoughness:0.04}),1);
+    // (the hypercar's calipers yellow, the P1 GT's red)
+    HCB.cal=env(new THREE.MeshPhysicalNodeMaterial({color:C(GTP1?'#c8161d':'#f5b50a'),roughness:0.22,metalness:0,clearcoat:1,clearcoatRoughness:0.04}),1);
     HCB.pad=new THREE.MeshStandardNodeMaterial({color:C('#232322'),roughness:0.92});
     HCB.back=env(new THREE.MeshStandardNodeMaterial({color:C('#3a3c3f'),roughness:0.5,metalness:0.8}),0.6);
     HCB.hose=new THREE.MeshStandardNodeMaterial({color:C('#111112'),roughness:0.7});
     HCB.motor=env(new THREE.MeshStandardNodeMaterial({color:C('#202124'),roughness:0.45,metalness:0.6}),0.6);
-    const c2=document.createElement('canvas');c2.width=512;c2.height=128;const y=c2.getContext('2d');y.fillStyle='#111';y.textAlign='center';y.textBaseline='middle';
+    const c2=document.createElement('canvas');c2.width=512;c2.height=128;const y=c2.getContext('2d');y.fillStyle=GTP1?'#f4f4f2':'#111';   // (white script on the red ones)
+    y.textAlign='center';y.textBaseline='middle';
     y.font='italic 800 80px "Chakra Petch","Segoe UI",sans-serif';y.fillText('CCB',120,66);y.font='600 32px "Chakra Petch","Segoe UI",sans-serif';y.fillText('CARBON CERAMIC',340,68);
     const t2=new THREE.CanvasTexture(c2);t2.colorSpace=THREE.SRGBColorSpace;t2.anisotropy=8;
     HCB.logo=new THREE.MeshStandardNodeMaterial({map:t2,transparent:true,alphaTest:0.3,roughness:0.3});
