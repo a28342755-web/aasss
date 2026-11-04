@@ -5589,9 +5589,13 @@ const TM={LI:1600*9.81,PLI:80,vmin:0.5,
   nL0:[0.178,0.19],sq0:[0.16337,0.20355],sqe:[0.96524,1.0714]};
 // the supercar's tyres: 255/30 ZR20 (load index 99) and 355/25 ZR21 (107), rated at 42 psi: stiffer, grippier,
 // peaking at smaller slips than the passenger-car set above
+const FXK=1.14;   // (the P1 GT's semi-slicks, along the tyre: see below)
 const TMF={LI:775*9.81,PLI:42,vmin:0.5,dfx0:[22,23*2],fxm:[1.22,1.15*2],fxs:[0.95,0.88*2],sxm:[0.1,0.11],sxs:[0.55,0.6],
   dfy0:[20.5,16.5*2],fym:[1.14,1.04*2],fys:[0.98,0.9*2],sym:[0.105,0.13],sys:[0.55,0.65],nL0:[0.15,0.165],sq0:[0.11,0.14],sqe:[0.55,0.65]};
 const TMR=Object.assign({},TMF,{LI:975*9.81,dfx0:[24,25*2],fxm:[1.25,1.18*2],dfy0:[23,18.5*2],fym:[1.17,1.07*2]});
+// the P1 GT on semi-slicks (P Zero Trofeo R, 245/35 ZR19 and 315/30 ZR20): more grip, along the tyre most of all,
+// which a rear-driven launch needs (on the hypercar's road tyres it spun off the line: 0-100 km/h in 3.3 s, the P1 2.8)
+if(GTP1)for(const T of[TMF,TMR]){T.fxm=T.fxm.map(v=>v*FXK);T.fxs=T.fxs.map(v=>v*FXK);T.fym=T.fym.map(v=>v*1.08);T.fys=T.fys.map(v=>v*1.08);}
 function tmState(w,S,mu){const TM_=SC?(w.front?TMF:TMR):TM;
   const pn=0.5*TM_.LI*Math.pow(Math.max(w.pAir,5)/TM_.PLI,0.8),q=clamp(w.Fz,0,3.5*pn)/pn;
   const iq=c=>q*(2*c[0]-0.5*c[1]-(c[0]-0.5*c[1])*q)*pn,il=c=>c[0]+(c[1]-c[0])*(q-1);
@@ -6107,7 +6111,7 @@ function computeSpecs(){
     return[['엔진',GTP1?'3.8 L V8 트윈터보 + 전기 모터 1기 · 미드십 하이브리드':HC?'6.5 L V12 자연흡기 + 전기 모터 3기 (앞 2기 · 변속기 1기)':'6.5 L V12 자연흡기 · 미드십'],
       ['최고출력',`${Math.round(SYS_KW)} kW (${Math.round(SYS_KW*1.36)} PS)${EAXLE?' 시스템':''} @ ${PEAK.rpm}`],['최대토크',GTP1?'900 N·m (엔진 + 모터)':HC?'725 N·m @ 6,750 (V12) + 전기 모터':`${Math.max(...TQ.map(t=>t[1]))} N·m @ 6,750`],
       ['변속기',HC&&!GTP1?'8단 듀얼 클러치':'7단 듀얼 클러치'],['구동',GTP1?'후륜 구동 · 후륜 LSD':HC?'상시 4륜 · 앞 전기 모터 2기 + 뒤 V12 · 후륜 LSD':'상시 4륜 · 전자식 센터 커플링 · 후륜 LSD'],
-      ['차량 중량',`${MASS.toLocaleString()} kg · 앞뒤 ${GTP1?'42:58':'43:57'}`],['타이어',GTP1?'앞 245/35 ZR19 · 뒤 315/30 ZR20':'앞 255/30 ZR20 · 뒤 355/25 ZR21'],
+      ['차량 중량',`${MASS.toLocaleString()} kg · 앞뒤 ${GTP1?'42:58':'43:57'}`],['타이어',GTP1?'앞 245/35 ZR19 · 뒤 315/30 ZR20 · 세미 슬릭':'앞 255/30 ZR20 · 뒤 355/25 ZR21'],
       ['서스펜션','앞뒤 더블 위시본 · 푸시로드 · 스태빌라이저'],['지오메트리',`캠버 ${(SCK.cam0[0]*DEG).toFixed(1)}° / ${(SCK.cam0[1]*DEG).toFixed(1)}° · 앤티 다이브 ${g.ad}% · 앤티 스쿼트 ${g.as}%`],
       ['롤 센터 앞 / 뒤',`${g.rcF} / ${g.rcR} mm`],['공력','액티브 리어 윙 · 에어 브레이크 · 다운포스'],['브레이크','카본 세라믹 · ABS'],['최저 지상고',`${clr} mm`]];}
   const wheelY=MOUNT_Y-(SUSP-STATIC);
