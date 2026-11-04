@@ -19,6 +19,9 @@
   --heart-2: #ff9cb6;
   --heart-3: #ffbfd0;
   --spark: #ffc94d;
+  --ring: rgba(233, 85, 127, 0.9);
+  --ring-fill: rgba(233, 85, 127, 0.16);
+  --track: rgba(75, 53, 57, 0.14);
   --font-display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
   --font-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
   color-scheme: light;
@@ -44,6 +47,9 @@
     --heart-2: #ffa6c1;
     --heart-3: #ffcfdd;
     --spark: #ffd977;
+    --ring: rgba(255, 141, 176, 0.95);
+    --ring-fill: rgba(255, 141, 176, 0.18);
+    --track: rgba(255, 255, 255, 0.16);
     color-scheme: dark;
   }
 }
@@ -67,6 +73,9 @@
   --heart-2: #ffa6c1;
   --heart-3: #ffcfdd;
   --spark: #ffd977;
+  --ring: rgba(255, 141, 176, 0.95);
+  --ring-fill: rgba(255, 141, 176, 0.18);
+  --track: rgba(255, 255, 255, 0.16);
   color-scheme: dark;
 }
 
@@ -482,6 +491,263 @@ button:focus-visible {
   100% {
     opacity: 0;
     transform: translate(calc(var(--x) + var(--dx)), calc(var(--y) - var(--dy))) scale(0.85) rotate(var(--r));
+  }
+}
+
+/* ---- physics panel ------------------------------------------------------ */
+.panel {
+  position: fixed;
+  z-index: 5;
+  top: calc(env(safe-area-inset-top, 0px) + 66px);
+  right: max(16px, env(safe-area-inset-right, 0px));
+  width: min(360px, calc(100% - 32px));
+  max-height: min(64vh, calc(100dvh - env(safe-area-inset-top, 0px) - 250px));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 12px;
+  border-radius: 22px;
+  background: var(--tray);
+  border: 1px solid var(--tray-line);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 18px 40px -24px var(--shade);
+  pointer-events: auto;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 19px;
+}
+
+.icon-btn.small {
+  width: 32px;
+  height: 32px;
+}
+
+.icon-btn.small svg {
+  width: 18px;
+  height: 18px;
+}
+
+.panel-note {
+  margin: 4px 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.text-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.sliders {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -6px;
+  padding: 0 6px;
+}
+
+.slider {
+  padding: 8px 0 6px;
+  border-top: 1px solid var(--tray-line);
+}
+
+.slider:first-child {
+  border-top: 0;
+}
+
+.slider-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.slider-head label {
+  font-family: var(--font-display);
+  font-size: 15.5px;
+}
+
+.slider-head output {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.slider-hint {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.slider input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin: 2px 0 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--track);
+}
+
+.slider input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--track);
+}
+
+.slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border: 3px solid var(--tray);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px var(--swatch-shade);
+}
+
+.slider input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 3px solid var(--tray);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.slider input[type="range"]:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.panel-foot {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tray-line);
+}
+
+.quality {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.quality select {
+  min-height: 34px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--tray-line);
+  background: var(--chip);
+  color: var(--ink);
+  font: 14px var(--font-body);
+}
+
+.perf {
+  margin: 6px 0 0;
+  min-height: 1.4em;
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+
+/* ---- touch rings: contact size and press force ---------------------------- */
+.rings {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.touch-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  --r: 20px;
+  --k: 0;
+}
+
+.touch-ring i {
+  position: absolute;
+  left: calc(var(--r) * -1.55);
+  top: calc(var(--r) * -1.55);
+  width: calc(var(--r) * 3.1);
+  height: calc(var(--r) * 3.1);
+  box-sizing: border-box;
+  border-radius: 50%;
+  /* a thin gauge around the contact: the arc grows with the press force */
+  background: conic-gradient(var(--ring) calc(var(--k) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  mask: radial-gradient(closest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  opacity: 0.8;
+}
+
+.touch-ring i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--ring);
+  opacity: 0.35;
+}
+
+.touch-ring b {
+  position: absolute;
+  left: 0;
+  top: calc(var(--r) * -1.55 - 22px);
+  transform: translateX(-50%);
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: var(--tray);
+  border: 1px solid var(--tray-line);
+  font: 11px var(--font-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .panel {
+    left: max(16px, env(safe-area-inset-left, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+    width: auto;
   }
 }
 

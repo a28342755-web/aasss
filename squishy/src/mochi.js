@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { BODY_VERT, BODY_FRAG } from './shaders.js';
+import { icosphereDirs, surfacePoint, inside, earWeight, CENTER_Y } from './physics/shape.js';
+import { PointGrid } from './physics/hash.js';
+import { raycastTriangles } from './physics/geom.js';
+import { patchSkinMaterial, patchDepthMaterial, MAX_FINGERS } from './shaders.js';
 
-// 찹쌀이: an original round rice-cake creature with a sprout on its head.
-// The body is a welded icosphere shaped into a mochi. Touches create "deformers"
-// (a dent pushed along the surface normal and/or a pull dragged by the finger),
-// each driven by its own spring so the dough sinks, stretches and springs back.
+// 찹쌀이: an original round rice-cake creature with little ears and a sprout.
+// This module is the visible side of the soft body: a fine render mesh driven on
+// the GPU by the simulated particles, the face and expressions, and the sprout.
 
 export const FLAVORS = [
   { id: 'milk', name: '우유', body: '#fbf6ef', deep: '#efb9a6', rim: '#ffffff', blush: '#ff9fb2', sprout: '#7cc576' },
@@ -16,36 +18,6 @@ export const FLAVORS = [
   { id: 'choco', name: '초코', body: '#cfa88a', deep: '#8a5638', rim: '#f8e9dd', blush: '#ff8f9a', sprout: '#7ab26b' },
 ];
 
-// Spring settings are [angular frequency, damping ratio].
-export const MODES = {
-  soft: {
-    name: '말랑', desc: '꾹 누르면 천천히 부풀어 올라요',
-    dent: [3.4, 1.25], pull: [6.5, 0.8], body: [8, 0.55],
-    maxDepth: 0.34, maxPull: 0.62, pinch: 0.35, kick: 0.5,
-  },
-  bouncy: {
-    name: '탱글', desc: '통통 튀고 출렁출렁 흔들려요',
-    dent: [15, 0.17], pull: [13, 0.13], body: [12, 0.15],
-    maxDepth: 0.27, maxPull: 0.52, pinch: 0.25, kick: 1.15,
-  },
-  chewy: {
-    name: '쫀득', desc: '쭈우욱 늘어났다가 돌아와요',
-    dent: [5.5, 0.6], pull: [6.2, 0.32], body: [8.5, 0.3],
-    maxDepth: 0.3, maxPull: 1.0, pinch: 0.6, kick: 0.85,
-  },
-};
-
-const CENTER_Y = 0.72;           // height of the widest ring; the floor is y = 0
-const SHAPE = { A: 1.2, top: 1.0, bottom: CENTER_Y, nTop: 2.15, nBottom: 3.0 };
-const ARMS = [[-0.86, -0.22, 0.46], [0.86, -0.22, 0.46]].map(norm3);
-const RIM = 0.3;                 // how much a dent pushes up a soft ring around itself
-const STRIDE = 20;
-const MAX_DEFORMERS = 8;
-
-function norm3(v) {
-  const l = Math.hypot(v[0], v[1], v[2]);
-  return [v[0] / l, v[1] / l, v[2] / l];
-}
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const smooth = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1);
@@ -53,64 +25,8 @@ const smooth = (a, b, x) => {
 };
 export const damp = (cur, target, k, dt) => cur + (target - cur) * (1 - Math.exp(-k * dt));
 
-function bodyRadius(dx, dy, dz) {
-  const h = Math.hypot(dx, dz);
-  const up = dy >= 0;
-  const B = up ? SHAPE.top : SHAPE.bottom;
-  const n = up ? SHAPE.nTop : SHAPE.nBottom;
-  let r = Math.pow(Math.pow(h / SHAPE.A, n) + Math.pow(Math.abs(dy) / B, n), -1 / n);
-  for (const a of ARMS) {
-    const c = clamp(dx * a[0] + dy * a[1] + dz * a[2], -1, 1);
-    const ang = Math.acos(c);
-    r += 0.085 * Math.exp(-(ang * ang) / (0.18 * 0.18));
-  }
-  return r;
-}
-
-// Icosphere with shared vertices (no UV seam), so every vertex can move freely.
-function icosphere(detail) {
-  const ico = new THREE.IcosahedronGeometry(1, detail);
-  const src = ico.getAttribute('position').array;
-  const total = src.length / 3;
-  const map = new Map();
-  const verts = [];
-  const index = new Uint32Array(total);
-  for (let i = 0; i < total; i++) {
-    const x = src[i * 3], y = src[i * 3 + 1], z = src[i * 3 + 2];
-    const key = `${Math.round(x * 1e4)},${Math.round(y * 1e4)},${Math.round(z * 1e4)}`;
-    let id = map.get(key);
-    if (id === undefined) {
-      id = verts.length / 3;
-      map.set(key, id);
-      const l = Math.hypot(x, y, z);
-      verts.push(x / l, y / l, z / l);
-    }
-    index[i] = id;
-  }
-  ico.dispose();
-  const count = verts.length / 3;
-  return { dirs: new Float32Array(verts), index: count < 65536 ? Uint16Array.from(index) : index };
-}
-
-function computeNormals(pos, index, out) {
-  out.fill(0);
-  for (let i = 0; i < index.length; i += 3) {
-    const a = index[i] * 3, b = index[i + 1] * 3, c = index[i + 2] * 3;
-    const ax = pos[a], ay = pos[a + 1], az = pos[a + 2];
-    const e1x = pos[b] - ax, e1y = pos[b + 1] - ay, e1z = pos[b + 2] - az;
-    const e2x = pos[c] - ax, e2y = pos[c + 1] - ay, e2z = pos[c + 2] - az;
-    const nx = e1y * e2z - e1z * e2y;
-    const ny = e1z * e2x - e1x * e2z;
-    const nz = e1x * e2y - e1y * e2x;
-    out[a] += nx; out[a + 1] += ny; out[a + 2] += nz;
-    out[b] += nx; out[b + 1] += ny; out[b + 2] += nz;
-    out[c] += nx; out[c + 1] += ny; out[c + 2] += nz;
-  }
-  for (let i = 0; i < out.length; i += 3) {
-    const l = Math.hypot(out[i], out[i + 1], out[i + 2]) || 1;
-    out[i] /= l; out[i + 1] /= l; out[i + 2] /= l;
-  }
-}
+const K = 8; // particles per render vertex
+const TEX_W = 1024; // 256 particles per texture row
 
 // A leaf that is pointed at both ends and curls up toward the tip.
 function makeLeafGeometry() {
@@ -126,83 +42,149 @@ function makeLeafGeometry() {
   return geo;
 }
 
-const _m4 = new THREE.Matrix4();
 const _m3 = new THREE.Matrix3();
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
-const _pa = new THREE.Vector3();
-const _pb = new THREE.Vector3();
-const _pc = new THREE.Vector3();
-const _bary = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const UP = new THREE.Vector3(0, 1, 0);
 
 export class Mochi {
-  constructor({ detail = 30 } = {}) {
+  constructor(sim, { detail = 36 } = {}) {
+    this.sim = sim;
     this.group = new THREE.Group();
-    this.mode = MODES.soft;
-    this.deformers = [];
     this.events = [];
     this.time = 0;
-    this.sy = 1; this.syV = 0;
-    this.shx = 0; this.shxV = 0;
-    this.shz = 0; this.shzV = 0;
-    this.jumpY = 0; this.jumpV = 0; this.jumpPower = 1;
-    this.airborne = false; this.crouch = 0;
-    this.bulge = 0;
     this.asleep = false;
     this.gaze = { x: 0, y: 0 };
     this.face = { blink: 0, squeeze: 0, happy: 0, sleep: 0, surprise: 0, mouth: 0, blush: 0.3, lx: 0, ly: 0 };
     this.timers = { happy: 0, surprise: 0, pout: 0, blinkWait: 2.2, blinkT: -1 };
-    this.params = new Float64Array(STRIDE * MAX_DEFORMERS);
-    this._buildBody(detail);
+    this._buildSkin(detail);
     this._buildSprout();
   }
 
-  _buildBody(detail) {
-    const { dirs, index } = icosphere(detail);
+  // ---- render mesh + embedding ------------------------------------------------
+  _buildSkin(detail) {
+    const { dirs, index } = icosphereDirs(detail);
     const n = dirs.length / 3;
     const rest = new Float32Array(n * 3);
+    const p = [0, 0, 0];
     let top = 0;
     for (let i = 0; i < n; i++) {
-      const dx = dirs[i * 3], dy = dirs[i * 3 + 1], dz = dirs[i * 3 + 2];
-      const r = bodyRadius(dx, dy, dz);
-      rest[i * 3] = dx * r;
-      rest[i * 3 + 1] = Math.max(0, dy * r + CENTER_Y);
-      rest[i * 3 + 2] = dz * r;
-      if (rest[i * 3 + 1] > rest[top * 3 + 1]) top = i;
+      surfacePoint(dirs[i * 3], dirs[i * 3 + 1], dirs[i * 3 + 2], p);
+      rest[i * 3] = p[0]; rest[i * 3 + 1] = p[1]; rest[i * 3 + 2] = p[2];
+      // the sprout grows from the top of the head, between the ears
+      if (Math.abs(p[0]) < 0.06 && Math.abs(p[2]) < 0.2 && p[1] > rest[top * 3 + 1] - (top ? 0 : 99)) top = i;
     }
     const restN = new Float32Array(n * 3);
-    computeNormals(rest, index, restN);
+    for (let f = 0; f < index.length; f += 3) {
+      const a = index[f] * 3, b = index[f + 1] * 3, c = index[f + 2] * 3;
+      const e1x = rest[b] - rest[a], e1y = rest[b + 1] - rest[a + 1], e1z = rest[b + 2] - rest[a + 2];
+      const e2x = rest[c] - rest[a], e2y = rest[c + 1] - rest[a + 1], e2z = rest[c + 2] - rest[a + 2];
+      const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+      for (const o of [a, b, c]) { restN[o] += nx; restN[o + 1] += ny; restN[o + 2] += nz; }
+    }
+    for (let i = 0; i < n; i++) {
+      const l = Math.hypot(restN[i * 3], restN[i * 3 + 1], restN[i * 3 + 2]) || 1;
+      restN[i * 3] /= l; restN[i * 3 + 1] /= l; restN[i * 3 + 2] /= l;
+    }
+
+    // embedding: 8 nearest particles with smooth weights that vanish at the 9th
+    // neighbour's distance, so the blend is continuous across the whole skin
+    const S = this.sim;
+    const grid = new PointGrid(0.3);
+    for (let i = 0; i < S.nP; i++) grid.add(S.restPos[i * 3], S.restPos[i * 3 + 1], S.restPos[i * 3 + 2]);
+    const idx0 = new Float32Array(n * 4), idx1 = new Float32Array(n * 4);
+    const w0 = new Float32Array(n * 4), w1 = new Float32Array(n * 4);
+    const ids = new Float32Array(n * K), ws = new Float32Array(n * K);
+    const near = [];
+    for (let i = 0; i < n; i++) {
+      const x = rest[i * 3], y = rest[i * 3 + 1], z = rest[i * 3 + 2];
+      let r = 0.3;
+      for (;;) {
+        near.length = 0;
+        grid.forEachNear(x, y, z, r, (id, d2) => { near.push(d2, id); });
+        if (near.length >= (K + 1) * 2 || r > 3) break;
+        r *= 1.5;
+      }
+      const order = [];
+      for (let k = 0; k < near.length; k += 2) order.push(k);
+      order.sort((a, b) => near[a] - near[b]);
+      const hR = Math.sqrt(near[order[Math.min(K, order.length - 1)]]) * 1.0001 + 1e-6;
+      let sum = 0;
+      for (let k = 0; k < K; k++) {
+        const o = order[Math.min(k, order.length - 1)];
+        const q = 1 - near[o] / (hR * hR);
+        const w = k < order.length ? q * q * q : 0;
+        ids[i * K + k] = near[o + 1];
+        ws[i * K + k] = w;
+        sum += w;
+      }
+      for (let k = 0; k < K; k++) ws[i * K + k] /= sum || 1;
+      for (let k = 0; k < 4; k++) {
+        idx0[i * 4 + k] = ids[i * K + k]; w0[i * 4 + k] = ws[i * K + k];
+        idx1[i * 4 + k] = ids[i * K + 4 + k]; w1[i * 4 + k] = ws[i * K + 4 + k];
+      }
+    }
+
+    // thickness behind each vertex (for translucency)
+    const thick = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const nx = -restN[i * 3], ny = -restN[i * 3 + 1], nz = -restN[i * 3 + 2];
+      let t = 0.02;
+      while (t < 0.9 && inside(rest[i * 3] + nx * t, rest[i * 3 + 1] + ny * t, rest[i * 3 + 2] + nz * t)) t += 0.03;
+      thick[i] = t;
+    }
 
     this.count = n;
     this.index = index;
     this.rest = rest;
     this.restN = restN;
+    this.skinIds = ids;
+    this.skinWs = ws;
     this.top = top;
-    this.cheeks = [-1, 1].map((sx) => this._nearestVertex(sx * 0.5, 0.77, 1.1));
-    this.pos = rest.slice();
-    this.nrm = restN.slice();
-    this.dentAmt = new Float32Array(n);
-    this.dirty = false;
+
+    // render triangles bucketed by rest centroid, for precise picking
+    this.triGrid = new PointGrid(0.12);
+    for (let f = 0; f < index.length; f += 3) {
+      const a = index[f] * 3, b = index[f + 1] * 3, c = index[f + 2] * 3;
+      this.triGrid.add((rest[a] + rest[b] + rest[c]) / 3, (rest[a + 1] + rest[b + 1] + rest[c + 1]) / 3, (rest[a + 2] + rest[b + 2] + rest[c + 2]) / 3, f / 3);
+    }
 
     const geo = new THREE.BufferGeometry();
-    this.posAttr = new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
-    this.nrmAttr = new THREE.BufferAttribute(this.nrm, 3).setUsage(THREE.DynamicDrawUsage);
-    this.dentAttr = new THREE.BufferAttribute(this.dentAmt, 1).setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('position', this.posAttr);
-    geo.setAttribute('normal', this.nrmAttr);
-    geo.setAttribute('rest', new THREE.BufferAttribute(rest, 3));
-    geo.setAttribute('dent', this.dentAttr);
-    geo.setIndex(new THREE.BufferAttribute(index, 1));
-    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 3.4);
+    geo.setAttribute('position', new THREE.BufferAttribute(rest, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(restN, 3));
+    geo.setAttribute('skinIdx0', new THREE.BufferAttribute(idx0, 4));
+    geo.setAttribute('skinIdx1', new THREE.BufferAttribute(idx1, 4));
+    geo.setAttribute('skinW0', new THREE.BufferAttribute(w0, 4));
+    geo.setAttribute('skinW1', new THREE.BufferAttribute(w1, 4));
+    geo.setAttribute('thick', new THREE.BufferAttribute(thick, 1));
+    geo.setIndex(new THREE.BufferAttribute(n < 65536 ? Uint16Array.from(index) : index, 1));
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 4);
 
+    // particle texture
+    const rows = Math.ceil((S.nP * 4) / TEX_W);
+    this.texData = new Float32Array(TEX_W * rows * 4);
+    this.tex = new THREE.DataTexture(this.texData, TEX_W, rows, THREE.RGBAFormat, THREE.FloatType);
+    this.tex.minFilter = THREE.NearestFilter;
+    this.tex.magFilter = THREE.NearestFilter;
+    this.tex.generateMipmaps = false;
+    // identity affine maps until the first physics state arrives
+    for (let i = 0; i < S.nP; i++) {
+      const k = i * 16;
+      this.texData[k] = 1; this.texData[k + 5] = 1; this.texData[k + 10] = 1; this.texData[k + 13] = 1;
+    }
+    this.tex.needsUpdate = true;
+    this.affine = this.texData; // CPU view for picking & the sprout
+
+    this.fingerVec = Array.from({ length: MAX_FINGERS }, () => new THREE.Vector4(0, 0, 0, 0));
     const c = (hex) => new THREE.Color(hex);
     this.uniforms = {
-      uBase: { value: c('#fbf6ef') },
+      uParticles: { value: this.tex },
+      uTexW: { value: TEX_W },
+      uFingers: { value: this.fingerVec },
       uDeep: { value: c('#efb9a6') },
       uRimCol: { value: c('#ffffff') },
       uInk: { value: c('#3b2a2d') },
@@ -210,10 +192,7 @@ export class Mochi {
       uMouthCol: { value: c('#8c3d4b') },
       uTongueCol: { value: c('#ff8c9f') },
       uLightV: { value: new THREE.Vector3(0, 1, 0) },
-      uUpV: { value: new THREE.Vector3(0, 1, 0) },
-      uSky: { value: new THREE.Color(0.56, 0.54, 0.57) },
-      uGround: { value: new THREE.Color(0.45, 0.38, 0.4) },
-      uSun: { value: new THREE.Color(0.5, 0.48, 0.46) },
+      uSunCol: { value: new THREE.Color(1, 0.97, 0.94) },
       uLook: { value: new THREE.Vector2() },
       uBlink: { value: 0 },
       uSqueeze: { value: 0 },
@@ -222,13 +201,30 @@ export class Mochi {
       uSurprise: { value: 0 },
       uMouth: { value: 0 },
       uBlush: { value: 0.3 },
+      uWrinkle: { value: 1 },
+      uWrinkleK: { value: 46 },
+      uSurface: { value: 0.5 },
     };
-    this.material = new THREE.ShaderMaterial({
-      uniforms: this.uniforms,
-      vertexShader: BODY_VERT,
-      fragmentShader: BODY_FRAG,
+    this.material = new THREE.MeshPhysicalMaterial({
+      color: 0xfbf6ef,
+      roughness: 0.46,
+      metalness: 0,
+      sheen: 0.35,
+      sheenRoughness: 0.5,
+      sheenColor: new THREE.Color('#ffffff'),
+      clearcoat: 0.22,
+      clearcoatRoughness: 0.38,
+      envMapIntensity: 0.6,
     });
+    patchSkinMaterial(this.material, this.uniforms);
+    this.depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    patchDepthMaterial(this.depthMaterial, this.uniforms);
+
     this.mesh = new THREE.Mesh(geo, this.material);
+    this.mesh.customDepthMaterial = this.depthMaterial;
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+    this.mesh.frustumCulled = false;
     this.mesh.matrixAutoUpdate = false;
     this.group.add(this.mesh);
   }
@@ -238,64 +234,146 @@ export class Mochi {
     const g = new THREE.Group();
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.17, 10, 1), this.sproutMat);
     stem.position.y = 0.07;
+    stem.castShadow = true;
     g.add(stem);
     const leafGeo = makeLeafGeometry();
-    const leaves = [-1, 1].map((side) => {
+    this.leaves = [-1, 1].map((side) => {
       const mount = new THREE.Group();
       mount.position.y = 0.145;
       mount.rotation.y = side < 0 ? Math.PI : 0;
       const hinge = new THREE.Group();
-      hinge.add(new THREE.Mesh(leafGeo, this.sproutMat));
+      const leaf = new THREE.Mesh(leafGeo, this.sproutMat);
+      leaf.castShadow = true;
+      hinge.add(leaf);
       mount.add(hinge);
       g.add(mount);
       return hinge;
     });
     this.sprout = g;
-    this.leaves = leaves;
     this.sp = { ax: 0, az: 0, vx: 0, vz: 0, flap: 0, vf: 0, prev: new THREE.Vector3(), vel: new THREE.Vector3(), init: false };
     this.group.add(g);
   }
 
-  _nearestVertex(x, y, z) {
-    let best = 0, bd = Infinity;
-    const R = this.rest;
-    for (let i = 0; i < this.count; i++) {
-      const d = (R[i * 3] - x) ** 2 + (R[i * 3 + 1] - y) ** 2 + (R[i * 3 + 2] - z) ** 2;
-      if (d < bd) { bd = d; best = i; }
-    }
-    return best;
+  // ---- physics state ------------------------------------------------------------
+  // affine: Float32Array(N*16) from the solver (already interpolated)
+  setState(affine) {
+    this.texData.set(affine.subarray(0, this.sim.nP * 16));
+    this.tex.needsUpdate = true;
   }
 
-  // ---- settings ---------------------------------------------------------
+  setFingers(list) {
+    for (let k = 0; k < MAX_FINGERS; k++) {
+      const f = list[k];
+      const v = this.fingerVec[k];
+      if (!f || f.fade <= 0) { v.set(0, 0, 0, 0); continue; }
+      // the fingertip is a sphere resting on the contact point, pushed in by the
+      // press depth (its centre sits one radius outside the pressed surface)
+      const rho = f.radius * 1.05;
+      v.set(f.xf[0] - f.n[0] * rho, f.xf[1] - f.n[1] * rho, f.xf[2] - f.n[2] * rho, f.depth > 0.004 ? rho * Math.min(1, f.fade * 1.5) : 0);
+    }
+  }
+
+  // CPU version of the vertex shader for one render vertex.
+  skinVertex(vi, out, outN) {
+    const A = this.affine, ids = this.skinIds, ws = this.skinWs;
+    let r00 = 0, r01 = 0, r02 = 0, r03 = 0, r10 = 0, r11 = 0, r12 = 0, r13 = 0, r20 = 0, r21 = 0, r22 = 0, r23 = 0;
+    for (let k = 0; k < K; k++) {
+      const w = ws[vi * K + k];
+      if (w <= 0) continue;
+      const o = ids[vi * K + k] * 16;
+      r00 += w * A[o]; r01 += w * A[o + 1]; r02 += w * A[o + 2]; r03 += w * A[o + 3];
+      r10 += w * A[o + 4]; r11 += w * A[o + 5]; r12 += w * A[o + 6]; r13 += w * A[o + 7];
+      r20 += w * A[o + 8]; r21 += w * A[o + 9]; r22 += w * A[o + 10]; r23 += w * A[o + 11];
+    }
+    const R = this.rest, o = vi * 3;
+    const x = R[o], y = R[o + 1], z = R[o + 2];
+    out[0] = r00 * x + r01 * y + r02 * z + r03;
+    out[1] = r10 * x + r11 * y + r12 * z + r13;
+    out[2] = r20 * x + r21 * y + r22 * z + r23;
+    if (outN) {
+      // cofactor(F)·n₀ gives the deformed normal direction
+      const n0x = this.restN[o], n0y = this.restN[o + 1], n0z = this.restN[o + 2];
+      const c00 = r11 * r22 - r12 * r21, c01 = r12 * r20 - r10 * r22, c02 = r10 * r21 - r11 * r20;
+      const c10 = r02 * r21 - r01 * r22, c11 = r00 * r22 - r02 * r20, c12 = r01 * r20 - r00 * r21;
+      const c20 = r01 * r12 - r02 * r11, c21 = r02 * r10 - r00 * r12, c22 = r00 * r11 - r01 * r10;
+      let nx = c00 * n0x + c10 * n0y + c20 * n0z;
+      let ny = c01 * n0x + c11 * n0y + c21 * n0z;
+      let nz = c02 * n0x + c12 * n0y + c22 * n0z;
+      const l = Math.hypot(nx, ny, nz) || 1;
+      outN[0] = nx / l; outN[1] = ny / l; outN[2] = nz / l;
+    }
+    return out;
+  }
+
+  // Exact pick on the deformed skin: a coarse hit on the simulation surface, then
+  // the render triangles around it are skinned on the CPU and ray-tested.
+  raycast(o, d, simPos) {
+    const S = this.sim;
+    const coarse = raycastTriangles(simPos, S.surfFaces, o[0], o[1], o[2], d[0], d[1], d[2]);
+    if (!coarse) return null;
+    const F = S.surfFaces, X = S.restPos;
+    const a = F[coarse.face * 3] * 3, b = F[coarse.face * 3 + 1] * 3, c = F[coarse.face * 3 + 2] * 3;
+    const u = coarse.u, v = coarse.v, w = 1 - u - v;
+    const rx = X[a] * w + X[b] * u + X[c] * v;
+    const ry = X[a + 1] * w + X[b + 1] * u + X[c + 1] * v;
+    const rz = X[a + 2] * w + X[b + 2] * u + X[c + 2] * v;
+    const cache = new Map();
+    const tris = [];
+    this.triGrid.forEachNear(rx, ry, rz, 0.4, (t) => { tris.push(t); });
+    const pos = [];
+    const local = [];
+    const vid = (vi) => {
+      let k = cache.get(vi);
+      if (k === undefined) {
+        k = pos.length / 3;
+        cache.set(vi, k);
+        const p = this.skinVertex(vi, [0, 0, 0]);
+        pos.push(p[0], p[1], p[2]);
+      }
+      return k;
+    };
+    for (const t of tris) local.push(vid(this.index[t * 3]), vid(this.index[t * 3 + 1]), vid(this.index[t * 3 + 2]));
+    const fine = raycastTriangles(pos, local, o[0], o[1], o[2], d[0], d[1], d[2]);
+    const hit = fine && fine.t < coarse.t + 0.3 ? fine : coarse;
+    let restPoint = [rx, ry, rz];
+    if (hit === fine) {
+      const t = tris[fine.face];
+      const ia = this.index[t * 3] * 3, ib = this.index[t * 3 + 1] * 3, ic = this.index[t * 3 + 2] * 3;
+      const fu = fine.u, fv = fine.v, fw = 1 - fu - fv;
+      const R = this.rest;
+      restPoint = [R[ia] * fw + R[ib] * fu + R[ic] * fv, R[ia + 1] * fw + R[ib + 1] * fu + R[ic + 1] * fv, R[ia + 2] * fw + R[ib + 2] * fu + R[ic + 2] * fv];
+    }
+    const part = earWeight(restPoint[0], restPoint[1], restPoint[2]) > 0.5 ? 'ear'
+      : restPoint[2] > 0.6 && Math.abs(restPoint[0]) > 0.3 && Math.abs(restPoint[1] - 0.77) < 0.25 ? 'cheek'
+        : restPoint[1] > 1.35 ? 'head' : 'body';
+    return { point: hit.point, normal: hit.normal, t: hit.t, rest: restPoint, part };
+  }
+
+  // ---- settings -----------------------------------------------------------------
   setFlavor(f) {
     const u = this.uniforms;
-    u.uBase.value.set(f.body);
+    this.material.color.set(f.body);
     u.uDeep.value.set(f.deep);
     u.uRimCol.value.set(f.rim);
     u.uBlushCol.value.set(f.blush);
+    this.material.sheenColor.set(f.rim);
     this.sproutMat.color.set(f.sprout);
   }
 
-  setMode(key) {
-    this.mode = MODES[key] || MODES.soft;
+  // Surface response also shows in the skin: a stiffer skin wrinkles in fewer,
+  // larger folds (wavelength ∝ (bending/stiffness)^¼).
+  setSurface(t) {
+    this.uniforms.uSurface.value = t;
+    this.uniforms.uWrinkleK.value = 62 - 30 * Math.sqrt(t);
   }
 
   setView(camera, lightDirWorld) {
-    const view = camera.matrixWorldInverse;
-    this.uniforms.uLightV.value.copy(lightDirWorld).transformDirection(view);
-    this.uniforms.uUpV.value.copy(UP).transformDirection(view);
+    this.uniforms.uLightV.value.copy(lightDirWorld).transformDirection(camera.matrixWorldInverse);
   }
 
   setGaze(x, y) {
     this.gaze.x = clamp(x, -1, 1);
     this.gaze.y = clamp(y, -1, 1);
-  }
-
-  // ---- picking ----------------------------------------------------------
-  hitBody(raycaster) {
-    this.mesh.updateMatrixWorld();
-    const hits = raycaster.intersectObject(this.mesh, false);
-    return hits.length ? hits[0] : null;
   }
 
   hitSprout(raycaster) {
@@ -311,389 +389,84 @@ export class Mochi {
     this.timers.happy = 0.9;
   }
 
-  // ---- touching -----------------------------------------------------------
-  _newDeformer(cx, cy, cz, nx, ny, nz, pressure) {
-    if (this.deformers.length >= MAX_DEFORMERS) {
-      const i = this.deformers.findIndex((d) => !d.held);
-      if (i < 0) return null;
-      this.deformers.splice(i, 1);
-    }
-    const d = {
-      held: true, hold: 0, auto: 0, pressure,
-      cx, cy, cz, nx, ny, nz,
-      depth: 0, depthV: 0, depthT: 0,
-      Dx: 0, Dy: 0, Dz: 0, Vx: 0, Vy: 0, Vz: 0, Tx: 0, Ty: 0, Tz: 0,
-      r: 0.28, rp: 0.34, stretched: false, squeaked: false, dead: false,
-    };
-    this.deformers.push(d);
-    return d;
-  }
-
-  grab(hit, pressure = 1) {
-    _m4.copy(this.mesh.matrixWorld).invert();
-    const lp = _v1.copy(hit.point).applyMatrix4(_m4);
-    const { a, b, c } = hit.face;
-    _pa.fromArray(this.pos, a * 3);
-    _pb.fromArray(this.pos, b * 3);
-    _pc.fromArray(this.pos, c * 3);
-    let w0 = 1, w1 = 0, w2 = 0;
-    if (THREE.Triangle.getBarycoord(lp, _pa, _pb, _pc, _bary)) {
-      w0 = clamp(_bary.x, 0, 1); w1 = clamp(_bary.y, 0, 1); w2 = clamp(_bary.z, 0, 1);
-      const s = w0 + w1 + w2 || 1;
-      w0 /= s; w1 /= s; w2 /= s;
-    }
-    const R = this.rest, N = this.restN;
-    const cx = R[a * 3] * w0 + R[b * 3] * w1 + R[c * 3] * w2;
-    const cy = R[a * 3 + 1] * w0 + R[b * 3 + 1] * w1 + R[c * 3 + 1] * w2;
-    const cz = R[a * 3 + 2] * w0 + R[b * 3 + 2] * w1 + R[c * 3 + 2] * w2;
-    let nx = N[a * 3] * w0 + N[b * 3] * w1 + N[c * 3] * w2;
-    let ny = N[a * 3 + 1] * w0 + N[b * 3 + 1] * w1 + N[c * 3 + 1] * w2;
-    let nz = N[a * 3 + 2] * w0 + N[b * 3 + 2] * w1 + N[c * 3 + 2] * w2;
-    const l = Math.hypot(nx, ny, nz) || 1;
-    nx /= l; ny /= l; nz /= l;
-
-    const d = this._newDeformer(cx, cy, cz, nx, ny, nz, pressure);
-    if (!d) return null;
-    // a little whole-body flinch on contact
-    this.syV -= 0.9 * (0.25 + Math.max(0, ny)) * this.mode.kick;
-    this.shxV -= nx * 0.7;
-    this.shzV -= nz * 0.7;
-    if (this.asleep) this.wake();
-    return d;
-  }
-
-  // Keyboard poke: press the top of the head without a pointer.
-  pressHead() {
-    const vi = this.headSpot ?? (this.headSpot = this._nearestVertex(0, 1.5, 0.65));
-    const R = this.rest, N = this.restN, o = vi * 3;
-    const d = this._newDeformer(R[o], R[o + 1], R[o + 2], N[o], N[o + 1], N[o + 2], 1);
-    if (!d) return null;
-    this.syV -= 0.9 * (0.25 + Math.max(0, N[o + 1])) * this.mode.kick;
-    if (this.asleep) this.wake();
-    return d;
-  }
-
-  // Drag a held deformer by a world-space offset from where it was grabbed.
-  pull(d, wx, wy, wz) {
-    if (!d || !d.held) return 'none';
-    const M = this.mode;
-    _m3.setFromMatrix4(this.mesh.matrixWorld).invert();
-    const v = _v1.set(wx, wy, wz).applyMatrix3(_m3);
-    const L = v.length();
-    if (L > M.maxPull * 2.7) {
-      this.release(d, true);
-      return 'slip';
-    }
-    const k = L > 1e-6 ? (M.maxPull * Math.tanh(L / M.maxPull)) / L : 0;
-    d.Tx = v.x * k; d.Ty = v.y * k; d.Tz = v.z * k;
-    if (!d.stretched && L > 0.22) {
-      d.stretched = true;
-      return 'stretch';
-    }
-    return 'ok';
-  }
-
-  release(d, slipped = false) {
-    if (!d || !d.held) return null;
-    d.held = false;
-    const M = this.mode;
-    const len = Math.hypot(d.Dx, d.Dy, d.Dz);
-    const info = { depth: Math.max(0, d.depth) / M.maxDepth, pull: len / M.maxPull, hold: d.hold, slipped };
-    if (len > 0.04) {
-      const k = 2.4 * M.kick;
-      this.shxV -= d.Dx * k;
-      this.shzV -= d.Dz * k;
-      this.syV += d.Dy * k;
-      if (slipped) {
-        d.Vx -= d.Dx * 7; d.Vy -= d.Dy * 7; d.Vz -= d.Dz * 7;
-      }
-    }
-    if (d.depth > 0.04) this.syV += d.depth * 3 * Math.max(0.2, d.ny) * M.kick;
-    if (!d.auto) this.timers.happy = info.pull > 0.5 ? 0.7 : 1.1;
-    return info;
-  }
-
-  hop(power = 1) {
-    if (this.airborne || this.crouch > 0) return false;
-    this.crouch = 0.11;
-    this.jumpPower = power;
-    return true;
-  }
-
   sleep() {
     this.asleep = true;
   }
 
   wake() {
-    if (!this.asleep) return;
+    if (!this.asleep) return false;
     this.asleep = false;
     this.timers.surprise = 0.8;
-    this.hop(0.65);
-    this.events.push({ type: 'wake' });
+    return true;
   }
 
-  // Puffed cheeks: two automatic deformers inflate the cheeks for a moment.
   pout() {
     this.timers.pout = 2.0;
-    for (const vi of this.cheeks) {
-      const R = this.rest, N = this.restN, o = vi * 3;
-      const d = this._newDeformer(R[o], R[o + 1], R[o + 2], N[o], N[o + 1], N[o + 2], 0);
-      if (!d) continue;
-      d.auto = 1.6;
-      d.Tx = N[o] * 0.11; d.Ty = N[o + 1] * 0.11; d.Tz = N[o + 2] * 0.11;
+  }
+
+  // World position of a rest-space point (approximate: nearest render vertex).
+  worldPoint(x, y, z, target) {
+    const vi = this._nearestVertex(x, y, z);
+    const p = this.skinVertex(vi, [0, 0, 0]);
+    return target.set(p[0], p[1], p[2]);
+  }
+
+  _nearestVertex(x, y, z) {
+    const key = `${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)}`;
+    this._nv = this._nv || new Map();
+    let vi = this._nv.get(key);
+    if (vi !== undefined) return vi;
+    let bd = Infinity;
+    const R = this.rest;
+    for (let i = 0; i < this.count; i++) {
+      const d = (R[i * 3] - x) ** 2 + (R[i * 3 + 1] - y) ** 2 + (R[i * 3 + 2] - z) ** 2;
+      if (d < bd) { bd = d; vi = i; }
     }
+    this._nv.set(key, vi);
+    return vi;
   }
 
-  get held() {
-    return this.deformers.some((d) => d.held && !d.auto);
-  }
-
-  // ---- physics (fixed step) -----------------------------------------------
-  step(dt) {
-    const M = this.mode;
+  // ---- per frame ----------------------------------------------------------------
+  // press: 0..1 how hard the body is being squeezed right now
+  update(dt, press, anyHeld) {
     this.time += dt;
-    let sq = 0, shx = 0, shz = 0, bulge = 0;
-
-    for (const d of this.deformers) {
-      if (d.auto) {
-        d.auto -= dt;
-        if (d.auto <= 0) { d.auto = 0.0001; if (d.held) this.release(d); }
-      }
-      let wD, zD, wP, zP;
-      if (d.held) {
-        d.hold += dt;
-        if (!d.auto) {
-          const L = Math.hypot(d.Tx, d.Ty, d.Tz);
-          const press = M.maxDepth * d.pressure * (0.42 + 0.58 * (1 - Math.exp(-d.hold / 0.35)));
-          d.depthT = press * (1 - smooth(0.04, 0.24, L));
-        }
-        wD = 26; zD = 1; wP = d.auto ? 9 : 30; zP = d.auto ? 0.45 : 1;
-      } else {
-        d.depthT = 0; d.Tx = 0; d.Ty = 0; d.Tz = 0;
-        [wD, zD] = M.dent;
-        [wP, zP] = M.pull;
-      }
-      const aD = wD * wD * (d.depthT - d.depth) - 2 * zD * wD * d.depthV;
-      d.depthV += aD * dt;
-      d.depth += d.depthV * dt;
-
-      const kP = wP * wP, cP = 2 * zP * wP;
-      d.Vx += (kP * (d.Tx - d.Dx) - cP * d.Vx) * dt; d.Dx += d.Vx * dt;
-      d.Vy += (kP * (d.Ty - d.Dy) - cP * d.Vy) * dt; d.Dy += d.Vy * dt;
-      d.Vz += (kP * (d.Tz - d.Dz) - cP * d.Vz) * dt; d.Dz += d.Vz * dt;
-
-      const dep = Math.max(0, d.depth);
-      const len = Math.hypot(d.Dx, d.Dy, d.Dz);
-      d.r = 0.28 + 0.16 * Math.min(1, dep / M.maxDepth);
-      d.rp = 0.34 + 0.22 * Math.min(1, len / M.maxPull);
-
-      if (!d.auto) {
-        sq += Math.max(0, d.ny) * dep * 1.05 - d.Dy * 0.3;
-        shx += -d.nx * dep * 0.25 + d.Dx * 0.22;
-        shz += -d.nz * dep * 0.25 + d.Dz * 0.22;
-      }
-      bulge += d.depth * d.r * d.r * 1.1;
-
-      if (!d.held && Math.abs(d.depth) < 1e-4 && Math.abs(d.depthV) < 1e-3 && len < 1e-4 &&
-          Math.abs(d.Vx) + Math.abs(d.Vy) + Math.abs(d.Vz) < 1e-3) {
-        d.dead = true;
-      }
-    }
-    if (this.deformers.some((d) => d.dead)) this.deformers = this.deformers.filter((d) => !d.dead);
-    this.bulge = bulge;
-
-    // hop: crouch, launch, fly, land
-    if (this.crouch > 0) {
-      this.crouch -= dt;
-      sq += 0.24;
-      if (this.crouch <= 0) {
-        this.crouch = 0;
-        this.airborne = true;
-        this.jumpV = 4.2 * this.jumpPower;
-        this.syV += 3.5 * this.jumpPower;
-        this.events.push({ type: 'jump' });
-      }
-    }
-    if (this.airborne) {
-      this.jumpV -= 22 * dt;
-      this.jumpY += this.jumpV * dt;
-      sq -= clamp(this.jumpV * 0.035, -0.06, 0.16);
-      if (this.jumpY <= 0 && this.jumpV < 0) {
-        const impact = -this.jumpV;
-        this.jumpY = 0;
-        this.jumpV = 0;
-        this.airborne = false;
-        this.syV -= impact * 0.7 * (0.5 + 0.5 * M.kick);
-        this.events.push({ type: 'land', impact });
-      }
-    }
-
-    const [wB, zB] = M.body;
-    const kB = wB * wB, cB = 2 * zB * wB;
-    const syT = 1 - clamp(sq, -0.4, 0.42);
-    this.syV += (kB * (syT - this.sy) - cB * this.syV) * dt;
-    this.sy = clamp(this.sy + this.syV * dt, 0.5, 1.65);
-    const shxT = clamp(shx, -0.35, 0.35), shzT = clamp(shz, -0.35, 0.35);
-    this.shxV += (kB * 0.8 * (shxT - this.shx) - cB * this.shxV) * dt;
-    this.shx = clamp(this.shx + this.shxV * dt, -0.6, 0.6);
-    this.shzV += (kB * 0.8 * (shzT - this.shz) - cB * this.shzV) * dt;
-    this.shz = clamp(this.shz + this.shzV * dt, -0.6, 0.6);
-  }
-
-  // ---- per frame ------------------------------------------------------------
-  update(dt) {
-    this._deform();
-    this._place();
     this._sprout(dt);
-    this._expression(dt);
-  }
-
-  _deform() {
-    const defs = this.deformers;
-    const m = defs.length;
-    if (m === 0) {
-      if (this.dirty) {
-        this.pos.set(this.rest);
-        this.nrm.set(this.restN);
-        this.dentAmt.fill(0);
-        this.posAttr.needsUpdate = true;
-        this.nrmAttr.needsUpdate = true;
-        this.dentAttr.needsUpdate = true;
-        this.dirty = false;
-      }
-      return;
-    }
-    const M = this.mode;
-    const P = this.params;
-    for (let k = 0; k < m; k++) {
-      const d = defs[k], o = k * STRIDE;
-      const rb = d.r * 1.8;
-      const len = Math.hypot(d.Dx, d.Dy, d.Dz);
-      P[o] = d.cx; P[o + 1] = d.cy; P[o + 2] = d.cz;
-      P[o + 3] = d.nx; P[o + 4] = d.ny; P[o + 5] = d.nz;
-      P[o + 6] = d.depth / (1 - RIM);
-      P[o + 7] = 1 / (d.r * d.r);
-      P[o + 8] = 1 / (rb * rb);
-      P[o + 9] = Math.max((rb * 2.6) ** 2, (d.rp * 1.8) ** 2);
-      P[o + 10] = d.Dx; P[o + 11] = d.Dy; P[o + 12] = d.Dz;
-      P[o + 13] = 1 / (d.rp * d.rp);
-      P[o + 14] = len > 1e-5 ? M.pinch * Math.min(1, len / M.maxPull) : 0;
-      P[o + 15] = len;
-      P[o + 16] = len > 1e-5 ? d.Dx / len : 0;
-      P[o + 17] = len > 1e-5 ? d.Dy / len : 0;
-      P[o + 18] = len > 1e-5 ? d.Dz / len : 0;
-    }
-
-    const R = this.rest, RN = this.restN, pos = this.pos, dent = this.dentAmt;
-    const bulge = this.bulge;
-    const n = this.count;
-    for (let i = 0, j = 0; i < n; i++, j += 3) {
-      const x = R[j], y = R[j + 1], z = R[j + 2];
-      let ux = 0, uy = 0, uz = 0, dn = 0;
-      for (let k = 0; k < m; k++) {
-        const o = k * STRIDE;
-        const dx = x - P[o], dy = y - P[o + 1], dz = z - P[o + 2];
-        const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 > P[o + 9]) continue;
-        const depth = P[o + 6];
-        if (depth > 1e-5 || depth < -1e-5) {
-          const g = (Math.exp(-d2 * P[o + 7]) - RIM * Math.exp(-d2 * P[o + 8])) * depth;
-          ux -= P[o + 3] * g; uy -= P[o + 4] * g; uz -= P[o + 5] * g;
-          dn += g;
-        }
-        if (P[o + 15] > 1e-5) {
-          const t = d2 * P[o + 13];
-          const w = Math.exp(-t * t);
-          ux += P[o + 10] * w; uy += P[o + 11] * w; uz += P[o + 12] * w;
-          const pinch = P[o + 14];
-          if (pinch > 0) {
-            const hx = P[o + 16], hy = P[o + 17], hz = P[o + 18];
-            const along = dx * hx + dy * hy + dz * hz;
-            const s = pinch * 4 * w * (1 - w);
-            ux -= (dx - hx * along) * s;
-            uy -= (dy - hy * along) * s;
-            uz -= (dz - hz * along) * s;
-          }
-        }
-      }
-      if (bulge !== 0) {
-        const f = y < 0.35 ? bulge * smooth(0, 0.35, y) : bulge;
-        ux += RN[j] * f; uy += RN[j + 1] * f; uz += RN[j + 2] * f;
-      }
-      pos[j] = x + ux;
-      const ny = y + uy;
-      pos[j + 1] = ny > 0 ? ny : 0;
-      pos[j + 2] = z + uz;
-      dent[i] = dn > 0 ? dn : 0;
-    }
-    computeNormals(pos, this.index, this.nrm);
-    this.posAttr.needsUpdate = true;
-    this.nrmAttr.needsUpdate = true;
-    this.dentAttr.needsUpdate = true;
-    this.dirty = true;
-  }
-
-  // Whole-body squash, lean and hop as one matrix (bottom stays on the plate).
-  _place() {
-    const t = this.time;
-    const breathe = this.asleep ? 0.022 * Math.sin(t * 1.3) : 0.011 * Math.sin(t * 2.1);
-    const sy = this.sy * (1 + breathe);
-    const sxz = 1 / Math.sqrt(sy);
-    const kx = this.shx + 0.008 * Math.sin(t * 1.3);
-    const kz = this.shz + 0.006 * Math.sin(t * 1.7 + 1);
-    this.mesh.matrix.set(
-      sxz, kx * sy, 0, 0,
-      0, sy, 0, this.jumpY,
-      0, kz * sy, sxz, 0,
-      0, 0, 0, 1,
-    );
-    this.mesh.matrixWorldNeedsUpdate = true;
-    this.spread = sxz;
+    this._expression(dt, press, anyHeld);
   }
 
   _sprout(dt) {
     const s = this.sp;
-    const o = this.top * 3;
-    const base = _v1.set(this.pos[o], this.pos[o + 1], this.pos[o + 2]).applyMatrix4(this.mesh.matrix);
-    _m3.getNormalMatrix(this.mesh.matrix);
-    const up = _v2.set(this.nrm[o], this.nrm[o + 1], this.nrm[o + 2]).applyMatrix3(_m3).normalize();
+    const p = this.skinVertex(this.top, [0, 0, 0], (this._tn = this._tn || [0, 1, 0]));
+    const base = _v1.set(p[0], p[1], p[2]);
+    const up = _v2.set(this._tn[0], this._tn[1], this._tn[2]).normalize();
     if (!s.init) { s.prev.copy(base); s.vel.set(0, 0, 0); s.init = true; }
     const idt = 1 / Math.max(dt, 1 / 240);
     const vel = _v3.copy(base).sub(s.prev).multiplyScalar(idt);
-    const acc = _v4.copy(vel).sub(s.vel).multiplyScalar(idt).clampLength(0, 70);
+    const acc = _v4.copy(vel).sub(s.vel).multiplyScalar(idt).clampLength(0, 120);
     s.prev.copy(base);
     s.vel.copy(vel);
-
     const w = 15, z = 0.13, k = w * w, c = 2 * z * w, h = Math.min(dt, 1 / 30);
-    s.vx += (-k * s.ax - c * s.vx - acc.z * 3.5) * h; s.ax = clamp(s.ax + s.vx * h, -0.9, 0.9);
-    s.vz += (-k * s.az - c * s.vz + acc.x * 3.5) * h; s.az = clamp(s.az + s.vz * h, -0.9, 0.9);
-    s.vf += (-k * s.flap - c * s.vf - acc.y * 2.2) * h; s.flap = clamp(s.flap + s.vf * h, -0.8, 0.8);
-
-    this.sprout.position.copy(base);
+    s.vx += (-k * s.ax - c * s.vx - acc.z * 2.2) * h; s.ax = clamp(s.ax + s.vx * h, -0.9, 0.9);
+    s.vz += (-k * s.az - c * s.vz + acc.x * 2.2) * h; s.az = clamp(s.az + s.vz * h, -0.9, 0.9);
+    s.vf += (-k * s.flap - c * s.vf - acc.y * 1.4) * h; s.flap = clamp(s.flap + s.vf * h, -0.8, 0.8);
+    this.sprout.position.copy(base).addScaledVector(up, -0.01);
     this.sprout.quaternion.setFromUnitVectors(UP, up).multiply(_q.setFromEuler(_e.set(s.ax, 0, s.az)));
     const rest = 0.5 - 0.42 * this.face.sleep + 0.25 * this.face.happy;
     for (const leaf of this.leaves) leaf.rotation.z = rest + s.flap;
   }
 
-  _expression(dt) {
-    const F = this.face, T = this.timers, M = this.mode;
+  _expression(dt, press, anyHeld) {
+    const F = this.face, T = this.timers;
     T.happy = Math.max(0, T.happy - dt);
     T.surprise = Math.max(0, T.surprise - dt);
     T.pout = Math.max(0, T.pout - dt);
-
-    let press = 0, anyHeld = false;
-    for (const d of this.deformers) {
-      if (!d.held || d.auto) continue;
-      anyHeld = true;
-      press = Math.max(press, d.depth / M.maxDepth, (Math.hypot(d.Dx, d.Dy, d.Dz) / M.maxPull) * 1.1);
-    }
     press = clamp(press, 0, 1);
     const asleep = this.asleep;
     const pouting = T.pout > 0;
-    const squeezeT = asleep ? 0 : Math.max(smooth(0.3, 0.75, press), pouting ? 1 : 0);
+    const squeezeT = asleep ? 0 : Math.max(smooth(0.35, 0.8, press), pouting ? 1 : 0);
     const happyT = !asleep && !anyHeld && !pouting && T.happy > 0 ? 1 : 0;
     const surpriseT = T.surprise > 0 ? 1 : 0;
-    const mouthT = asleep || pouting ? 0 : Math.max(smooth(0.5, 1, press) * 0.9, surpriseT * 0.75);
+    const mouthT = asleep || pouting ? 0 : Math.max(smooth(0.55, 1, press) * 0.9, surpriseT * 0.75);
     const blushT = asleep ? 0.18 : clamp(0.3 + 0.75 * smooth(0.1, 0.8, press) + happyT * 0.25 + (pouting ? 0.8 : 0), 0, 1);
 
     F.squeeze = damp(F.squeeze, squeezeT, 22, dt);
@@ -714,7 +487,6 @@ export class Mochi {
         T.blinkWait = Math.random() < 0.2 ? 0.28 : 1.8 + Math.random() * 3.6;
       }
     }
-
     F.lx = damp(F.lx, asleep ? 0 : this.gaze.x, 9, dt);
     F.ly = damp(F.ly, asleep ? 0 : this.gaze.y, 9, dt);
 
@@ -728,9 +500,6 @@ export class Mochi {
     u.uBlush.value = F.blush;
     u.uLook.value.set(F.lx * 0.05, F.ly * 0.035);
   }
-
-  // World position of a point on the rest shape (for placing effects).
-  worldPoint(x, y, z, target) {
-    return target.set(x, y, z).applyMatrix4(this.mesh.matrixWorld);
-  }
 }
+
+export { CENTER_Y };

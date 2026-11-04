@@ -4,35 +4,65 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>말랑말랑 찹쌀이</title>
-<meta name="description" content="꾹 누르고 쭉 늘리는 3D 말랑이, 찹쌀이를 만져보세요.">
+<meta name="description" content="실제 소프트바디 물리로 움직이는 3D 말랑이, 찹쌀이를 꾹 누르고 쭉 당기고 흔들어보세요.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
 <link rel="stylesheet" href="style.css">
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js" } }
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
 </script>
 </head>
 <body>
-<canvas id="stage" tabindex="0" aria-label="3D 찹쌀이. 꾹 누르거나 누른 채로 당겨서 만질 수 있어요. 키보드로는 스페이스로 누르고, 화살표로 돌리고, J로 점프해요."></canvas>
+<canvas id="stage" tabindex="0" aria-label="3D 찹쌀이. 꾹 누르거나 누른 채로 당겨서 만질 수 있어요. 접시를 끌면 흔들려요. 키보드로는 스페이스로 누르고, 화살표로 돌리고, J로 점프, S로 흔들어요."></canvas>
 
 <div class="ui">
   <header class="topbar" id="topbar">
     <div class="brand">
       <h1>말랑말랑 찹쌀이</h1>
-      <p>꾹 누르고, 쭉 늘리고, 톡톡 점프</p>
+      <p>꾹 누르고, 쭉 당기고, 살살 흔들기</p>
     </div>
     <div class="top-actions">
       <div class="counter" id="counter" role="img" aria-label="만진 횟수 0번">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
         <span id="count">0</span>
       </div>
+      <button type="button" class="icon-btn" id="tune" aria-label="말랑함 세부 설정" aria-expanded="false" aria-controls="panel" title="말랑함 세부 설정">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>
+      </button>
       <button type="button" class="icon-btn" id="sound" aria-label="소리와 진동" aria-pressed="true" title="소리·진동 끄기">
         <svg class="ic-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" class="fill"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
         <svg class="ic-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" class="fill"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>
       </button>
     </div>
   </header>
+
+  <section class="panel" id="panel" aria-labelledby="panel-title" hidden>
+    <div class="panel-head">
+      <h2 id="panel-title">말랑함 세부 설정</h2>
+      <button type="button" class="icon-btn small" id="panel-close" aria-label="설정 닫기" title="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+      </button>
+    </div>
+    <p class="panel-note"><span id="preset-note"></span> <button type="button" class="text-btn" id="preset-reset">질감 기본값으로</button></p>
+    <div class="sliders" id="sliders"></div>
+    <div class="panel-foot">
+      <label class="quality" for="quality">시뮬레이션 품질
+        <select id="quality">
+          <option value="auto">자동</option>
+          <option value="low">낮음</option>
+          <option value="medium">보통</option>
+          <option value="high">높음</option>
+        </select>
+      </label>
+      <p class="perf" id="perf" aria-live="off"></p>
+    </div>
+  </section>
 
   <section class="tray" id="tray" aria-label="찹쌀이 고르기">
     <div class="tray-row">
@@ -52,9 +82,10 @@
 <div class="hint is-out" id="hint" hidden><div class="hint-bubble" id="hint-text"></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="fx" id="fx" aria-hidden="true"></div>
+<div class="rings" id="rings" aria-hidden="true"></div>
 
 <div class="nogl" id="nogl" hidden>
-  <p><strong>3D 화면을 열 수 없어요.</strong><br>이 브라우저에서 WebGL이 꺼져 있어요. 최신 크롬, 사파리, 엣지에서 열어주세요.</p>
+  <p><strong>3D 화면을 열 수 없어요.</strong><br>이 브라우저에서 WebGL 2가 꺼져 있어요. 최신 크롬, 사파리, 엣지에서 열어주세요.</p>
 </div>
 
 <script type="module" src="src/main.js"></script>
