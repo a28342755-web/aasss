@@ -3376,6 +3376,10 @@ for(const y of[-0.4,0.5])for(const[x,z]of[[0.95,2.7],[-0.95,2.7],[0.95,-2.65],[-
 // engine air intake (water above it floods the engine): the 4x4's snorkel head; the supercar's side intakes
 const SNORKEL=SC?new V3(-0.98,0.1,-0.65):new V3(-0.9,1.03,0.38);
 const BOX_HW=SC?1.0:0.95,BOX_HL=SC?2.42:2.78;
+// the car's own box in its frame, which the motion blur keeps sharp: from the body as drawn once a model is on (see the
+// models), its floor just above the ground, so the road round the car blurs with the rest of the road. (A box the size
+// of the collision box, down through the ground, left a sharp patch of road round the car, longest behind a short body.)
+const CARBOX={lo:new V3(-(BOX_HW+0.1),YC0-RAD+0.05,-(BOX_HL+0.1)),hi:new V3(BOX_HW+0.1,1.35,BOX_HL+0.1)};
 let BSTAMP=0;
 
 /* ================= VEHICLE MODEL ================= */
@@ -4686,7 +4690,13 @@ if(MODEL){
     if(HCW.on&&!SC&&MODEL.hub)try{axleRig(b);}catch(e){console.warn('axle rig',e);}
     // the model's own steering wheel turns on its column
     const SN=MODEL.steer&&b.getObjectByName(MODEL.steer.node);if(SN)HCW.steer={n:SN,q0:SN.quaternion.clone(),ax:new V3(...MODEL.steer.ax).normalize()};
-    carGroup.add(b);HCW.model=true;}catch(e){console.warn('vehicle model',e);}}
+    carGroup.add(b);HCW.model=true;
+    // the motion blur's car box: the body's bounds in the car's frame, the wheels' reach added (they turn outside the body)
+    try{carGroup.updateMatrixWorld(true);const inv=carGroup.matrixWorld.clone().invert(),bx=new THREE.Box3(),tb=new THREE.Box3(),M4=new THREE.Matrix4(),v=new V3();
+      b.traverse(o=>{if(!o.isMesh||!o.visible)return;const g=o.geometry;if(!g.boundingBox)g.computeBoundingBox();bx.union(tb.copy(g.boundingBox).applyMatrix4(M4.multiplyMatrices(inv,o.matrixWorld)));});
+      bx.expandByPoint(v.set(HALF_TRACK+0.25,YC0+RAD+0.05,AXZ[0]+RAD+0.05)).expandByPoint(v.set(-(HALF_TRACK+0.25),YC0-RAD,AXZ[1]-RAD-0.05));
+      CARBOX.lo.copy(bx.min).subScalar(0.06);CARBOX.hi.copy(bx.max).addScalar(0.06);CARBOX.lo.y=Math.max(CARBOX.lo.y,YC0-RAD+0.05);}catch(e){console.warn('car box',e);}}
+    catch(e){console.warn('vehicle model',e);}}
 // ==== CHASSIS31: the frame and the drivetrain under the body ====
 // Everything a look underneath shows, placed so that it clears the moving suspension and the driveshafts: the boxed
 // ladder frame (holes, outriggers, rubber body mounts, crossmembers, coil towers), the sump, bellhousing, gearbox and
@@ -5139,7 +5149,13 @@ function setXray(on){garage.xray=on;for(const m of carGroup.children){if(!m.isMe
 const _zA=new V3(0,0,1);
 const blob=(()=>{const cv=document.createElement('canvas');cv.width=cv.height=64;const x=cv.getContext('2d');const g=x.createRadialGradient(32,32,4,32,32,32);g.addColorStop(0,'#fff');g.addColorStop(1,'#000');x.fillStyle=g;x.fillRect(0,0,64,64);
   const pg=new THREE.PlaneGeometry(2.5,5.3);pg.rotateX(-Math.PI/2);
-  const m=new THREE.Mesh(pg,new THREE.MeshBasicNodeMaterial({color:0x000000,alphaMap:new THREE.CanvasTexture(cv),transparent:true,opacity:0.5,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3*POFF,polygonOffsetUnits:-6*POFF}));m.renderOrder=2;scene.add(m);return m;})();
+  const m=new THREE.Mesh(pg,new THREE.MeshBasicNodeMaterial({color:0x000000,alphaMap:new THREE.CanvasTexture(cv),transparent:true,opacity:0.5,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3*POFF,polygonOffsetUnits:-6*POFF}));m.renderOrder=2;
+  // its corners are written in world space each frame and the mesh itself never moves, so the motion buffer takes it for
+  // part of the road (the camera's motion over a still surface) and the road under it blurs with the rest. (Moved as an
+  // object, it wrote the truck's own motion there, which the chase camera shares: the road under the whole quad, out
+  // past the body, stayed sharp, a rectangle in the streaking road)
+  m.matrixAutoUpdate=false;m.frustumCulled=false;m.userData.base=Float32Array.from(pg.attributes.position.array);pg.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  scene.add(m);return m;})(),_blM=new THREE.Matrix4(),_blV=new V3(),_bl1=new V3(1,1,1);
 function setPaint(i){paintIdx=i;M_.paint.color.copy(C(PAINTS[i][1]));for(const m of HCP)m.color.copy(M_.paint.color);document.querySelectorAll('#swatches button').forEach((b,k)=>b.setAttribute('aria-pressed',String(k===i)));}
 
 // small parts (bolts, clips, hoses, brake lines) stay out of the shadow pass: a draw each for a shadow nobody sees
@@ -7031,6 +7047,7 @@ function updateVisuals(dt){
   const hAbove=car.pos.y-blob.position.y;
   _d.copy(car.fwd).addScaledVector(_bn,-car.fwd.dot(_bn)).normalize();_m.crossVectors(_bn,_d);
   blob.quaternion.setFromRotationMatrix(_bm.makeBasis(_m,_bn,_d));
+  {const P=blob.geometry.attributes.position,B=blob.userData.base;_blM.compose(blob.position,blob.quaternion,_bl1);for(let i=0;i<P.count;i++){_blV.fromArray(B,i*3).applyMatrix4(_blM);P.setXYZ(i,_blV.x,_blV.y,_blV.z);}P.needsUpdate=true;}
   blob.material.opacity=0.55*clamp(1.6-hAbove*0.5,0,1);
   flushTracks();
   updateParticles(dt);
@@ -7446,13 +7463,13 @@ const PFX=(()=>{
   // the player's own car stays sharp: swinging the camera round it moves its near and far sides across the screen
   // (parallax), which would streak it. Pixels inside its box (found from the depth: the camera's and the car's matrices)
   // get no streak of their own and lend none to their neighbours; the world round it still blurs
-  const uCWm=uniform(new THREE.Matrix4()),uCarI=uniform(new THREE.Matrix4()),uCarE=uniform(new V3(1.2,1.35,3.1)),_cm=new THREE.Matrix4(),_c1=new V3(1,1,1);
+  const uCWm=uniform(new THREE.Matrix4()),uCarI=uniform(new THREE.Matrix4()),uCarLo=uniform(CARBOX.lo.clone()),uCarHi=uniform(CARBOX.hi.clone()),_cm=new THREE.Matrix4(),_c1=new V3(1,1,1);
   const mbO=new V3(),mbO0=new V3(),mbQ0=new THREE.Quaternion(),mbC0=new THREE.Quaternion();
   P.mb={k:1,max:0.03};   // k: shutter scale (1 = 180 degrees), max: the longest streak, as a fraction of the screen
   P.addFX('motion blur',20,(x,S)=>{const {If,sqrt}=TSL,N=14,u=S.u,lm=uMBx.mul(max(uRes.x,uRes.y));
-    // (1 inside the car's box, 0 past 25 cm outside it)
-    const carIn=(c,d)=>{const vp=getViewPosition(c,LOGZ?viewZToPerspectiveDepth(viewZ(d),uNear,uFar):d,uPInv),q=abs(uCarI.mul(uCWm.mul(vec4(vp,1))).xyz).sub(uCarE);
-      return float(1).sub(smoothstep(0,0.25,max(q.x,max(q.y,q.z))));};
+    // (1 inside the car's box, from 5 cm in from its faces; 0 from 3 cm outside them: the road 5 cm under its floor is out)
+    const carIn=(c,d)=>{const vp=getViewPosition(c,LOGZ?viewZToPerspectiveDepth(viewZ(d),uNear,uFar):d,uPInv),pc=uCarI.mul(uCWm.mul(vec4(vp,1))).xyz,q=max(uCarLo.sub(pc),pc.sub(uCarHi));
+      return float(1).sub(smoothstep(-0.05,0.03,max(q.x,max(q.y,q.z))));};
     // the streak in pixels, clamped (an Inf/NaN motion, from a vertex behind the camera, fails the test: no streak)
     const bv=c=>{const v=lod0(S.vel.sample(c)).xy.mul(vec2(0.5,-0.5)).mul(uRes).mul(uMB),l2=dot(v,v),ok=l2.lessThan(1e10);
       return select(ok,v.mul(min(1,lm.div(max(sqrt(select(ok,l2,0)),1e-4)))),vec2(0));};
@@ -7635,7 +7652,7 @@ const PFX=(()=>{
     mbO0.copy(mbO);mbQ0.copy(car.q);mbC0.copy(camera.quaternion);
     uMB.value=full&&!garage.on&&!mbZ&&uDbg.value<0.5?0.5*Math.min(2.4,Math.max(0.6,(1/60)/Math.max(1e-3,fd)))*Math.max(0,P.mb.k||0):0;
     if(mbZ)mbZ--;uMBf.value=mbN=(mbN+1)&63;uMBx.value=Math.min(0.1,Math.max(0,P.mb.max||0));
-    camera.updateMatrixWorld();uCWm.value.copy(camera.matrixWorld);uCarI.value.copy(_cm.compose(car.pos,car.q,_c1)).invert();uCarE.value.set(BOX_HW+0.25,1.35,BOX_HL+0.3);
+    camera.updateMatrixWorld();uCWm.value.copy(camera.matrixWorld);uCarI.value.copy(_cm.compose(car.pos,car.q,_c1)).invert();uCarLo.value.copy(CARBOX.lo);uCarHi.value.copy(CARBOX.hi);
     // sun glare: eased in and out with the sun's reach (gn) and P.glare.k; none in the garage, under the debug views or
     // below level 2, and cut at once with the sun behind the camera (its place on screen isn't updated then). The 1x1
     // visibility renders only while it is on (and once at the start, so its shader is built behind the loading
