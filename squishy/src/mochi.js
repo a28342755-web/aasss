@@ -71,12 +71,13 @@ export class Mochi {
     const n = dirs.length / 3;
     const rest = new Float32Array(n * 3);
     const p = [0, 0, 0];
-    let top = 0;
+    let top = -1;
     for (let i = 0; i < n; i++) {
       surfacePoint(dirs[i * 3], dirs[i * 3 + 1], dirs[i * 3 + 2], p);
       rest[i * 3] = p[0]; rest[i * 3 + 1] = p[1]; rest[i * 3 + 2] = p[2];
-      // the sprout grows from the top of the head, between the ears
-      if (Math.abs(p[0]) < 0.06 && Math.abs(p[2]) < 0.2 && p[1] > rest[top * 3 + 1] - (top ? 0 : 99)) top = i;
+      // the sprout grows from the highest point on the head's centre line,
+      // between the ears
+      if (Math.abs(p[0]) < 0.06 && Math.abs(p[2]) < 0.2 && (top < 0 || p[1] > rest[top * 3 + 1])) top = i;
     }
     const restN = new Float32Array(n * 3);
     for (let f = 0; f < index.length; f += 3) {
@@ -202,7 +203,7 @@ export class Mochi {
       uMouth: { value: 0 },
       uBlush: { value: 0.3 },
       uWrinkle: { value: 1 },
-      uWrinkleK: { value: 46 },
+      uWrinkleK: { value: 58 },
       uSurface: { value: 0.5 },
     };
     this.material = new THREE.MeshPhysicalMaterial({
@@ -364,7 +365,7 @@ export class Mochi {
   // larger folds (wavelength ∝ (bending/stiffness)^¼).
   setSurface(t) {
     this.uniforms.uSurface.value = t;
-    this.uniforms.uWrinkleK.value = 62 - 30 * Math.sqrt(t);
+    this.uniforms.uWrinkleK.value = 74 - 34 * Math.sqrt(t);
   }
 
   setView(camera, lightDirWorld) {

@@ -198,7 +198,7 @@ async function buildWorld(drop) {
   sun.shadow.mapSize.set(T.shadow, T.shadow);
   sun.shadow.map?.dispose();
   sun.shadow.map = null;
-  physics = new PhysicsClient(sim, params, { substeps: T.substeps, minSubsteps: Math.min(5, T.substeps), budgetMs: 8, drop });
+  physics = new PhysicsClient(sim, params, { substeps: T.substeps, minSubsteps: T.minSubsteps, budgetMs: 11, drop });
   mochi.setState(physics.affine);
   await physics.start();
   setFlavor(store.get('flavor', 'milk'), false);
@@ -279,6 +279,7 @@ function setMode(key, byUser) {
     modeKey = 'custom';
     modeGroup.mark(null);
     store.set('mode', modeKey);
+    renderPanelValues();
     return;
   }
   modeKey = key;
@@ -457,6 +458,8 @@ function layout() {
   camera.aspect = w / fullH;
   camera.setViewOffset(w, fullH, 0, shift > 0 ? 2 * shift : 0, w, h);
   camera.updateProjectionMatrix();
+  // the settings panel hangs just below the top bar, however tall it wraps
+  panel.style.top = `${Math.round(topbar.getBoundingClientRect().bottom + 10)}px`;
 }
 
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -986,6 +989,24 @@ function overlays(dt, now) {
   }
 }
 
+// Left alone away from the middle of the plate (pulled by an ear, shaken),
+// 찹쌀이 hops back toward the centre. Each hop is only a launch impulse with a
+// horizontal part; the flight, landing and wobble are simulated.
+const homing = { off: 0, cool: 0 };
+function homeHop(dt) {
+  homing.cool = Math.max(0, homing.cool - dt);
+  const busy = [...pointers.values()].some((p) => p.kind === 'body' || p.kind === 'plate') || keyPress || shake || mochi.asleep;
+  const cm = physics.frame.cm;
+  const dx = cm[0] - physics.plate[0], dz = cm[2] - physics.plate[1];
+  const d = Math.hypot(dx, dz);
+  homing.off = !busy && d > 0.22 && physics.stats.ke < 2e-4 ? homing.off + dt : 0;
+  if (homing.off > 0.9 && homing.cool <= 0) {
+    physics.send({ t: 'hop', power: 0.5, dir: [-dx / d, -dz / d], speed: Math.min(5.5, 2 + d * 4) });
+    homing.cool = 0.75;
+    homing.off = 0;
+  }
+}
+
 // Keyboard shake: the "hand" moves the plate back and forth; the body follows
 // through friction and wobbles by its own inertia.
 function updateShake(dt) {
@@ -1092,6 +1113,7 @@ function frame(now) {
   if (!(dt > 0)) dt = 1 / 60;
   if (dt > 0.1) dt = 0.1;
   updateShake(dt);
+  homeHop(dt);
   physics.tick(dt);
   mochi.setState(physics.affine);
   mochi.setFingers(physics.fingers);

@@ -23,7 +23,7 @@ export function getMesh(tier) {
 export class Rig {
   constructor({ tier = 'medium', params = {}, substeps } = {}) {
     this.mesh = getMesh(tier);
-    const sub = substeps || { low: 8, medium: 10, high: 12 }[tier];
+    const sub = substeps || { low: 12, medium: 16, high: 18 }[tier];
     this.sb = new SoftBody(this.mesh, params, { substeps: sub });
     this.cam = [0, 5.2, 11.2]; // the app's home camera
     this.fingers = new Map();

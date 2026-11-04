@@ -15,8 +15,8 @@ export const SLIDERS = [
     label: '말랑함',
     phys: 'E',
     hint: '영률 E · 낮을수록 같은 힘에 더 깊이 들어가요',
-    to: (t) => logMap(60000, 2500, t),
-    from: (E) => invLog(60000, 2500, E),
+    to: (t) => logMap(40000, 2500, t),
+    from: (E) => invLog(40000, 2500, E),
     show: (p) => `E ${(p.E / 1000).toFixed(p.E < 10000 ? 1 : 0)} kPa`,
   },
   {
@@ -97,7 +97,7 @@ export const PRESETS = {
   soft: {
     name: '말랑',
     desc: '꾹 누르면 천천히 부풀어 올라요',
-    params: { E: 6500, nu: 0.36, g1: 2.6, tau: 0.9, beta: 0.012, smFreq: 0.4, skin: 18, radius: 0.27 },
+    params: { E: 6500, nu: 0.36, g1: 3.0, tau: 0.7, beta: 0.012, smFreq: 0.4, skin: 18, radius: 0.27 },
   },
   bouncy: {
     name: '탱글',

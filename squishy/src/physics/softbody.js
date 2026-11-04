@@ -63,7 +63,7 @@ export const DEFAULT_PARAMS = {
   smFreq: 1.0, // shape-memory natural frequency [Hz]
   skin: 25, // surface membrane modulus [N/m]
   radius: 0.25, // fingertip contact radius [units]
-  fingerForce: 1.5, // fingertip force at full pressure [N]
+  fingerForce: 2.4, // fingertip force at full pressure [N]
   airDrag: 0.4, // [1/s]
   friction: 1.5, // plate static friction (tacky silicone on glazed ceramic)
 };
@@ -462,9 +462,11 @@ export class SoftBody {
     this.plate.held = held;
   }
 
-  hop(power = 1) {
+  // dir (optional): horizontal unit direction [x, z] and speed [units/s] to hop
+  // toward, e.g. back to the middle of the plate
+  hop(power = 1, dir = null, speed = 0) {
     if (this.hopState || this.contacts < 3) return false;
-    this.hopState = { t: 0, power };
+    this.hopState = { t: 0, power, dir, speed };
     return true;
   }
 
@@ -484,7 +486,11 @@ export class SoftBody {
     this.time += frameDt;
     this.frame++;
     this._frameBegin(frameDt);
-    for (let s = 0; s < n; s++) this._substep(h, (s + 1) / n);
+    for (let s = 0; s < n; s++) {
+      // the hard-limit passes run every other substep and always on the last
+      this.lastSub = s === n - 1;
+      this._substep(h, (s + 1) / n);
+    }
     this._frameEnd(frameDt);
     if (t0) {
       const ms = performance.now() - t0;
@@ -542,11 +548,15 @@ export class SoftBody {
     const drag = Math.exp(-this.air * h);
     // hop: an upward push that reaches the base first (the body squashes at
     // take-off, then stretches in the air); everything after is simulated
-    let launch = 0, hn0 = 0;
+    let launch = 0, hn0 = 0, lx = 0, lz = 0;
     const hs = this.hopState;
     if (hs) {
       hn0 = this.cm[1];
-      if (hs.t >= 0.04 && !hs.launched) { hs.launched = true; launch = Math.sqrt(2 * g * 0.7) * hs.power; }
+      if (hs.t >= 0.04 && !hs.launched) {
+        hs.launched = true;
+        launch = Math.sqrt(2 * g * 0.7) * hs.power;
+        if (hs.dir) { lx = hs.dir[0] * hs.speed; lz = hs.dir[1] * hs.speed; }
+      }
       if (hs.t > 0.5) this.hopState = null;
     }
     for (let i = 0; i < N; i++) {
@@ -559,6 +569,7 @@ export class SoftBody {
       if (launch) {
         const hn = Math.min(1, Math.max(0, (x[o + 1] - hn0) / 0.9 + 0.5));
         vy += launch * (1.06 - 0.12 * hn);
+        vx += lx; vz += lz;
       }
       vx *= drag; vy *= drag; vz *= drag;
       v[o] = vx; v[o + 1] = vy; v[o + 2] = vz;
@@ -575,11 +586,13 @@ export class SoftBody {
     this._shapeMatch(h);
     // Self-collision only matters while something squeezes or shakes the body;
     // every other substep is plenty for the speeds involved.
-    if (this.active && (this.subCount & 1) === 0) this._selfCollide();
+    if (this.active && (this.subCount % (this.substeps > 12 ? 3 : 2) === 0 || (this.active && this.lastSub))) this._selfCollide();
     this._solvePlate(h);
     // hard limits get the very last word (twice if the first pass had work)
-    this._limitEdges();
-    if (this._limitTets()) this._limitTets();
+    if (this.lastSub || (this.subCount & 1) === 0) {
+      this._limitEdges();
+      if (this._limitTets()) this._limitTets();
+    }
     const ih = 1 / h;
     for (let i = 0; i < N * 3; i++) v[i] = (x[i] - p[i]) * ih;
     this._dashpots(h);
@@ -587,9 +600,9 @@ export class SoftBody {
   }
 
   _solveTets(h) {
-    const x = this.x, p = this.p, w = this.w;
+    const x = this.x, w = this.w;
     const ih2 = 1 / (h * h);
-    const gam = 0; // Kelvin–Voigt damping is done implicitly at velocity level (_dashpots)
+    // (Kelvin–Voigt damping is applied implicitly at velocity level in _dashpots)
     const fwd = true; // a fixed order keeps the resting state a true fixed point
 
     // ---- edge springs: elastic + Maxwell branch in one constraint ----
@@ -619,8 +632,7 @@ export class SoftBody {
           const r = L / l0;
           const st = r > 1.5 ? 1 + 8 * (r - 1.5) * (r - 1.5) : r < 0.65 ? 1 + 30 * (0.65 - r) * (0.65 - r) : 1;
           const aT = ih2 / (K[e] * sc * st);
-          const vdot = nx * (x[a] - p[a] - x[b] + p[b]) + ny * (x[a + 1] - p[a + 1] - x[b + 1] + p[b + 1]) + nz * (x[a + 2] - p[a + 2] - x[b + 2] + p[b + 2]);
-          dl = (-C - gam * vdot) / ((1 + gam) * (wa + wb) + aT);
+          dl = -C / (wa + wb + aT);
         }
         x[a] += wa * nx * dl; x[a + 1] += wa * ny * dl; x[a + 2] += wa * nz * dl;
         x[b] -= wb * nx * dl; x[b + 1] -= wb * ny * dl; x[b + 2] -= wb * nz * dl;
@@ -657,12 +669,8 @@ export class SoftBody {
           dl = -(vol - (vol < V0 ? 0.35 : 2.2) * V0) / ws;
         } else if (kv > 0) {
           const C = vol - V0 * SW[t] * breath;
-          const vdot = g0x * (x0 - p[a]) + g0y * (y0 - p[a + 1]) + g0z * (z0 - p[a + 2]) +
-            g1x * (x[b] - p[b]) + g1y * (x[b + 1] - p[b + 1]) + g1z * (x[b + 2] - p[b + 2]) +
-            g2x * (x[c] - p[c]) + g2y * (x[c + 1] - p[c + 1]) + g2z * (x[c + 2] - p[c + 2]) +
-            g3x * (x[d] - p[d]) + g3y * (x[d + 1] - p[d + 1]) + g3z * (x[d + 2] - p[d + 2]);
           const aT = (V0 / kv) * ih2; // energy ½(K/V0)(V-V0)²
-          dl = (-C - gam * vdot) / ((1 + gam) * ws + aT);
+          dl = -C / (ws + aT);
         } else continue;
         x[a] += w0 * g0x * dl; x[a + 1] += w0 * g0y * dl; x[a + 2] += w0 * g0z * dl;
         x[b] += w1 * g1x * dl; x[b + 1] += w1 * g1y * dl; x[b + 2] += w1 * g1z * dl;
@@ -753,13 +761,12 @@ export class SoftBody {
   }
 
   _solveSkin(h) {
-    const x = this.x, p = this.p, w = this.w;
+    const x = this.x, w = this.w;
     const ih2 = 1 / (h * h);
     if (this.kEdge > 0) {
       const E = this.mesh.surfEdges, L0 = this.edgeRest;
       const alpha = 1 / this.kEdge;
       const aT = alpha * ih2;
-      const gam = 0;
       for (let e = 0, ne = L0.length; e < ne; e++) {
         const ia = E[e * 2], ib = E[e * 2 + 1];
         const a = ia * 3, b = ib * 3;
@@ -768,8 +775,7 @@ export class SoftBody {
         if (L < 1e-9) continue;
         const nx = dx / L, ny = dy / L, nz = dz / L;
         const wa = w[ia], wb = w[ib];
-        const vdot = nx * (x[a] - p[a] - x[b] + p[b]) + ny * (x[a + 1] - p[a + 1] - x[b + 1] + p[b + 1]) + nz * (x[a + 2] - p[a + 2] - x[b + 2] + p[b + 2]);
-        const dl = (-(L - L0[e]) - gam * vdot) / ((1 + gam) * (wa + wb) + aT);
+        const dl = -(L - L0[e]) / (wa + wb + aT);
         x[a] += wa * nx * dl; x[a + 1] += wa * ny * dl; x[a + 2] += wa * nz * dl;
         x[b] -= wb * nx * dl; x[b + 1] -= wb * ny * dl; x[b + 2] -= wb * nz * dl;
       }

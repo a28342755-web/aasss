@@ -26,7 +26,7 @@ export function createRunner(sb, { minSubsteps = 5, maxSubsteps = 10, budgetMs =
         sb.setPlate(inp.x, inp.z, inp.held);
         break;
       case 'hop':
-        sb.hop(inp.power || 1);
+        sb.hop(inp.power || 1, inp.dir || null, inp.speed || 0);
         break;
       case 'puff':
         sb.puff();

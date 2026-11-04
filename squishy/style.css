@@ -501,7 +501,7 @@ button:focus-visible {
   top: calc(env(safe-area-inset-top, 0px) + 66px);
   right: max(16px, env(safe-area-inset-right, 0px));
   width: min(360px, calc(100% - 32px));
-  max-height: min(64vh, calc(100dvh - env(safe-area-inset-top, 0px) - 250px));
+  max-height: min(64vh, calc(100dvh - env(safe-area-inset-top, 0px) - 270px));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

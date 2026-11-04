@@ -83,7 +83,7 @@ const configs = quick
     { label: 'default/low', tier: 'low', params: {} },
     { label: 'default/high', tier: 'high', params: {} },
     { label: 'softest/medium', tier: 'medium', params: { E: 2500, nu: 0.25, g1: 3, tau: 4, beta: 0.0004, smFreq: 0, skin: 0, radius: 0.42 } },
-    { label: 'stiffest/medium', tier: 'medium', params: { E: 60000, nu: 0.49, g1: 0, tau: 0.12, beta: 0.03, smFreq: 3.5, skin: 150, radius: 0.14 } },
+    { label: 'stiffest/medium', tier: 'medium', params: { E: 40000, nu: 0.49, g1: 0, tau: 0.12, beta: 0.03, smFreq: 3.5, skin: 150, radius: 0.14 } },
   ];
 
 const { failures } = runMatrix(configs, names);

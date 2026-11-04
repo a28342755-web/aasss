@@ -16,12 +16,16 @@ import { CENTER_Y, inside, surfacePoint, earWeight, icosphereDirs, mulberry32, C
 import { PointGrid } from './hash.js';
 
 // Bump when the shape or the mesher changes: cached meshes are keyed by it.
-export const MESH_VERSION = 4;
+export const MESH_VERSION = 5;
 
 export const TIERS = {
-  low: { spacing: 0.25, interior: 1.75, substeps: 8, render: 26, shadow: 1024 },
-  medium: { spacing: 0.2, interior: 1.75, substeps: 10, render: 36, shadow: 1536 },
-  high: { spacing: 0.165, interior: 1.7, substeps: 12, render: 46, shadow: 2048 },
+  // One Gauss–Seidel sweep per XPBD substep can only represent elastic waves up
+  // to about (edge length / substep), so finer meshes need more substeps for the
+  // same material; minSubsteps is the floor the frame-drop guard may go down to
+  // without the toy feeling softer than its settings.
+  low: { spacing: 0.25, interior: 1.75, substeps: 12, minSubsteps: 8, render: 26, shadow: 1024 },
+  medium: { spacing: 0.2, interior: 1.75, substeps: 16, minSubsteps: 10, render: 36, shadow: 1536 },
+  high: { spacing: 0.18, interior: 1.75, substeps: 18, minSubsteps: 12, render: 46, shadow: 2048 },
 };
 
 // Local target spacing: finer on ears (for pulling) and on the face/front where

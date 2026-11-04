@@ -311,21 +311,26 @@ const FRAG_NORMAL = /* glsl */ `
   float lmax = tr + dis;
   float sMin = sqrt(lmin), sMax = sqrt(lmax);
   // compressed in one direction more than the other (or overall)
-  float amt = smoothstep(0.95, 0.78, sMin) * (0.5 + 0.5 * smoothstep(1.0, 1.3, sMax / max(sMin, 1e-3)));
-  amt *= uWrinkle;
+  float amt = smoothstep(0.9, 0.68, sMin) * (0.45 + 0.55 * smoothstep(1.0, 1.35, sMax / max(sMin, 1e-3)));
+  // no creases in the band that rests on the plate (it is squashed by the weight)
+  amt *= uWrinkle * smoothstep(0.1, 0.4, vRest.y);
   if (amt > 0.002) {
     vec2 ev = abs(g12) > 1e-6 ? normalize(vec2(g12, lmin - g11)) : (g11 < g22 ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
     vec3 n0 = normalize(vRestN);
     vec3 t1 = skinTangentF(n0);
     vec3 t2 = cross(n0, t1);
     vec3 dRest = ev.x * t1 + ev.y * t2;
+    vec3 eRest = cross(n0, dRest);
     vec3 dDef = normalize(ev.x * vTa + ev.y * vTb);
     float k = uWrinkleK;
-    float warp = vnoise(vRest * 9.0) * 2.2;
-    float ph = dot(vRest, dRest) * k + warp;
-    float slope = -sin(ph) * (0.55 + 0.45 * vnoise(vRest * 23.0 + 7.0));
+    // creases run across the compression; noise warps and breaks them up so
+    // they read as soft folds, not stripes
+    float u = dot(vRest, dRest) * k;
+    float v = dot(vRest, eRest) * k * 0.2;
+    float ph = u + 2.4 * vnoise(vec3(v, u * 0.12, 1.7)) + 1.6 * vnoise(vRest * 7.0);
+    float slope = -sin(ph) * smoothstep(0.15, 0.75, vnoise(vec3(v * 1.7, u * 0.2, 5.3)));
     vec3 dView = normalize((viewMatrix * vec4(dDef, 0.0)).xyz);
-    normal = normalize(normal + dView * slope * amt * 0.55);
+    normal = normalize(normal + dView * slope * amt * 0.32);
   }
 }
 `;
