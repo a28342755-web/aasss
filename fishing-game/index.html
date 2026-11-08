@@ -1443,31 +1443,32 @@ function updateLineGeometry() {
 
 // ================= 물고기 (절차 생성) =================
 // 윤곽은 전장(TL)=1 기준: top/bot = 등·배 쪽 높이, wr = 폭/높이 비. x=0 코끝, x=1 꼬리 끝.
+// scale = 비늘 하나의 폭(전장 비) — 옆줄 비늘 수에서: 붕어 29, 잉어 35, 배스 64, 블루길 42, 강준치 85
 const LOOKS = {
   crucian: { top: [[0, .012], [.05, .06], [.14, .115], [.3, .15], [.48, .145], [.64, .105], [.76, .06], [.82, .046]],
     bot: [[0, .004], [.05, .04], [.14, .075], [.32, .105], [.5, .1], [.64, .075], [.76, .048], [.82, .04]], wr: .42,
-    back: 0x2c3120, flank: 0x9b7a3c, belly: 0xdcc78c, fin: 0x5e4a2a, scale: .028, op: .19, dorsal: [.34, .64, .08, 'long'], anal: [.64, .73, .06], tail: 'fork', pect: .22, pelv: .44, eye: .075, eyeR: .017 },
+    back: 0x38371f, flank: 0xb08b3c, belly: 0xe4cd92, fin: 0x5e4a2a, op: .19, dorsal: [.34, .64, .08, 'long'], anal: [.64, .73, .06], tail: 'fork', pect: .22, pelv: .44, eye: .075, eyeR: .022, scale: .0275, sheen: 0xd6a846, finUp: 0x5e5440, finLow: 0x6a5a3c, finTip: 0x3a3428, iris: 0xd8a838, irid: .15 },
   carp: { top: [[0, .01], [.05, .045], [.15, .085], [.33, .11], [.5, .105], [.66, .08], [.77, .05], [.82, .042]],
     bot: [[0, .006], [.05, .035], [.15, .06], [.35, .08], [.52, .075], [.66, .058], [.77, .04], [.82, .035]], wr: .55,
-    back: 0x3a3722, flank: 0xa47a36, belly: 0xe2cf98, fin: 0x6e4428, scale: .034, op: .2, dorsal: [.36, .66, .07, 'long'], anal: [.66, .74, .06], tail: 'fork', pect: .22, pelv: .45, eye: .07, eyeR: .014, barbels: 'carp' },
+    back: 0x3a3722, flank: 0xb08438, belly: 0xe2cf98, fin: 0x6e4428, op: .2, dorsal: [.36, .66, .07, 'long'], anal: [.66, .74, .06], tail: 'fork', pect: .22, pelv: .45, eye: .07, eyeR: .018, barbels: 'carp', scale: .0235, sheen: 0xd29c48, finUp: 0x5a4a2e, finLow: 0xa4522a, finTip: 0x6e2c1c, iris: 0xc89a38, irid: .12 },
   mirror: { top: [[0, .012], [.05, .05], [.15, .095], [.33, .125], [.5, .12], [.66, .09], [.77, .055], [.82, .045]],
     bot: [[0, .006], [.05, .038], [.15, .068], [.35, .092], [.52, .088], [.66, .065], [.77, .042], [.82, .037]], wr: .58,
-    back: 0x463d25, flank: 0xa98a48, belly: 0xe0cfa0, fin: 0x6a4a2c, scale: 'mirror', op: .2, dorsal: [.36, .66, .07, 'long'], anal: [.66, .74, .06], tail: 'fork', pect: .22, pelv: .45, eye: .07, eyeR: .013, barbels: 'carp' },
+    back: 0x463d25, flank: 0xa98a48, belly: 0xe0cfa0, fin: 0x6a4a2c, scale: 'mirror', op: .2, dorsal: [.36, .66, .07, 'long'], anal: [.66, .74, .06], tail: 'fork', pect: .22, pelv: .45, eye: .07, eyeR: .017, barbels: 'carp', finUp: 0x5e4c30, finLow: 0x9a5a30, finTip: 0x5a3a24, iris: 0xc89a38, irid: .15, sheen: 0xb89a58 },
   bass: { top: [[0, .02], [.04, .05], [.12, .08], [.3, .105], [.48, .1], [.64, .075], [.76, .05], [.82, .045]],
     bot: [[0, .0], [.03, .035], [.1, .07], [.3, .09], [.5, .085], [.64, .065], [.76, .045], [.82, .04]], wr: .55,
-    back: 0x253219, flank: 0x76854a, belly: 0xe6e6d6, fin: 0x55603a, scale: .016, op: .23, marks: 'bass', mouth: 'big', dorsal: [.3, .68, .075, 'bass'], anal: [.6, .72, .06], tail: 'emarg', pect: .25, pelv: .36, eye: .08, eyeR: .016 },
+    back: 0x2a3818, flank: 0x7c8c46, belly: 0xe8e4cc, fin: 0x55603a, op: .23, marks: 'bass', mouth: 'big', dorsal: [.3, .68, .075, 'bass'], anal: [.6, .72, .06], tail: 'emarg', pect: .25, pelv: .36, eye: .08, eyeR: .02, scale: .0125, finUp: 0x6a7448, finLow: 0x7a7a52, finTip: 0x3a4228, iris: 0xb08a40, irid: .1 },
   bluegill: { top: [[0, .02], [.05, .07], [.14, .14], [.32, .18], [.48, .17], [.64, .12], [.76, .065], [.82, .05]],
     bot: [[0, .0], [.05, .05], [.14, .11], [.32, .15], [.48, .14], [.62, .1], [.76, .055], [.82, .045]], wr: .36,
-    back: 0x2b3829, flank: 0x6c7748, belly: 0xd9a24a, fin: 0x384030, scale: .02, op: .24, marks: 'bluegill', dorsal: [.3, .7, .085, 'bass'], anal: [.56, .74, .085], tail: 'fork2', pect: .25, pelv: .34, eye: .085, eyeR: .021 },
+    back: 0x2b3829, flank: 0x6c7748, belly: 0xd9a24a, fin: 0x384030, op: .24, marks: 'bluegill', dorsal: [.3, .7, .085, 'bass'], anal: [.56, .74, .085], tail: 'fork2', pect: .25, pelv: .34, eye: .085, eyeR: .024, scale: .019, finUp: 0x3e4436, finLow: 0x4a4a3a, finTip: 0x1e2420, iris: 0x5a4a30, irid: .25 },
   catfish: { top: [[0, .02], [.04, .045], [.12, .06], [.25, .062], [.45, .055], [.65, .045], [.8, .035], [.88, .028]],
     bot: [[0, .01], [.04, .035], [.12, .055], [.3, .06], [.5, .05], [.7, .04], [.8, .03], [.88, .025]], wr: [[0, 1.25], [.2, 1], [.5, .6], [.88, .4]], bodyEnd: .88,
-    back: 0x2c2d23, flank: 0x585844, belly: 0xd2cdbb, fin: 0x303028, scale: 0, op: .14, marks: 'mottle', lat: false, dorsal: [.28, .33, .03, 'tiny'], anal: [.42, .9, .045], tail: 'round', pect: .16, pelv: .4, eye: .055, eyeR: .007, barbels: 'catfish' },
+    back: 0x2c2d23, flank: 0x585844, belly: 0xd2cdbb, fin: 0x303028, scale: 0, op: .14, marks: 'mottle', lat: false, dorsal: [.28, .33, .03, 'tiny'], anal: [.42, .9, .045], tail: 'round', pect: .16, pelv: .4, eye: .055, eyeR: .007, barbels: 'catfish', finUp: 0x34352c, finLow: 0x3a3a30, finTip: 0x1e1e1a, iris: 0x8a7a50, irid: 0, slime: 1 },
   bullhead: { top: [[0, .02], [.05, .05], [.15, .075], [.28, .085], [.5, .07], [.68, .055], [.78, .04], [.82, .035]],
     bot: [[0, .01], [.05, .04], [.15, .06], [.3, .07], [.5, .06], [.68, .045], [.78, .035], [.82, .03]], wr: [[0, 1.15], [.25, .85], [.6, .55], [.82, .45]],
-    back: 0x553d13, flank: 0xa98030, belly: 0xe2cf8a, fin: 0x5e4820, scale: 0, op: .17, marks: 'saddles', lat: false, dorsal: [.27, .36, .09, 'spine'], adipose: [.62, .74, .03], anal: [.6, .76, .05], tail: 'fork', pect: .17, pelv: .44, eye: .06, eyeR: .01, barbels: 'bullhead' },
+    back: 0x553d13, flank: 0xa98030, belly: 0xe2cf8a, fin: 0x5e4820, scale: 0, op: .17, marks: 'saddles', lat: false, dorsal: [.27, .36, .09, 'spine'], adipose: [.62, .74, .03], anal: [.6, .76, .05], tail: 'fork', pect: .17, pelv: .44, eye: .06, eyeR: .01, barbels: 'bullhead', finUp: 0x6a5428, finLow: 0x7a6430, finTip: 0x3a2c14, iris: 0x9a8040, irid: 0, slime: .9 },
   skygager: { top: [[0, .006], [.05, .035], [.15, .065], [.35, .085], [.52, .08], [.66, .06], [.77, .04], [.82, .032]],
     bot: [[0, .014], [.05, .03], [.15, .06], [.36, .078], [.55, .072], [.68, .055], [.77, .036], [.82, .03]], wr: .4,
-    back: 0x55606d, flank: 0xbfc5cb, belly: 0xeef0f0, fin: 0x97a0a8, scale: .014, op: .2, marks: 'silver', mouthY: .1, dorsal: [.46, .56, .07, 'tri'], anal: [.56, .8, .05], tail: 'fork', pect: .2, pelv: .42, eye: .07, eyeR: .016, metal: .45 },
+    back: 0x5a6560, flank: 0xc6cac4, belly: 0xeef0f0, fin: 0x97a0a8, op: .2, marks: 'silver', mouthY: .1, dorsal: [.46, .56, .07, 'tri'], anal: [.56, .8, .05], tail: 'fork', pect: .2, pelv: .42, eye: .07, eyeR: .02, metal: .28, scale: .0095, finUp: 0x8a9098, finLow: 0xc06048, finTip: 0xa04030, iris: 0xd0d4d8, irid: .35 },
 };
 function cr(pts, t) { // 단조 3차 보간
   const n = pts.length;
@@ -1485,105 +1486,213 @@ const halfW = (L, t) => wrAt(L, t) * (Math.max(0.002, cr(L.top, t)) + Math.max(0
 const hexRGB = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
 const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
+
+// 몸통 텍스처: 앞쪽 비늘이 뒤쪽 비늘 위를 덮는 기와 배열. 색(map)·요철(normalMap)·거칠기/금속성(ormMap)을 한 번에 만든다
 function fishTextures(id) {
-  const L = LOOKS[id], W = 512, H = 256;
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const cb = document.createElement('canvas'); cb.width = W; cb.height = H;
-  const g = c.getContext('2d'), gb = cb.getContext('2d'), im = g.createImageData(W, H), ib = gb.createImageData(W, H);
-  const back = hexRGB(L.back), flank = hexRGB(L.flank), belly = hexRGB(L.belly);
-  const su = typeof L.scale === 'number' ? L.scale : L.scale === 'mirror' ? 0.06 : 0;
+  const L = LOOKS[id], W = 1024, H = 512, N = W * H;
+  const col = new Uint8Array(N * 4), orm = new Uint8Array(N * 4), nrm = new Uint8Array(N * 4), hgt = new Float32Array(N), cand = new Float64Array(64);
+  const back = hexRGB(L.back), flank = hexRGB(L.flank), belly = hexRGB(L.belly), sheen = L.sheen ? hexRGB(L.sheen) : null;
   const a = (cr(L.top, 0.42) + cr(L.bot, 0.42)) / 2, b = wrAt(L, 0.42) * a;
   const perim = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
-  const sv = su / perim;
+  const mirror = L.scale === 'mirror', su = mirror ? 0.05 : L.scale || 0;
+  const rows = su ? Math.max(6, Math.round(perim / (su * 1.1))) : 1, sv = 1 / rows, R = (perim / rows) * 0.8; // 둘레를 정수 줄로 나눠 등 쪽 이음매가 맞게
   for (let y = 0; y < H; y++) {
     const v = (y + 0.5) / H, cy = Math.cos(v * TAU);
     for (let x = 0; x < W; x++) {
-      const u = (x + 0.5) / W;
-      let col = mix3(belly, flank, smooth(-0.92, -0.1, cy));
-      col = mix3(col, back, smooth(0.05, 0.9, cy));
-      let bright = 1, bump = 0.55;
+      const u = (x + 0.5) / W, k = y * W + x;
+      let c = mix3(belly, flank, smooth(-0.92, -0.1, cy));
+      if (sheen) c = mix3(c, sheen, 0.35 * Math.exp(-Math.pow((cy + 0.05) / 0.35, 2))); // 옆구리 황금빛
+      c = mix3(c, back, smooth(0.05, 0.9, cy));
+      let bright = 1, h = 0.5, metal = 0.1, rough = 0.4;
       const opU = L.op + 0.02 * (1 - cy * cy), head = u < opU;
       if (su && !head) {
-        const ok = L.scale !== 'mirror' || cy > 0.74 || Math.abs(cy - 0.1) < 0.12 || vnoise(u * 26, v * 26) > 0.62;
-        if (ok) {
-          const ci = Math.floor(u / su), fv = v / sv + ((ci & 1) ? 0.5 : 0), cj = Math.floor(fv);
-          const lu = u / su - ci, lv = fv - cj, d = Math.hypot(lu - 0.05, (lv - 0.5) * 0.95);
-          const rim = smooth(0.4, 0.56, d) * (1 - smooth(0.62, 0.7, d));
-          bright *= (1 - 0.3 * rim + 0.08 * (1 - smooth(0, 0.45, d))) * (0.94 + 0.12 * hash2(ci, cj));
-          bump = 0.65 - 0.5 * rim;
+        const ci = Math.floor(u / su);
+        let best = -1, bu = 1e9, bd = 1e9, n = 0;
+        for (let i = ci - 2; i <= ci + 1; i++) {
+          const off = (i & 1) * 0.5, cu = (i + 0.5) * su, j0 = Math.floor(v / sv - off);
+          for (let j = j0 - 1; j <= j0 + 1; j++) {
+            const cv = (j + 0.5 + off) * sv, jj = ((j % rows) + rows) % rows;
+            if (mirror) { const ccy = Math.cos(cv * TAU); if (!(ccy > 0.72 || Math.abs(ccy - 0.08) < 0.12 || hash2(i, jj) > 0.86)) continue; }
+            const rr = R * (mirror ? 0.85 + 0.6 * hash2(i, jj + 99) : 1), d = Math.hypot(u - cu, (v - cv) * perim);
+            cand[n * 4] = cu; cand[n * 4 + 1] = d; cand[n * 4 + 2] = rr; cand[n * 4 + 3] = i * 1000 + jj;
+            if (d < rr && (cu < bu - 1e-9 || (Math.abs(cu - bu) < 1e-9 && d < bd))) { best = n; bu = cu; bd = d; }
+            n++;
+          }
         }
-      } else if (!su) bright *= 0.95 + 0.08 * vnoise(u * 90, v * 60);
-      if (Math.abs(u - opU) < 0.0045 && cy > -0.8) { bright *= 0.66; bump = 0.25; }
-      if (L.lat !== false && !head && Math.abs(cy - 0.1 - 0.04 * Math.sin(u * 4)) < 0.012) bright *= 1.1;
+        if (best >= 0) { // 이 점을 덮는 비늘 중 가장 머리 쪽 비늘이 보인다
+          const rr = cand[best * 4 + 2], t = (u - bu) / rr;
+          let shadow = 1e9;
+          for (let m = 0; m < n; m++) if (cand[m * 4] < bu - 1e-9) shadow = Math.min(shadow, cand[m * 4 + 1] - cand[m * 4 + 2]);
+          const p = smooth(-0.6, 0.9, t), sh = 1 - smooth(0, 0.22 * rr, shadow), rim = smooth(0.8 * rr, rr, bd) * smooth(0, 0.5, t);
+          bright = (0.84 + 0.22 * p) * (1 - 0.45 * sh) * (1 + 0.18 * rim) * (0.92 + 0.16 * hash2(cand[best * 4 + 3], 7));
+          h = 0.25 + 0.75 * smooth(-1, 0.85, t) + 0.1 * (1 - Math.pow(bd / rr, 2)); // 뒤 가장자리로 갈수록 들려 다음 비늘 위에 얹힌다
+          metal = 0.06 + 0.22 * p * (1 - sh); rough = 0.5 - 0.22 * p;
+        } else { bright = 0.95 + 0.07 * vnoise(u * 90, v * 60); h = 0.5 + 0.12 * vnoise(u * 140, v * 90); rough = 0.32; } // 향어 맨살
+      } else { // 머리, 또는 비늘 없는 메기류: 매끈하고 미끈한 피부에 잔주름
+        h = 0.5 + 0.18 * vnoise(u * 150, v * 100) + 0.1 * vnoise(u * 40, v * 30);
+        bright = 0.94 + 0.08 * vnoise(u * 90, v * 60);
+        rough = 0.28; metal = head ? 0.1 : 0.04;
+      }
+      if (cy > -0.85) { // 아가미뚜껑: 뒷가장자리가 몸 위로 들떠 그늘이 진다, 그 앞엔 앞아가미뚜껑 홈
+        const dop = opU - u;
+        if (dop > 0 && dop < 0.035) h += 0.55 * smooth(0.035, 0.004, dop);
+        if (dop <= 0 && dop > -0.008) { h -= 0.35; bright *= 0.66; }
+        if (Math.abs(u - (opU - 0.04 - 0.012 * (1 - cy * cy))) < 0.0025 && cy > -0.6) { h -= 0.25; bright *= 0.85; }
+      }
+      if (L.lat !== false && !head) { const ly = 0.1 + 0.04 * Math.sin(u * 4); if (Math.abs(cy - ly) < 0.007) { bright *= (u / Math.max(su, 0.012)) % 1 < 0.35 ? 0.6 : 1.12; h -= 0.08; } } // 옆줄 구멍
+      if (Math.pow((u - L.eye * 0.5) / 0.006, 2) + Math.pow((cy - 0.42) / 0.07, 2) < 1) { bright *= 0.4; h -= 0.4; } // 콧구멍
       switch (L.marks) {
         case 'bass': {
           const bc = 0.03 + 0.05 * Math.sin(u * 10 + 1), bw = 0.13 + 0.07 * vnoise(u * 14, 3.1);
-          if (u > opU && u < 0.95 && Math.abs(cy - bc) < bw && vnoise(u * 22, v * 9) > -0.35) col = mix3(col, [34, 42, 22], 0.75);
-          if (head && Math.abs(cy - 0.12 + (u - 0.08) * 0.9) < 0.03) col = mix3(col, [40, 46, 28], 0.5);
+          if (u > opU && u < 0.95 && Math.abs(cy - bc) < bw && vnoise(u * 22, v * 9) > -0.35) c = mix3(c, [34, 42, 22], 0.75);
+          if (head && Math.abs(cy - 0.12 + (u - 0.08) * 0.9) < 0.03) c = mix3(c, [40, 46, 28], 0.5);
           break;
         }
         case 'bluegill': {
           const bar = 0.5 + 0.5 * Math.cos((u - 0.25) / 0.08 * TAU);
-          if (u > 0.22 && u < 0.85 && cy > -0.55) col = mix3(col, [38, 48, 38], 0.38 * bar * smooth(-0.55, 0, cy));
-          if (cy < -0.35 && u < 0.52) col = mix3(col, [224, 150, 58], 0.65 * smooth(-0.35, -0.75, cy));
-          if (Math.pow((u - opU + 0.012) / 0.024, 2) + Math.pow((cy - 0.25) / 0.2, 2) < 1) col = [20, 24, 40];
-          if (head && Math.abs(cy + 0.1 - Math.sin(u * 30) * 0.04) < 0.03) col = mix3(col, [70, 110, 150], 0.5);
+          if (u > 0.22 && u < 0.85 && cy > -0.55) c = mix3(c, [38, 48, 38], 0.38 * bar * smooth(-0.55, 0, cy));
+          if (cy < -0.35 && u < 0.52) c = mix3(c, [224, 150, 58], 0.65 * smooth(-0.35, -0.75, cy));
+          if (Math.pow((u - opU + 0.012) / 0.024, 2) + Math.pow((cy - 0.25) / 0.2, 2) < 1) c = [20, 24, 40];
+          if (head && Math.abs(cy + 0.1 - Math.sin(u * 30) * 0.04) < 0.03) c = mix3(c, [70, 110, 150], 0.5);
           break;
         }
         case 'mottle': {
           const n = fbm(u * 9, cy * 3 + (Math.sin(v * TAU) > 0 ? 0 : 7), 3);
-          if (cy > -0.55) col = mix3(col, [32, 32, 26], smooth(0.05, 0.3, n) * 0.75);
+          if (cy > -0.55) c = mix3(c, [32, 32, 26], smooth(0.05, 0.3, n) * 0.75);
           break;
         }
         case 'saddles': {
           const s = Math.max(Math.exp(-Math.pow((u - 0.3) / 0.05, 2)), Math.exp(-Math.pow((u - 0.52) / 0.06, 2)), Math.exp(-Math.pow((u - 0.74) / 0.05, 2)));
-          if (cy > -0.35) col = mix3(col, [66, 46, 16], clamp(s * 1.2 + vnoise(u * 20, v * 12) * 0.3, 0, 1) * smooth(-0.35, 0.4, cy) * 0.85);
+          if (cy > -0.35) c = mix3(c, [66, 46, 16], clamp(s * 1.2 + vnoise(u * 20, v * 12) * 0.3, 0, 1) * smooth(-0.35, 0.4, cy) * 0.85);
           break;
         }
         case 'silver': bright *= 1 + 0.12 * (1 - Math.abs(cy)); break;
       }
       const my = L.mouthY || 0;
-      if (u < 0.022 && Math.abs(cy - my) < 0.22) bright *= 0.5;
-      if (L.mouth === 'big' && u < 0.11 && Math.abs(cy - (0.06 - (u - 0.01) * 1.6)) < 0.025) bright *= 0.45;
-      const i = (y * W + x) * 4;
-      im.data[i] = clamp(col[0] * bright, 0, 255); im.data[i + 1] = clamp(col[1] * bright, 0, 255); im.data[i + 2] = clamp(col[2] * bright, 0, 255); im.data[i + 3] = 255;
-      ib.data[i] = ib.data[i + 1] = ib.data[i + 2] = bump * 255; ib.data[i + 3] = 255;
+      if (u < 0.022 && Math.abs(cy - my) < 0.22) { bright *= 0.5; h -= 0.2; }
+      if (L.mouth === 'big' && u < 0.11 && Math.abs(cy - (0.06 - (u - 0.01) * 1.6)) < 0.025) { bright *= 0.45; h -= 0.3; }
+      col[k * 4] = clamp(c[0] * bright, 0, 255); col[k * 4 + 1] = clamp(c[1] * bright, 0, 255); col[k * 4 + 2] = clamp(c[2] * bright, 0, 255); col[k * 4 + 3] = 255;
+      hgt[k] = h;
+      orm[k * 4] = 255; orm[k * 4 + 1] = clamp(rough, 0, 1) * 255; orm[k * 4 + 2] = clamp(metal + (L.metal || 0), 0, 1) * 255; orm[k * 4 + 3] = 255;
     }
   }
-  g.putImageData(im, 0, 0); gb.putImageData(ib, 0, 0);
-  const map = new THREE.CanvasTexture(c); map.colorSpace = THREE.SRGBColorSpace; map.flipY = false; map.anisotropy = 4;
-  const bumpMap = new THREE.CanvasTexture(cb); bumpMap.flipY = false;
-  return { map, bumpMap };
+  const A = su ? su * 0.12 : 0.0012, ku = A * W / 2, kv = A * H / (2 * perim); // 높이 → 노멀 (텍셀의 실제 크기 반영)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const k = y * W + x, yu = ((y - 1 + H) % H) * W, yd = ((y + 1) % H) * W;
+    const dx = (hgt[y * W + Math.min(W - 1, x + 1)] - hgt[y * W + Math.max(0, x - 1)]) * ku, dy = (hgt[yd + x] - hgt[yu + x]) * kv, l = Math.hypot(dx, dy, 1);
+    nrm[k * 4] = (-dx / l * 0.5 + 0.5) * 255; nrm[k * 4 + 1] = (-dy / l * 0.5 + 0.5) * 255; nrm[k * 4 + 2] = (0.5 / l + 0.5) * 255; nrm[k * 4 + 3] = 255;
+  }
+  const tex = (data, srgb) => {
+    const t = new THREE.DataTexture(data, W, H);
+    t.wrapT = THREE.RepeatWrapping; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.anisotropy = 4;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
+  };
+  return { map: tex(col, true), normalMap: tex(nrm), ormMap: tex(orm) };
 }
-function fishSway(mat, U) {
+// 헤엄: 꼬리로 갈수록 커지는 진행파(머리는 살짝만). 물 밖에선 몸을 활처럼 휘고(curl), 지느러미는 처지고(droop), 아가미를 여닫는다
+function fishSway(mat, U, fin) {
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = 'uniform float uTime;\nuniform float uAmp;\nuniform float uFreq;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      float bx = max(0.0, position.x - 0.22);
-      transformed.z += uAmp * bx * bx * 4.0 * sin(uTime * uFreq - position.x * 6.0);`);
+    sh.vertexShader = 'uniform float uTime, uAmp, uFreq, uCurl, uDroop, uGill, uOp;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      float fx = position.x, env = 0.12 + 0.88 * smoothstep(0.12, 1.0, fx);
+      transformed.z += uAmp * env * env * 0.9 * sin(uTime * uFreq - fx * 5.5) + uCurl * (fx - 0.42) * (fx - 0.42) * 1.2;
+      ${fin ? 'transformed.z -= uDroop * uv.y * uv.y * 0.035;'
+    : 'float gl = smoothstep(uOp - 0.05, uOp - 0.005, fx) * (1.0 - smoothstep(uOp - 0.005, uOp + 0.004, fx)); transformed.z += sign(position.z) * gl * uGill * 0.004;'}`);
   };
+  mat.customProgramCacheKey = () => (fin ? 'fish-fin' : 'fish-body');
   return mat;
 }
-function shapeGeo(points) {
-  const s = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
-  return new THREE.ShapeGeometry(s, 4);
+const FIN_PROFILE = { // 지느러미 뿌리를 따라(0~1) 잰 높이 비율
+  long: [[0, 0], [0.08, 1], [0.2, 0.82], [0.87, 0.38], [1, 0]],
+  bass: [[0, 0], [0.03, 0.95], [0.08, 0.72], [0.13, 0.9], [0.18, 0.68], [0.24, 0.86], [0.3, 0.64], [0.38, 0.75], [0.45, 0.42], [0.52, 1.05], [0.85, 1], [0.97, 0.55], [1, 0]],
+  spine: [[0, 0], [0.13, 1], [0.33, 0.85], [0.97, 0.2], [1, 0]],
+  tri: [[0, 0], [0.2, 1], [0.5, 0.55], [0.97, 0.2], [1, 0]],
+  round: [[0, 0], [0.12, 0.8], [0.5, 1], [0.88, 0.8], [1, 0]],
+  tiny: [[0, 0], [0.5, 1], [1, 0]],
+};
+const lin1 = (pts, t) => { for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) { const [a0, b0] = pts[i - 1], [a1, b1] = pts[i]; return b0 + (b1 - b0) * (t - a0) / Math.max(1e-6, a1 - a0); } return pts[pts.length - 1][1]; };
+function gridGeo(nu, nv, at) { // (u, v) 격자 → 지느러미 면. uv.x = 줄기살 방향 위치, uv.y = 뿌리(0)→가장자리(1)
+  const P = [], UV = [], I = [];
+  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { P.push(...at(i / nu, j / nv)); UV.push(i / nu, j / nv); }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + nu + 1; I.push(a, a + 1, b, a + 1, b + 1, b); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); g.setIndex(I);
+  g.computeVertexNormals();
+  return g;
 }
-function finOutline(L, x0, x1, h, type, top) {
-  const base = top ? (x) => cr(L.top, x) - 0.006 : (x) => -cr(L.bot, x) + 0.006, sg = top ? 1 : -1, P = [];
-  const at = (x, k) => [x, base(x) + sg * h * k];
-  if (type === 'long') P.push(at(x0, 0), at(x0 + 0.025, 1), at(x0 + 0.06, 0.82), at(x1 - 0.04, 0.38), at(x1, 0));
-  else if (type === 'bass') {
-    const xm = x0 + (x1 - x0) * 0.45;
-    P.push(at(x0, 0));
-    for (let i = 0; i <= 6; i++) P.push(at(lerp(x0 + 0.01, xm, i / 6), i % 2 ? 0.72 : 0.95 - i * 0.04));
-    P.push(at(xm + 0.01, 0.4), at(xm + 0.05, 1.05), at(x1 - 0.06, 1), at(x1 - 0.01, 0.55), at(x1, 0));
-  } else if (type === 'spine') P.push(at(x0, 0), at(x0 + 0.012, 1), at(x0 + 0.03, 0.85), at(x1, 0.2), at(x1, 0));
-  else if (type === 'tri') P.push(at(x0, 0), at(x0 + 0.02, 1), at(x0 + 0.05, 0.55), at(x1, 0.2), at(x1, 0));
-  else if (type === 'round') P.push(at(x0, 0), at(x0 + 0.02, 0.8), at((x0 + x1) / 2, 1), at(x1 - 0.02, 0.8), at(x1, 0));
-  else P.push(at(x0, 0), at((x0 + x1) / 2, 1), at(x1, 0)); // tiny
-  for (let k = 6; k >= 1; k--) { const x = x1 + (x0 - x1) * (k / 7); P.push([x, base(x)]); }
-  if (top === false) P.reverse();
-  return P;
+function medianFin(L, x0, x1, h, type, top) { // 등·뒷·기름지느러미: 줄기살이 뒤로 비스듬히 눕는다
+  const prof = FIN_PROFILE[type] || FIN_PROFILE.round, sg = top ? 1 : -1;
+  return gridGeo(24, 6, (u, v) => {
+    const bx = lerp(x0, x1, u), k = lin1(prof, u), base = top ? cr(L.top, bx) - 0.006 : -cr(L.bot, bx) + 0.006;
+    return [bx + v * k * h * 0.35, base + sg * v * k * h, 0];
+  });
+}
+function polyRadius(poly, px, py, ang) { // 점 (px,py)에서 ang 방향 반직선이 윤곽과 만나는 가장 먼 거리
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  let best = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % poly.length], ex = bx - ax, ey = by - ay, den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = ((ax - px) * ey - (ay - py) * ex) / den, s = ((ax - px) * dy - (ay - py) * dx) / den;
+    if (t > 0 && s >= 0 && s <= 1) best = Math.max(best, t);
+  }
+  return best;
+}
+function polarFin(poly, px, py, a0, a1, r0) { // 꼬리·가슴·배지느러미: 줄기살이 한 점에서 부챗살로 퍼진다
+  return gridGeo(26, 6, (u, v) => { const ang = lerp(a0, a1, u), r = lerp(r0, polyRadius(poly, px, py, ang), v); return [px + Math.cos(ang) * r, py + Math.sin(ang) * r, 0]; });
+}
+function finColors(g, L, lowK) { // 뿌리 쪽 색 → 가장자리 색, lowK(u)만큼 아래쪽(배쪽) 지느러미 색
+  const up = new THREE.Color(L.finUp ?? L.fin), low = new THREE.Color(L.finLow ?? L.fin), tip = new THREE.Color(L.finTip ?? L.fin), c = new THREE.Color();
+  const uv = g.attributes.uv, out = new Float32Array(uv.count * 3);
+  for (let i = 0; i < uv.count; i++) { c.copy(up).lerp(low, lowK(uv.getX(i))).lerp(tip, Math.pow(uv.getY(i), 1.6) * 0.75); out.set([c.r, c.g, c.b], i * 3); }
+  g.setAttribute('color', new THREE.BufferAttribute(out, 3));
+  return g;
+}
+let rayTex = null;
+function finRayTexture() { // 마디진 줄기살(끝에서 두 갈래), 반투명 막, 닳은 가장자리. 캔버스 아래 = 뿌리
+  if (rayTex) return rayTex;
+  const C = 256, cv = document.createElement('canvas'); cv.width = cv.height = C;
+  const g = cv.getContext('2d'), grd = g.createLinearGradient(0, C, 0, 0);
+  grd.addColorStop(0, 'rgba(225,225,225,0.95)'); grd.addColorStop(0.15, 'rgba(235,235,235,0.62)'); grd.addColorStop(0.85, 'rgba(240,240,240,0.42)'); grd.addColorStop(1, 'rgba(240,240,240,0.2)');
+  g.fillStyle = grd; g.fillRect(0, 0, C, C);
+  g.lineCap = 'round'; g.strokeStyle = 'rgba(140,140,140,0.95)';
+  for (let i = 0, nR = 16; i < nR; i++) {
+    const x = (i + 0.5) / nR * C;
+    for (let y = C; y > 6; y -= 14) {
+      const split = y < C * 0.45 ? 2.6 * (1 - y / (C * 0.45)) : 0;
+      g.lineWidth = lerp(1.2, 3.2, y / C);
+      for (const sg of split ? [-1, 1] : [0]) { g.beginPath(); g.moveTo(x + sg * split, y); g.lineTo(x + sg * split * 1.3, y - 12); g.stroke(); }
+    }
+  }
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+  for (let i = 0; i < 70; i++) { g.beginPath(); g.arc(rnd() * C, rnd() * 12, 3 + rnd() * 6, 0, TAU); g.fill(); }
+  g.globalCompositeOperation = 'source-over';
+  rayTex = canvasTex(cv);
+  return rayTex;
+}
+function eyeTexture(iris) { // 홍채(방사 줄무늬)·동공·어두운 테두리
+  const C = 128, cv = document.createElement('canvas'); cv.width = cv.height = C;
+  const g = cv.getContext('2d'), [r, gg, b] = hexRGB(iris);
+  g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, C, C);
+  const gr = g.createRadialGradient(64, 64, 20, 64, 64, 60);
+  gr.addColorStop(0, `rgb(${Math.min(255, r * 1.15) | 0},${Math.min(255, gg * 1.15) | 0},${b | 0})`); gr.addColorStop(0.75, `rgb(${r * 0.8 | 0},${gg * 0.75 | 0},${b * 0.6 | 0})`); gr.addColorStop(1, 'rgb(20,18,14)');
+  g.fillStyle = gr; g.beginPath(); g.arc(64, 64, 60, 0, TAU); g.fill();
+  for (let i = 0; i < 80; i++) {
+    const a = rnd() * TAU, r2 = 44 + rnd() * 14;
+    g.strokeStyle = `rgba(0,0,0,${0.1 + rnd() * 0.22})`; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(64 + Math.cos(a) * 27, 64 + Math.sin(a) * 27); g.lineTo(64 + Math.cos(a) * r2, 64 + Math.sin(a) * r2); g.stroke();
+  }
+  g.fillStyle = '#030303'; g.beginPath(); g.ellipse(64, 64, 27, 25, 0, 0, TAU); g.fill();
+  return canvasTex(cv);
+}
+function eyeGeo(er) { // 살짝 볼록한 각막 반구, 정면에서 평면 투영한 uv
+  const g = new THREE.SphereGeometry(er, 24, 12, 0, TAU, 0, Math.PI / 2);
+  g.rotateX(Math.PI / 2); g.scale(1, 1, 0.5);
+  const p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / (2 * er) + 0.5, p.getY(i) / (2 * er) + 0.5);
+  return g;
 }
 function tailOutline(L) {
   const end = L.bodyEnd || 0.82, xe = end - 0.025, pt = cr(L.top, end), pb = cr(L.bot, end);
@@ -1595,7 +1704,7 @@ function tailOutline(L) {
   }
 }
 function bodyGeometry(L) {
-  const NX = 40, NR = 28, end = L.bodyEnd || 0.82, pos = [], uv = [], idx = [];
+  const NX = 64, NR = 40, end = L.bodyEnd || 0.82, pos = [], uv = [], idx = [];
   for (let i = 0; i <= NX; i++) {
     const t = end * Math.pow(i / NX, 1.35), ht = Math.max(0.002, cr(L.top, t)), hb = Math.max(0.002, cr(L.bot, t)), w = halfW(L, t);
     for (let j = 0; j <= NR; j++) {
@@ -1624,30 +1733,38 @@ function bodyGeometry(L) {
 const fishCache = {};
 function getFish(id) {
   if (fishCache[id]) return fishCache[id];
-  const L = LOOKS[id], U = { uTime: { value: 0 }, uAmp: { value: 0 }, uFreq: { value: 8 } };
-  const { map, bumpMap } = fishTextures(id);
-  const bodyMat = fishSway(new THREE.MeshPhysicalMaterial({ map, bumpMap, bumpScale: 0.8, roughness: 0.4, metalness: L.metal || 0.18, clearcoat: 0.85, clearcoatRoughness: 0.2 }), U);
-  const finMat = fishSway(new THREE.MeshStandardMaterial({ color: L.fin, roughness: 0.55, transparent: true, opacity: 0.85, side: THREE.DoubleSide }), U);
+  const L = LOOKS[id], U = { uTime: { value: 0 }, uAmp: { value: 0 }, uFreq: { value: 8 }, uCurl: { value: 0 }, uDroop: { value: 0 }, uGill: { value: 0 }, uOp: { value: L.op } };
+  const { map, normalMap, ormMap } = fishTextures(id);
+  // 비늘의 구아닌 반사(금속성) + 점액 막(클리어코트) + 얇은 막 무지갯빛(이리데선스)
+  const bodyMat = fishSway(new THREE.MeshPhysicalMaterial({ map, normalMap, roughnessMap: ormMap, metalnessMap: ormMap, roughness: 1, metalness: 1,
+    clearcoat: L.slime ?? 0.55, clearcoatRoughness: 0.22, iridescence: L.irid ?? 0.2, iridescenceIOR: 1.35, iridescenceThicknessRange: [180, 420] }), U, false);
+  const finMat = fishSway(new THREE.MeshStandardMaterial({ map: finRayTexture(), vertexColors: true, transparent: true, depthWrite: false, alphaTest: 0.12, side: THREE.DoubleSide, roughness: 0.42 }), U, true);
   const parts = new THREE.Group();
   parts.add(new THREE.Mesh(bodyGeometry(L), bodyMat));
-  const fins = [shapeGeo(tailOutline(L)), shapeGeo(finOutline(L, L.dorsal[0], L.dorsal[1], L.dorsal[2], L.dorsal[3], true)),
-    shapeGeo(finOutline(L, L.anal[0], L.anal[1], L.anal[2], 'round', false))];
-  if (L.adipose) fins.push(shapeGeo(finOutline(L, L.adipose[0], L.adipose[1], L.adipose[2], 'round', true)));
+  const end = L.bodyEnd || 0.82, xe = end - 0.025, pt = cr(L.top, end), pb = cr(L.bot, end), py = (pt - pb) / 2, px = xe - 0.025;
+  const fins = [
+    finColors(polarFin(tailOutline(L), px, py, Math.atan2(-pb - py, xe - px), Math.atan2(pt - py, xe - px), 0.03), L, (u) => smooth(0.55, 0.3, u)),
+    finColors(medianFin(L, L.dorsal[0], L.dorsal[1], L.dorsal[2], L.dorsal[3], true), L, () => 0),
+    finColors(medianFin(L, L.anal[0], L.anal[1], L.anal[2], 'round', false), L, () => 1),
+  ];
+  if (L.adipose) fins.push(finColors(medianFin(L, L.adipose[0], L.adipose[1], L.adipose[2], 'round', true), L, () => 0));
+  const pectPoly = [[0, 0.006], [0.045, 0.014], [0.085, 0.007], [0.092, -0.003], [0.05, -0.01], [0, -0.006]];
+  const pelvPoly = [[0, 0.004], [0.04, 0.009], [0.065, 0.003], [0.06, -0.004], [0, -0.004]];
   for (const sd of [1, -1]) {
-    const pc = shapeGeo([[0, 0.006], [0.045, 0.014], [0.085, 0.007], [0.092, -0.003], [0.05, -0.01], [0, -0.006]]);
+    const pc = finColors(polarFin(pectPoly, -0.01, 0, -0.6, 0.6, 0.01), L, () => 0.6);
     pc.rotateX(sd * 1.05); pc.rotateY(sd * 0.3); pc.translate(L.pect, -cr(L.bot, L.pect) * 0.45, sd * halfW(L, L.pect) * 0.88);
-    const pv = shapeGeo([[0, 0.004], [0.04, 0.009], [0.065, 0.003], [0.06, -0.004], [0, -0.004]]);
+    const pv = finColors(polarFin(pelvPoly, -0.008, 0, -0.5, 0.6, 0.008), L, () => 1);
     pv.rotateX(sd * 0.75); pv.translate(L.pelv, -cr(L.bot, L.pelv) * 0.85, sd * halfW(L, L.pelv) * 0.45);
     fins.push(pc, pv);
   }
   for (const f of fins) parts.add(new THREE.Mesh(f, finMat));
-  const ex = L.eye, ey = cr(L.top, ex) * 0.3, ez = halfW(L, ex) * 0.84, er = L.eyeR;
-  const irisMat = fishSway(new THREE.MeshStandardMaterial({ color: 0xc8a046, roughness: 0.3, metalness: 0.55 }), U);
-  const pupilMat = fishSway(new THREE.MeshPhysicalMaterial({ color: 0x050505, roughness: 0.05, clearcoat: 1 }), U);
+  const ex = L.eye, ey = cr(L.top, ex) * 0.3, ez = halfW(L, ex) * 0.8, er = L.eyeR;
+  const eyeMat = fishSway(new THREE.MeshPhysicalMaterial({ map: eyeTexture(L.iris ?? 0xc8a046), roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.03 }), U, false);
   for (const sd of [1, -1]) {
-    const iris = new THREE.SphereGeometry(er, 16, 12); iris.translate(ex, ey, sd * ez);
-    const pupil = new THREE.SphereGeometry(er * 0.6, 12, 10); pupil.translate(ex, ey, sd * (ez + er * 0.55));
-    parts.add(new THREE.Mesh(iris, irisMat), new THREE.Mesh(pupil, pupilMat));
+    const e = eyeGeo(er);
+    if (sd < 0) e.rotateY(Math.PI);
+    e.translate(ex, ey, sd * ez);
+    parts.add(new THREE.Mesh(e, eyeMat));
   }
   const barbelMat = fishSway(new THREE.MeshStandardMaterial({ color: L.fin, roughness: 0.6 }), U);
   const barbel = (pts, r) => parts.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 10, r, 4), barbelMat));
@@ -1673,6 +1790,12 @@ function getFish(id) {
   return (fishCache[id] = { root, inner, parts, U, L, maxW: halfW(L, 0.4), maxH: cr(L.top, 0.4) });
 }
 let fish = null; // 지금 걸린 물고기 모델
+const warmQueue = Object.keys(LOOKS);
+function warmFish() {
+  if (!warmQueue.length) return;
+  if (['title', 'idle', 'settling'].includes(game.phase) && !game.bite) getFish(warmQueue.shift());
+  setTimeout(warmFish, 700);
+}
 function setFishSize(f, len) { f.parts.scale.setScalar(len); f.parts.position.set(-0.5 * len, 0, 0); }
 
 // ================= 물보라·파문 =================
@@ -2241,18 +2364,21 @@ function showCatch() {
   fillCard(c, sp);
   // 쪼그려 앉아 계측자를 내려다본다. 카드가 가리지 않는 쪽(가로 화면은 왼쪽, 세로는 위쪽)에 계측자가 들어오게 한다
   const rc = $('card').getBoundingClientRect(), wide = camera.aspect >= 1;
-  const halfH = Math.tan(camera.fov * D2R / 2), halfWd = halfH * camera.aspect, crouch = 0.55;
+  const halfH = Math.tan(camera.fov * D2R / 2), halfWd = halfH * camera.aspect;
   const right = wide ? Math.min(1, rc.left / W * 2 - 1 - 0.04) : 1, cx = (right - 1) / 2, fillW = (right + 1) / 2 * 0.8;
   const top = wide ? -1 : 1 - rc.top / H * 2, cy = (top + 1) / 2;
-  const D = (boardLen / 2) / (Math.max(0.2, halfWd) * fillW);
-  const hd = clamp(Math.sqrt(Math.max(0, D * D - crouch * crouch)), 0.35, 3);
-  board.position.set(cx * halfWd * Math.hypot(hd, crouch), 0.03, -hd); board.visible = true;
+  const frame = Math.min(boardLen, c.len / 100 + 0.14), D = (frame / 2) / (Math.max(0.2, halfWd) * fillW);
+  const crouch = clamp(D * 0.82, 0.3, 0.75), hd = clamp(Math.sqrt(Math.max(0, D * D - crouch * crouch)), 0.18, 3);
+  // 물고기는 카메라 바로 앞에 두고 렌즈 시프트로 화면 위치만 옮긴다 — 옆에서 비스듬히 보면 시차 때문에 눈금이 어긋나 보인다
+  board.position.set(-(board.userData.zeroX + frame / 2 - 0.015), 0.03, -hd); board.visible = true;
+  camera.setViewOffset(W, H, -cx * W / 2, wide ? 0 : cy * H / 2, W, H);
   game.catchEye = crouch;
   board.add(fish.root);
   fish.root.position.set(board.userData.zeroX + c.len / 200, 0.012 + fish.maxW * c.len / 100, 0);
+  game.catchY = fish.root.position.y; game.catchT = clockT;
   fish.root.rotation.set(0, 0, 0); fish.inner.rotation.set(-Math.PI / 2, 0, 0);
   fish.root.visible = true;
-  game.catchPitch = -Math.atan2(crouch - 0.03, hd) - (wide ? 0 : Math.atan(cy * halfH));
+  game.catchPitch = -Math.atan2(crouch - 0.03, hd);
   $('keepBtn').focus({ preventScroll: true });
 }
 function fillCard(c, sp) {
@@ -2278,6 +2404,7 @@ function closeCatch(kept) {
   save();
   game.catch = null;
   $('card').hidden = true;
+  camera.clearViewOffset();
   if (fish) { scene.add(fish.root); fish.root.visible = false; }
   toast(kept ? '살림망에 넣었습니다' : '조심스레 물로 돌려보냈습니다');
   toIdle();
@@ -2500,12 +2627,15 @@ function update(dt) {
       fish.root.rotation.set(0, Math.atan2(Math.cos(hdg), -Math.sin(hdg)), 0);
       const pitch = f.air ? Math.atan2(f.vy, Math.max(0.3, sp)) : 0;
       fish.inner.rotation.set(smooth(0.18, 0.04, f.stamina) * 1.3, 0, -pitch);
-      fish.U.uAmp.value = f.mode === 'tired' ? 0.02 : 0.07; fish.U.uFreq.value = f.mode === 'tired' ? 4 : 7 + sp * 5;
+      fish.U.uAmp.value = f.mode === 'tired' ? 0.025 : 0.09; fish.U.uFreq.value = f.mode === 'tired' ? 4 : 7 + sp * 5;
+      fish.U.uCurl.value = 0; fish.U.uDroop.value = 0; fish.U.uGill.value = 0;
     }
   }
-  if (fish && game.phase === 'caught') { // 계측자 위에서 가끔 퍼덕인다
-    const flop = Math.max(0, Math.sin(clockT * 0.9)) > 0.93 ? 0.05 : 0.008;
-    fish.U.uAmp.value += (flop - fish.U.uAmp.value) * (1 - Math.exp(-dt * 6)); fish.U.uFreq.value = 9;
+  if (fish && game.phase === 'caught') { // 계측자 위: 아가미를 여닫고, 가끔 몸을 활처럼 휘며 퍼덕인다
+    const ph = (clockT - game.catchT) % 4.6, fl = ph > 2 && ph < 2.75 ? Math.sin((ph - 2) / 0.75 * Math.PI) : 0;
+    fish.U.uCurl.value = fl * 0.22 * Math.sin((ph - 2) * 19); fish.U.uAmp.value = 0.004; fish.U.uDroop.value = 1;
+    fish.U.uGill.value = 0.5 + 0.5 * Math.sin(clockT * 3.4);
+    fish.root.position.y = game.catchY + fl * 0.012;
   }
   if (fish) fish.U.uTime.value = clockT;
   splashStep(dt);
@@ -2560,6 +2690,7 @@ function start(data) {
   envTick(true);
   for (let i = 0; i < 30; i++) { dangle(1 / 60); updateRod(0.12, dang.p, game.rodElev); }
   requestAnimationFrame(frame);
+  setTimeout(warmFish, 1500);
   window.__jjiolimReady = true;
   window.__jjiolim = { game, env, step: (s) => { for (let t = 0; t < s; t += 1 / 30) update(1 / 30); } }; // 자동 점검용: 렌더 없이 시간 진행
   const btn = $('startBtn');
