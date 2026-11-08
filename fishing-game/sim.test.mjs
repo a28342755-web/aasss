@@ -71,4 +71,18 @@ assert.equal(bend(0)[57], 0);
 assert.ok(bend(2)[57] < bend(10)[57] && bend(10)[57] < bend(25)[57], 'bend grows with load');
 assert.ok(tipAngle(25) <= 1.3 * D + 1e-6, 'tip never passes the line');
 
+// 게임처럼 매 프레임 이전 모양에서 이어 풀 때, 하중이 조금씩 변하면 끝도 조금씩만 움직인다 (화면 떨림 방지)
+const warm = new Float32Array(58);
+let lastY = null, jump = 0;
+for (let i = 0; i < 400; i++) { S.rodBend(10 + 6 * Math.sin(i / 40), 1.2 + 0.1 * Math.sin(i / 23), 3.6, 28, 90, warm); if (i > 20) jump = Math.max(jump, Math.abs(warm[57] - lastY)); lastY = warm[57]; }
+assert.ok(jump < 0.02, `rod tip jump per frame ${jump}`);
+
+// 찌 부력: 바닥에 봉돌 → 3마디, 봉돌 매달림 → 찌톱 끝이 수면, 고기가 봉돌을 들면 솟고, 끌면 잠긴다
+const settle = (P, sec = 6, wave = 0) => { const f = { y: 0.01, v: 0 }; for (let t = 0; t < sec; t += 1 / 60) S.floatStep(f, P, wave * Math.sin(2 * t), wave * 2 * Math.cos(2 * t), 1 / 60); return f.y - wave * Math.sin(2 * sec); };
+assert.ok(Math.abs(settle(S.FLOAT.rest) - 0.054) < 0.002, `rest exposure ${settle(S.FLOAT.rest)}`);
+assert.ok(Math.abs(settle(S.FLOAT.sinker)) < 0.003, 'sinker hanging → tip at surface');
+assert.ok(Math.abs(settle(S.floatPull(3)) - 0.108) < 0.003, '3-segment rise');
+assert.ok(settle(S.floatPull(-8), 1.5) < -0.05, 'pulled under');
+assert.ok(Math.abs(settle(S.FLOAT.rest, 6, 0.004) - 0.054) < 0.012, 'rides small waves');
+
 console.log(`ok · 25cm 붕어 ${small.t.toFixed(0)}s · 70cm 잉어 ${carp.t.toFixed(0)}s · 3.5kg 드랙 ${tight.result} ${tight.t.toFixed(0)}s · 끝 휨 1kg ${tipAngle(9.8).toFixed(0)}°`);
