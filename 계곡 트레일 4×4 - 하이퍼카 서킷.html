@@ -1941,7 +1941,9 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
       const hs=x=>fract(sin(x).mul(43758.5453)),h0=hs(lay.mul(91.7).add(3.1)),h1=hs(lay.add(1).mul(91.7).add(3.1)),lh=mix(h0,h1,smoothstep(0.85,1,fr));
       const rA=triG(atlas,wn,0.09),rB=triG(atlas,wn,0.37),rC=triG(atlas,wn,0.028);
       const bed=smoothstep(0,0.35,fr).mul(one.sub(smoothstep(0.5,1,fr)));
-      const vr=voro(vp),bid=vr.z,edge=sqrt(vr.y).sub(sqrt(vr.x));
+      // (the joint cells only where they show: their every use is scaled by face and aaV, so elsewhere skip the 9-cell search)
+      const vr=vec3(8,8,0.5).toVar();If(face.mul(aaV).greaterThan(0.002),()=>{vr.assign(voro(vp));});
+      const bid=vr.z,edge=sqrt(vr.y).sub(sqrt(vr.x));
       const crack=one.sub(smoothstep(0.015,0.08,edge)).mul(face).mul(aaV),bulge=smoothstep(0.02,0.25,edge);
       const seam=one.sub(smoothstep(0,0.16,fr)).mul(smoothstep(0.3,0.6,rB.z.add(h0.mul(0.35)))).mul(face).mul(aa);
       const joint=smoothstep(0.3,0.12,rC.z).mul(face);
@@ -6046,7 +6048,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
+(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},get pfx(){return PFX;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -7176,6 +7178,8 @@ const PFX=(()=>{
   const scenePass=pass(scene,camera,{samples:P.msaa});
   // motion vectors for the temporal anti-aliasing, written beside the colour
   scenePass.setMRT(TSL.mrt({output:TSL.output,velocity:TSL.velocity}));
+  // (two channels are all a motion vector needs: half the multisampled buffer's memory traffic of the four-channel one)
+  scenePass.getTexture('velocity').format=THREE.RGFormat;
   const velTex=scenePass.getTextureNode('velocity');
   // the motion vectors always use the camera's un-jittered projection (bound before any shader is compiled, so a
   // shader built before the first jittered frame doesn't bake the jitter into its motion)
@@ -7716,19 +7720,29 @@ const PFX=(()=>{
 // that crossed impostors baked from them), houses, rocks, fences and bales to the edge too. Grass blades to 42 m, grass
 // to 140 m and larger far tufts to 350 m (past that a blade is under a pixel: the ground's own grass texture carries on),
 // pebbles to 70 m, the frame at up to 2x the CSS resolution (~8 MP). The status panel shows the frame rate.
+// dynamic resolution: the full pixel count while the frame rate holds; under 50 fps the render scale steps down by
+// 0.1 (to 0.7 at most: the TAA and the sharpening keep it close), back up by 0.05 after 6 s over 58. A step down that
+// gains under 5% (the CPU, not the GPU, holds the frame) is undone and the scale left alone for 2 min. Steps 2 s apart
+// (a change reallocates the render targets). Returns whether the scale changed
+const DR={s:1,t:-1e9,prev:0,last:1,hold:0,up:0};
+function drStep(D,fps,now){D.up=fps>58?D.up+1:0;if(now<D.hold||now-D.t<2000)return false;
+  if(D.prev){const gain=fps>=D.prev*1.05;D.prev=0;if(!gain){D.s=D.last;D.hold=now+120000;D.t=now;return true;}}
+  if(fps<50&&D.s>0.7){D.last=D.s;D.prev=fps;D.s=Math.max(0.7,+(D.s-0.1).toFixed(2));D.t=now;return true;}
+  if(D.up>=12&&D.s<1){D.last=D.s;D.s=Math.min(1,+(D.s+0.05).toFixed(2));D.up=0;D.t=now;return true;}
+  return false;}
 const QUAL=(()=>{
   const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,grassFar:13,peb:7,near:WINTER?220:400,lodK:0};
   const Q={fps:0,fa:0,fn:0};
-  Q.apply=()=>{const px=Math.max(1,innerWidth*innerHeight);
-    renderer.setPixelRatio(Math.max(0.5,Math.min(window.devicePixelRatio||1,t.pr,Math.sqrt(t.px/px))));
+  const setPR=()=>{const px=Math.max(1,innerWidth*innerHeight);renderer.setPixelRatio(Math.max(0.5,Math.min(window.devicePixelRatio||1,t.pr,Math.sqrt(t.px/px))*DR.s));};
+  Q.apply=()=>{setPR();
     PFX.useAO=PFX.useSh=PFX.useBl=true;if(PFX.setMSAA)PFX.setMSAA(t.msaa);
     uNearR.value=t.near;LOD_K=t.lodK;FAR_MAX=0;PHOTO.hi.value=1;uGB.value.set(t.gb[0],t.gb[1]);
     bladeT.setRadius(t.blades);if(bladeT.mesh)bladeT.mesh.visible=true;grassT.setRadius(t.grass);grassF.setRadius(t.grassFar);pebT.setRadius(t.peb);
     if(WINTER)for(const g of[bladeT,grassT,grassF,pebT]){g.setRadius(0);if(g.mesh)g.mesh.visible=false;}   // (winter: under the snow)
     resize();Q.show();};
-  Q.show=()=>{const el=$('gfx');if(el)el.textContent=`${t.name} · ${Q.fps||'—'} fps`;};
+  Q.show=()=>{const el=$('gfx');if(el)el.textContent=`${t.name} · ${Q.fps||'—'} fps${DR.s<1?` · 해상도 ${Math.round(DR.s*100)}%`:''}`;};
   Q.tick=raw=>{if(raw>0.25)return;
-    Q.fa+=raw;Q.fn++;if(Q.fa>=0.5){Q.fps=Math.round(Q.fn/Q.fa);Q.fa=Q.fn=0;Q.show();}};
+    Q.fa+=raw;Q.fn++;if(Q.fa>=0.5){Q.fps=Math.round(Q.fn/Q.fa);Q.fa=Q.fn=0;if(drive.started&&!garage.on&&drStep(DR,Q.fps,performance.now())){setPR();resize();}Q.show();}};
   return Q;})();
 function resize(){
   const w=app.clientWidth,h=app.clientHeight;renderer.setSize(w,h);PFX.resize();camera.aspect=w/h;camera.updateProjectionMatrix();
