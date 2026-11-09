@@ -5268,6 +5268,7 @@ const pMat=(()=>{const {float,vec2,vec3,vec4,attribute,uv,texture,positionGeomet
   const al=select(isW,aW,select(isR,aR,select(isM,aM,aS)));
   m.colorNode=vec4(col,al);
   m.maskNode=pa.greaterThanEqual(0.003).and(al.greaterThan(0.004));
+  // (its motion vectors are set with the post-processing, which owns the camera's unjittered projection)
   m.uniforms={scale:{value:400}};return m;})();
 const points=new THREE.Mesh(pGeo,pMat);points.frustumCulled=false;scene.add(points);
 function emit(x,y,z,vx,vy,vz,col,s0,s1,life,alpha,grav,drag,kind){
@@ -7184,6 +7185,16 @@ const PFX=(()=>{
   // the motion vectors always use the camera's un-jittered projection (bound before any shader is compiled, so a
   // shader built before the first jittered frame doesn't bake the jitter into its motion)
   const taaP0=new THREE.Matrix4();TSL.velocity.setProjectionMatrix(taaP0);
+  // the dust's own motion vectors. Its puffs are camera-facing quads placed in a custom vertex stage, so the velocity
+  // node, which follows the geometry's own positions, gave them the motion of a quad at the world's origin - large and
+  // erratic while the camera swings round - and three writes the outputs other than the colour unblended, over every
+  // pixel a puff covers however faint: the TAA and the motion blur then pulled colours in from all over, and the
+  // ground round the car turned to noise in the 3D view. Each puff now moves as its centre does (the world held still:
+  // the puffs drift slowly), from the same unjittered projection and previous camera as everything else
+  {const {attribute,cameraViewMatrix}=TSL,V=TSL.velocity,pp=attribute('ppos','vec3');
+   const c=uniform(taaP0).mul(cameraViewMatrix).mul(vec4(pp,1)).toVarying(),q=V.previousProjectionMatrix.mul(V.previousCameraViewMatrix).mul(vec4(pp,1)).toVarying();
+   // (a puff at or behind the camera plane, now or a frame ago, gets none: no Inf/NaN for the TAA to keep)
+   pMat.mrtNode=TSL.mrt({velocity:select(c.w.greaterThan(1e-3).and(q.w.greaterThan(1e-3)),c.xy.div(c.w).sub(q.xy.div(q.w)),vec2(0))});}
   const colRaw=scenePass.getTextureNode('output'),dep=scenePass.getTextureNode('depth');
   // a mirror-sharp highlight can overflow half float to Inf, which a blur would spread over the frame: keep it finite
   const col=vec4(clamp(colRaw.rgb,0,6e4),1);
@@ -7493,7 +7504,7 @@ const PFX=(()=>{
   P.addFX('vignette',600,x=>vignette(x,uVig.mul(uGr)));
   P.addFX('tone',900,(x,S)=>{const y=vtAgx(x,uExp,uLkP,uLkS);S.toned=true;return y;});
   // ---- motion blur (order 20, before the other resamplers): the world streaks past at speed while the truck, which
-  // the camera carries along (motion ~0), stays crisp. 14 taps along the pixel's own motion (the velocity MRT, NDC
+  // the camera carries along (motion ~0), stays crisp. 14-32 taps, ~2 px apart, along the pixel's own motion (the velocity MRT, NDC
   // current minus previous, to uv as the TAA reads it), centred, stratified and jittered by interleaved gradient noise
   // that moves with the frame. Each tap is weighed by depth and motion (McGuire et al. 2012, 'A reconstruction filter
   // for plausible motion blur'): a nearer tap counts only where its own blur reaches this pixel, a farther one where
@@ -7509,7 +7520,7 @@ const PFX=(()=>{
   const uCWm=uniform(new THREE.Matrix4()),uCarI=uniform(new THREE.Matrix4()),uCarLo=uniform(CARBOX.lo.clone()),uCarHi=uniform(CARBOX.hi.clone()),_cm=new THREE.Matrix4(),_c1=new V3(1,1,1);
   const mbO=new V3(),mbO0=new V3(),mbQ0=new THREE.Quaternion(),mbC0=new THREE.Quaternion();
   P.mb={k:1,max:0.03};   // k: shutter scale (1 = 180 degrees), max: the longest streak, as a fraction of the screen
-  P.addFX('motion blur',20,(x,S)=>{const {If,sqrt}=TSL,N=14,u=S.u,lm=uMBx.mul(max(uRes.x,uRes.y));
+  P.addFX('motion blur',20,(x,S)=>{const {If,sqrt}=TSL,u=S.u,lm=uMBx.mul(max(uRes.x,uRes.y));
     // (1 inside the car's box, from 5 cm in from its faces; 0 from 3 cm outside them: the road 5 cm under its floor is out)
     const carIn=(c,d)=>{const vp=getViewPosition(c,LOGZ?viewZToPerspectiveDepth(viewZ(d),uNear,uFar):d,uPInv),pc=uCarI.mul(uCWm.mul(vec4(vp,1))).xyz,q=max(uCarLo.sub(pc),pc.sub(uCarHi));
       return float(1).sub(smoothstep(-0.05,0.03,max(q.x,max(q.y,q.z))));};
@@ -7525,7 +7536,10 @@ const PFX=(()=>{
       const wX=viewZ(S.dep.sample(u).x).negate().toVar(),ez=wX.mul(0.1).add(0.05).toVar(),rX=L.mul(0.5).toVar(),du=D.div(uRes).toVar();
       const j=fract(float(52.9829189).mul(fract(dot(screenCoordinate.xy.add(uMBf.mul(5.588238)),vec2(0.06711056,0.00583715)))));
       const sm=x.toVar(),ws=float(1).toVar();
-      Loop(N,({i})=>{const t=float(i).add(j).div(N).sub(0.5),c=u.add(du.mul(t)),d=abs(t).mul(L).toVar();
+      // (a fixed 14 over a 40-60 px streak - the 3D view swung round, at 1080p - put each pixel's jittered taps ~4 px
+      // apart, and the jitter showed as a grain moving over the streaked world: this runs after the TAA)
+      const n=clamp(L.mul(0.5).ceil(),14,32).toVar();
+      Loop({start:0,end:n.toInt(),type:'int',condition:'<'},({i})=>{const t=float(i).add(j).div(n).sub(0.5),c=u.add(du.mul(t)),d=abs(t).mul(L).toVar();
         const dc=S.dep.sample(c).x,rY=length(bv(c)).mul(0.5).mul(float(1).sub(carIn(c,dc))).toVar(),dz=viewZ(dc).negate().sub(wX).div(ez).toVar();
         const bk=smoothstep(1,2,dz),fr=smoothstep(1,2,dz.negate());
         const a=fr.mul(clamp(float(1).sub(d.div(max(rY,1e-4))),0,1))                                  // nearer: its blur's cone
