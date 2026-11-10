@@ -1605,6 +1605,36 @@ const RENDER_API=renderer.backend&&renderer.backend.isWebGPUBackend?'WebGPU':'We
 // instance matrices go through instanced vertex attributes, which follow every setMatrixAt(); the uniform-buffer path
 // r186 picks for small instance counts does not see later updates (tiles refilled as the camera moves, moving parts)
 (()=>{try{renderer.backend.capabilities.getUniformBufferLimit=()=>0;}catch(_){}})();
+// ---- Only the instance ranges in view are drawn. An instanced mesh here holds everything round the camera (a pool of
+// grass tiles, the trees out to 400 m) or over the whole map (the far trees' impostors), and three draws all of it in
+// one call: 12 million triangles a frame went through the vertex stage, half of them behind the camera or off to the
+// side. A mesh handed to rangeCull is drawn as a few runs of its instance buffer instead: the patches of ground - each a
+// range of instances with a bounding sphere - that touch the camera's view. three has no such draw, so the WebGPU draw
+// of that mesh (for the scene's camera only) is issued once per run, starting at the run's first instance. The shadow
+// pass (the sun's camera) and the WebGL2 path draw the whole buffer.
+const RC={cur:null,on:false,off:false,pl:new Float64Array(16),m:new THREE.Matrix4(),lists:[]};   // (off: a switch for comparing with the whole buffers drawn)
+(()=>{const P=RENDER_API==='WebGPU'&&window.GPURenderPassEncoder&&GPURenderPassEncoder.prototype,B=renderer.backend;if(!P||!B||typeof B.draw!=='function')return;
+  RC.on=true;const di=P.drawIndexed,dr=P.draw,bd=B.draw;
+  P.drawIndexed=function(n,ic,fi,bv,f0){const R=RC.cur;if(!R)return di.call(this,n,ic,fi,bv,f0);for(let i=0;i<R.n;i++)di.call(this,n,R.c[i],fi,bv,R.s[i]);};
+  P.draw=function(n,ic,fv,f0){const R=RC.cur;if(!R)return dr.call(this,n,ic,fv,f0);for(let i=0;i<R.n;i++)dr.call(this,n,R.c[i],fv,R.s[i]);};
+  // (the runs are in force for exactly one mesh's own draw: three renders the shadow pass from inside the first sunlit
+  // object's render, after that object's onBeforeRender, so anything wider would hand a pool's runs to the shadow casters)
+  B.draw=function(ro,info){const H=ro.object.userData.rc;RC.cur=H&&H.ok&&!RC.off&&ro.camera===camera?H:null;try{return bd.call(this,ro,info);}finally{RC.cur=null;}};})();
+// (a handle: n runs, s their first instances, c their counts; ok once a frame's runs are in)
+function rangeCull(meshes,cap){const H={n:0,s:new Uint32Array(cap),c:new Uint32Array(cap),ok:false,g:0,far:1e9};
+  if(RC.on)for(const m of meshes)m.userData.rc=H;
+  return H;}
+// the camera's four side planes for this frame (world space, unit normals pointing in)
+RC.frame=()=>{camera.updateMatrixWorld();const e=RC.m.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).elements,p=RC.pl;
+  for(let k=0;k<4;k++){const sg=k&1?-1:1,ax=k>>1,x=e[3]+sg*e[ax],y=e[7]+sg*e[4+ax],z=e[11]+sg*e[8+ax],l=1/Math.hypot(x,y,z);p[k*4]=x*l;p[k*4+1]=y*l;p[k*4+2]=z*l;p[k*4+3]=(e[15]+sg*e[12+ax])*l;}};
+RC.see=(x,y,z,r)=>{const p=RC.pl;return p[0]*x+p[1]*y+p[2]*z+p[3]>=-r&&p[4]*x+p[5]*y+p[6]*z+p[7]>=-r&&p[8]*x+p[9]*y+p[10]*z+p[11]>=-r&&p[12]*x+p[13]*y+p[14]*z+p[15]>=-r;};
+// the runs of a handle whose patches (H.g of them, in buffer order: sphere SP[4g..], range RG[2g..]) are in view and,
+// for a list drawn only out to H.far, in range; patches that adjoin in the buffer merge into one run
+function rcRuns(H,SP,RG){let n=0,end=-1;const S=H.s,C=H.c,f=H.far,cx=camera.position.x,cz=camera.position.z;
+  for(let g=0;g<H.g;g++){const j=g*4,r=SP[j+3];if(!RC.see(SP[j],SP[j+1],SP[j+2],r))continue;
+    if(f<1e9&&(SP[j]-cx)**2+(SP[j+2]-cz)**2>(f+r)**2)continue;
+    const a=RG[g*2],c=RG[g*2+1];if(n&&a===end)C[n-1]+=c;else{S[n]=a;C[n]=c;n++;}end=a+c;}
+  H.n=n;H.ok=true;}
 // with a reversed depth buffer "nearer" is a larger depth, so decals' polygon offsets change sign
 const POFF=renderer.reversedDepthBuffer?-1:1;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,LOWQ?1:1.5,Math.max(0.75,Math.sqrt(4.5e6/Math.max(1,innerWidth*innerHeight)))));
@@ -1774,6 +1804,16 @@ const skyMat=(()=>{const {Fn,If,Loop,float,vec2,vec3,uniform,positionLocal,norma
   return m;})();
 const sky=W(new THREE.Mesh(new THREE.SphereGeometry(5500,32,16),skyMat));
 sky.frustumCulled=false;sky.renderOrder=-1;scene.add(sky);
+// ---- The order things are drawn in. Opaque things are drawn nearest first, so that what ends up hidden is never shaded
+// (the depth test throws its pixels out before the shader runs) - but three orders by each mesh's own centre, and the
+// big instanced meshes (grass pools, tree sets, whole-map lists) have none that means anything. So the order is set by
+// hand: the blades and grass round the camera and the near trees first (renderOrder -4..-2: the ground under them, the
+// costliest shader in the frame, is then shaded only where it shows through), the ground and the car as three sorts
+// them (0), the far grass and the whole-map lists after the ground that hides much of them (0.5), and the sky last of
+// all (50), pinned to the far plane so that it is shaded only where nothing else was drawn - it was drawn first, over
+// the whole frame. (Reversed depth, the WebGPU path: far is z 0. The picture is the same either way.)
+if(renderer.reversedDepthBuffer){const {cameraProjectionMatrix,modelViewMatrix,positionLocal,vec4}=TSL,p=cameraProjectionMatrix.mul(modelViewMatrix).mul(vec4(positionLocal,1));
+  skyMat.vertexNode=vec4(p.xy,0,p.w);sky.renderOrder=50;}
 // ---- what the cars reflect (their envMap, envTex). A capture of the sky alone put the bright haze under the horizon
 // into every door, sill and window, and lit the undersides blue-white. Under the horizon the capture scene has a dome
 // of lit ground instead (the valley's mean albedo under the sun and sky, darker straight down where the car shades
@@ -2150,17 +2190,23 @@ function nearSet(list,parts,opt={}){
   const PM=parts.map(()=>new Float32Array(n*16)),PC=parts.map(()=>new Float32Array(n*3));
   list.forEach((t,i)=>{parts.forEach(([,,fill],j)=>{fill(t,M,c);M.toArray(PM[j],i*16);c.toArray(PC[j],i*3);});
     const k=(Math.floor(t.x/GS)+4096)*8192+Math.floor(t.z/GS)+4096;if(!cells.has(k))cells.set(k,[]);cells.get(k).push(i);});
+  // (how far each one reaches from its origin, over its parts: the geometry's reach at the instance's scale, and its sway)
+  const RI=new Float32Array(n);parts.forEach(([geo],j)=>{if(!geo.boundingSphere)geo.computeBoundingSphere();const gr=geo.boundingSphere.center.length()+geo.boundingSphere.radius,P=PM[j];
+    for(let i=0;i<n;i++){const o=i*16,t=list[i],ty=t.y!==undefined?t.y:PM[0][o+13];
+      const s2=Math.max(P[o]*P[o]+P[o+1]*P[o+1]+P[o+2]*P[o+2],P[o+4]*P[o+4]+P[o+5]*P[o+5]+P[o+6]*P[o+6],P[o+8]*P[o+8]+P[o+9]*P[o+9]+P[o+10]*P[o+10]);
+      RI[i]=Math.max(RI[i],gr*Math.sqrt(s2)+Math.hypot(P[o+12]-t.x,P[o+13]-ty,P[o+14]-t.z)+0.6);}});
   const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3);
   const shadows=[];
   const meshes=parts.map(([geo,mat])=>{const g=new THREE.BufferGeometry();for(const nm in geo.attributes)g.setAttribute(nm,geo.attributes[nm]);if(geo.index)g.setIndex(geo.index);g.setAttribute('ipos',ipa);
-    const m=staticInst(W(new THREE.InstancedMesh(g,mat,cap)));m.name='near trees '+n+' part';m.count=0;m.frustumCulled=false;m.receiveShadow=true;
+    const m=staticInst(W(new THREE.InstancedMesh(g,mat,cap)));m.name='near trees '+n+' part';m.renderOrder=-2;m.count=0;m.frustumCulled=false;m.receiveShadow=true;
     m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3);scene.add(m);
     // its shadow: the same model, material and instance buffers, seen only by the sun's shadow camera (layer 1) and
     // drawn only as far as the trees that can reach the shadow map, which come first in the buffers. (The trees cast
     // none themselves: every one out to 400 m went through the shadow pass, for a shadow map 100 m across.)
     const s=W(new THREE.InstancedMesh(g,mat,cap));s.name=m.name+' shadow';s.instanceMatrix=m.instanceMatrix;s.instanceColor=m.instanceColor;
     if(opt.cast!==false){s.count=0;s.frustumCulled=false;s.castShadow=true;s.layers.set(1);scene.add(s);shadows.push(s);}return m;});
-  const DEF=new Int32Array(n),DK=new Float64Array(n),KS=2**Math.ceil(Math.log2(n+1));
+  const DEF=new Int32Array(n),SHI=new Int32Array(n),TMP=new Int32Array(n),DK=new Float64Array(n),KS=2**Math.ceil(Math.log2(n+1));
+  const H=rangeCull(meshes,100),SP=new Float32Array(400),RG=new Uint32Array(200);
   // (copied element by element: a subarray per tree and part was thousands of throwaway objects every refill)
   const MA=meshes.map(m=>m.instanceMatrix.array),CA=meshes.map(m=>m.instanceColor.array),NM=meshes.length;
   const put=(i,k)=>{const t=list[i],i16=i*16,k16=k*16,i3=i*3,k3=k*3;
@@ -2169,9 +2215,21 @@ function nearSet(list,parts,opt={}){
   let lx=1e9,lz=1e9,lr=-1,sx=1e9,sy=0,sz=1e9;
   // (refilled every 10 m of camera or truck travel, with the trees out to R + 12 m: any within R of where the camera
   // has got to since are in; numeric cell keys, as a 400 m radius visits ~2,600 cells per set each time)
-  return{meshes,reset(){lx=1e9;},update(x,z,R){const C=car.pos;R=opt.R||R;
+  let k=0;
+  // A block of the buffer goes in ordered by where its trees lie round the camera - the ground within 48 m, then sixteen
+  // sectors of three rings - so that a run of the buffer is a patch of ground: each patch's range and bounding sphere
+  // are kept, and only the patches in view are drawn (the view takes in a few sectors side by side: a run or two)
+  const grp=(A,cnt)=>{for(let j=0;j<cnt;j++){const t=list[A[j]],ex=t.x-lx,ez=t.z-lz,d2=ex*ex+ez*ez;
+      DK[j]=(d2<2304?0:1+(Math.floor((Math.atan2(ez,ex)+Math.PI)*(8/Math.PI))&15)*3+(d2<12100?0:d2<48400?1:2))*KS+j;}
+    const ks=DK.subarray(0,cnt).sort();let key=-1,a=k,x0=0,x1=0,y0=0,y1=0,z0=0,z1=0,rm=0;
+    const close=()=>{if(k>a){const g=H.g++,j=g*4;SP[j]=(x0+x1)/2;SP[j+1]=(y0+y1)/2;SP[j+2]=(z0+z1)/2;SP[j+3]=Math.hypot(x1-x0,y1-y0,z1-z0)/2+rm;RG[g*2]=a;RG[g*2+1]=k-a;}};
+    for(let j=0;j<cnt;j++){const q=ks[j],kk=Math.floor(q/KS),i=A[q%KS];if(kk!==key){close();key=kk;a=k;x0=y0=z0=1e9;x1=y1=z1=-1e9;rm=0;}
+      put(i,k);const k3=k*3,px=IP[k3],py=IP[k3+1],pz=IP[k3+2];k++;
+      if(px<x0)x0=px;if(px>x1)x1=px;if(py<y0)y0=py;if(py>y1)y1=py;if(pz<z0)z0=pz;if(pz>z1)z1=pz;if(RI[i]>rm)rm=RI[i];}
+    close();};
+  const refill=(x,z,R)=>{const C=car.pos;
     if(Math.hypot(x-lx,z-lz)<10&&Math.hypot(C.x-sx,C.z-sz)<10&&Math.abs(C.y-sy)<10&&R===lr)return;lx=x;lz=z;lr=R;sx=C.x;sy=C.y;sz=C.z;
-    const Rr=R+12,R2=Rr*Rr;let k=0,nd=0;
+    const Rr=R+12,R2=Rr*Rr;let nd=0,nsh=0;k=0;
     // the shadow map is a 100 m box round the truck in the sun's frame (across the sun, up its light, and along it to
     // the shadow camera's depth range): a tree is in it if any of it (crown 8 m, up to 30 m tall) is, with 14 m to spare
     // for the truck's travel until the next refill
@@ -2179,15 +2237,26 @@ function nearSet(list,parts,opt={}){
     for(let cz=Math.floor((z-Rr)/GS);cz<=Math.floor((z+Rr)/GS);cz++)for(let cx=Math.floor((x-Rr)/GS);cx<=Math.floor((x+Rr)/GS);cx++){const L=cells.get((cx+4096)*8192+cz+4096);if(!L)continue;
       for(const i of L){const t=list[i],d2=(t.x-x)**2+(t.z-z)**2;if(d2>R2)continue;
         const ex=t.x-sx,ey=(t.y!==undefined?t.y:PM[0][i*16+13])-sy,ez=t.z-sz,a=ex*ar+ez*az,u=ex*ux+ey*uy+ez*uz,w=ex*dx+ey*dy+ez*dz;
-        if(Math.abs(a)<72&&u<72&&u>-100&&w>-175&&w<162&&k<cap)put(i,k++);else{DK[nd]=Math.floor(d2)*KS+nd;DEF[nd++]=i;}}}
-    const ns=k;
-    // the rest after them; nearest first when there are more than the meshes hold
-    if(ns+nd>cap){const ks=DK.subarray(0,nd).sort();for(let j=0;j<nd&&k<cap;j++)put(DEF[ks[j]%KS],k++);}
-    else for(let j=0;j<nd;j++)put(DEF[j],k++);
+        if(Math.abs(a)<72&&u<72&&u>-100&&w>-175&&w<162&&nsh<cap)SHI[nsh++]=i;else{DK[nd]=Math.floor(d2)*KS+nd;DEF[nd++]=i;}}}
+    // the rest after them: all of it, or the nearest when there are more than the meshes hold
+    let nr=nd;if(nsh+nd>cap){nr=cap-nsh;const ks=DK.subarray(0,nd).sort();for(let j=0;j<nr;j++)TMP[j]=DEF[ks[j]%KS];DEF.set(TMP.subarray(0,nr));}
+    H.g=0;grp(SHI,nsh);const ns=k;grp(DEF,nr);
     // (only the instances in use are uploaded; a range still pending from an earlier refill is inside this one or past the count)
     for(const m of meshes){m.count=k;if(k){for(const A of[m.instanceMatrix,m.instanceColor])A.clearUpdateRanges();m.instanceMatrix.addUpdateRange(0,k*16);m.instanceColor.addUpdateRange(0,k*3);m.instanceMatrix.needsUpdate=true;m.instanceColor.needsUpdate=true;}}
-    for(const s of shadows)s.count=ns;if(k){ipa.clearUpdateRanges();ipa.addUpdateRange(0,k*3);ipa.needsUpdate=true;}}};
+    for(const s of shadows)s.count=ns;if(k){ipa.clearUpdateRanges();ipa.addUpdateRange(0,k*3);ipa.needsUpdate=true;}};
+  return{meshes,reset(){lx=1e9;},update(x,z,R){refill(x,z,opt.R||R);if(RC.on)rcRuns(H,SP,RG);}};
 }
+// A list drawn as one instanced mesh over the whole map goes in ordered by 256 m cell, row by row: each cell is then a
+// range of the buffer with a bounding sphere, and only the cells in view (and, for a list with a far limit, in range)
+// are drawn.
+const cellKey=it=>(Math.floor(it.z/256)+512)*1024+Math.floor(it.x/256)+512,byCell=its=>its.map(it=>[cellKey(it),it]).sort((a,b)=>a[0]-b[0]).map(e=>e[1]);
+function rcList(m,geo,far){if(!geo.boundingSphere)geo.computeBoundingSphere();const gr=geo.boundingSphere.center.length()+geo.boundingSphere.radius,SP=[],RG=[];
+  let key=null,a=0,x0=0,x1=0,y0=0,y1=0,z0=0,z1=0,rm=0;
+  const close=i=>{if(i>a){SP.push((x0+x1)/2,(y0+y1)/2,(z0+z1)/2,Math.hypot(x1-x0,y1-y0,z1-z0)/2+rm);RG.push(a,i-a);}};
+  return{add(i,it,e){const k=cellKey(it);if(k!==key){close(i);key=k;a=i;x0=y0=z0=1e9;x1=y1=z1=-1e9;rm=0;}
+      if(e[12]<x0)x0=e[12];if(e[12]>x1)x1=e[12];if(e[13]<y0)y0=e[13];if(e[13]>y1)y1=e[13];if(e[14]<z0)z0=e[14];if(e[14]>z1)z1=e[14];
+      rm=Math.max(rm,gr*Math.sqrt(Math.max(e[0]*e[0]+e[1]*e[1]+e[2]*e[2],e[4]*e[4]+e[5]*e[5]+e[6]*e[6],e[8]*e[8]+e[9]*e[9]+e[10]*e[10]))+0.6);},
+    done(n){close(n);const H=rangeCull([m],RG.length/2+1);H.g=RG.length/2;H.SP=Float32Array.from(SP);H.RG=Uint32Array.from(RG);H.far=far;if(RC.on)RC.lists.push(H);}};}
 function cellInstanced(geo,mat,items,fill,opt={}){
   // drawn out to the map's edge with one look (no near/far pair of models): one instanced mesh for the lot. Every mesh
   // is a draw call with its own CPU cost each frame, and one per cell over the whole map (hundreds) held the frame rate
@@ -2203,8 +2272,8 @@ function cellInstanced(geo,mat,items,fill,opt={}){
     const M=new THREE.Matrix4(),c=new THREE.Color(),ip=new THREE.InstancedBufferAttribute(new Float32Array(n*3),3);
     const g=new THREE.BufferGeometry();for(const nm in opt.lo.attributes)g.setAttribute(nm,opt.lo.attributes[nm]);if(opt.lo.index)g.setIndex(opt.lo.index);g.setAttribute('ipos',ip);
     const mm=tileCull((opt.loMat||mat).clone(),q=>q.xz.sub(TSL.cameraPosition.xz).length().greaterThanEqual(NR));
-    const m=staticInst(W(new THREE.InstancedMesh(g,mm,n)));m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;
-    items.forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);ip.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);});scene.add(m);
+    const m=staticInst(W(new THREE.InstancedMesh(g,mm,n)));m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;m.renderOrder=0.5;
+    {const L=rcList(m,opt.lo,1e9);byCell(items).forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);ip.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);L.add(i,it,M.elements);});L.done(n);}scene.add(m);
     // the near model: only the items round the camera, as the near trees are (refilled as it moves, with shadow-only
     // copies of those that can reach the shadow map), the GPU keeping the ones inside NR. (One mesh over every item
     // ran the detailed model's vertices for all of them, in the shadow pass too, to show the few close by.)
@@ -2221,8 +2290,8 @@ function cellInstanced(geo,mat,items,fill,opt={}){
     const mm=cull?tileCull(mat.clone(),q=>q.xz.sub(TSL.cameraPosition.xz).length().lessThan(opt.far)):mat;
     const m=staticInst(W(new THREE.InstancedMesh(g,mm,list.length)));
     const ipa=opt.ipos||cull?new THREE.InstancedBufferAttribute(new Float32Array(list.length*3),3):null;if(ipa)g.setAttribute('ipos',ipa);
-    list.forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);if(ipa)ipa.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);});
-    m.castShadow=!!opt.cast;m.receiveShadow=true;scene.add(m);
+    {const L=one?rcList(m,geo,cull?opt.far:1e9):null;(one?byCell(list):list).forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);if(ipa)ipa.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);if(L)L.add(i,it,M.elements);});if(L)L.done(list.length);}
+    m.castShadow=!!opt.cast;m.receiveShadow=true;if(one)m.renderOrder=0.5;scene.add(m);
     let lo=null;
     if(opt.lo){const g2=new THREE.BufferGeometry();for(const nm in opt.lo.attributes)g2.setAttribute(nm,opt.lo.attributes[nm]);if(opt.lo.index)g2.setIndex(opt.lo.index);g2.boundingSphere=g.boundingSphere.clone();
       lo=W(new THREE.InstancedMesh(g2,opt.loMat||mat,list.length));lo.instanceMatrix=m.instanceMatrix;lo.instanceColor=m.instanceColor;lo.castShadow=!!opt.cast;lo.receiveShadow=true;scene.add(lo);}
@@ -2867,11 +2936,16 @@ function makeTiler(o){
   const g=new THREE.BufferGeometry();for(const nm in o.geo.attributes)g.setAttribute(nm,o.geo.attributes[nm]);if(o.geo.index)g.setIndex(o.geo.index);
   // each instance's origin rides along (ipos) so the vertex stage can drop whole instances behind the camera or out of range
   const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3);g.setAttribute('ipos',ipa);
-  const m=staticInst(W(new THREE.InstancedMesh(g,o.mat,cap)));m.name='tiles '+o.size+'m x'+o.per;
+  const m=staticInst(W(new THREE.InstancedMesh(g,o.mat,cap)));m.name='tiles '+o.size+'m x'+o.per;m.renderOrder=o.ro||0;
   const MA=m.instanceMatrix.array;MA.fill(0);   // (every instance starts collapsed to nothing)
   m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3).fill(1),3);const CA=m.instanceColor.array;
   
   m.count=0;m.frustumCulled=false;m.receiveShadow=true;m.castShadow=!!o.cast;scene.add(m);
+  // (for the culling: the pages in view, how far the geometry reaches from an instance's origin, and how many pages out
+  // of view may ride along between two in view - a draw call costs about what a couple of thousand triangles do)
+  if(!o.geo.boundingSphere)o.geo.computeBoundingSphere();
+  const H=rangeCull([m],NP),vis=new Uint8Array(NP),GR=o.geo.boundingSphere.center.length()+o.geo.boundingSphere.radius;
+  const GAP=Math.max(1,Math.min(6,Math.round(2000/(PG*(o.geo.index?o.geo.index.count:o.geo.attributes.position.count)/3))));
   const used=new Uint8Array(NP),own=new Array(NP).fill(null),dirtyA=new Set(),dirtyM=new Set();let top=0,low=0,nUsed=0;
   const alloc=()=>{while(low<NP&&used[low])low++;if(low>=NP)return -1;const p=low++;used[p]=1;nUsed++;if(p>=top)top=p+1;return p;};
   // a freed page under the top is cleared (the draw still covers it); the top one needs nothing, the draw stops short of it
@@ -2879,10 +2953,14 @@ function makeTiler(o){
     if(p<top-1){MA.fill(0,p*PG*16,(p+1)*PG*16);dirtyM.add(p);}
     while(top>0&&!used[top-1])top--;};
   const TM=new Float32Array(per*16),TC=new Float32Array(per*3),TI=new Float32Array(per*3);
-  const fill=tl=>{tl.todo=false;const r=rng(((tl.tx*73856093)^(tl.tz*19349663)^o.seed)>>>0);let n=0;
+  const fill=tl=>{tl.todo=false;const r=rng(((tl.tx*73856093)^(tl.tz*19349663)^o.seed)>>>0);let n=0,x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,z0=1e9,z1=-1e9,s2=0;
     for(let k=0;k<per;k++){const x=(tl.tx+r())*o.size,z=(tl.tz+r())*o.size,a=r(),bb=r(),c=r();
       if((Math.abs(x)>OHALF-2||Math.abs(z)>OHALF-2)&&OUTER_H===null)continue;
-      if(o.place(x,z,a,bb,c,_gM,_gC)){const e=_gM.elements;TM.set(e,n*16);TC[n*3]=_gC.r;TC[n*3+1]=_gC.g;TC[n*3+2]=_gC.b;TI[n*3]=e[12];TI[n*3+1]=e[13];TI[n*3+2]=e[14];n++;}}
+      if(o.place(x,z,a,bb,c,_gM,_gC)){const e=_gM.elements;TM.set(e,n*16);TC[n*3]=_gC.r;TC[n*3+1]=_gC.g;TC[n*3+2]=_gC.b;TI[n*3]=e[12];TI[n*3+1]=e[13];TI[n*3+2]=e[14];n++;
+        if(e[12]<x0)x0=e[12];if(e[12]>x1)x1=e[12];if(e[13]<y0)y0=e[13];if(e[13]>y1)y1=e[13];if(e[14]<z0)z0=e[14];if(e[14]>z1)z1=e[14];
+        s2=Math.max(s2,e[0]*e[0]+e[1]*e[1]+e[2]*e[2],e[4]*e[4]+e[5]*e[5]+e[6]*e[6],e[8]*e[8]+e[9]*e[9]+e[10]*e[10]);}}
+    // (the tile's bounding sphere: its instances' origins, the reach of the largest of them, and its sway)
+    tl.bx=(x0+x1)/2;tl.by=(y0+y1)/2;tl.bz=(z0+z1)/2;tl.br=Math.hypot(x1-x0,y1-y0,z1-z0)/2+GR*Math.sqrt(s2)+0.6;
     tl.pages=[];
     for(let j=0;j*PG<n;j++){const p=alloc();if(p<0)break;tl.pages.push(p);own[p]=tl;const k0=j*PG,k1=Math.min(n,k0+PG),b=p*PG;
       MA.set(TM.subarray(k0*16,k1*16),b*16);if(k1-k0<PG)MA.fill(0,(b+k1-k0)*16,(b+PG)*16);
@@ -2924,7 +3002,12 @@ function makeTiler(o){
     // fill the queued tiles nearest first, within a few milliseconds (more when far behind)
     if(queue.length){const t0=performance.now(),bud=queue.length>60?5:queue.length>2*(2*rad+1)?3:1.5;
       while(queue.length){const tl=queue.pop();if(tl.todo&&!tl.dead)fill(tl);if(performance.now()-t0>bud)break;}}
-    compact();m.count=top*PG;flush();}};
+    compact();m.count=top*PG;flush();
+    // the pages of the tiles in view, as runs of the pool (e: one past a run's last page in view; up to GAP pages out of
+    // view ride along inside it)
+    if(RC.on){vis.fill(0,0,top);for(const tl of tiles.values())if(tl.pages&&tl.pages.length&&RC.see(tl.bx,tl.by,tl.bz,tl.br))for(const p of tl.pages)vis[p]=1;
+      let n=0,p=0;const S=H.s,C=H.c;while(p<top){if(!vis[p]){p++;continue;}let q=p+1,e=q;while(q<top&&q-e<=GAP){if(vis[q])e=q+1;q++;}S[n]=p*PG;C[n++]=(e-p)*PG;p=e;}
+      H.n=n;H.ok=true;}}};
 }
 const uViewDir=TSL.uniform(new V3(0,0,1));
 // keep(ip) says whether the instance at ip is drawn; otherwise all its vertices fall onto its origin (nothing to raster)
@@ -2949,10 +3032,10 @@ const grassBand=(mat,a,b,inv)=>{const {attribute,length,smoothstep,float,cameraP
   mat.opacityNode=(mat.opacityNode||float(1)).mul(inv?float(1).sub(f):f);return mat;};
 const grassPlace=(k,s,hs)=>(x,z,a,b,c,M,col)=>{const g=gInfo(x,z);let pr=smooth(0.3,0.8,g.wg);pr*=(1-g.tw)*(1-g.ws)*(1-g.wm)*k;if(c>pr)return false;
     const sc=(0.75+b*0.7)*s,kk=(a*7.3)%1;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.03*s,z),_gQ,_gS.set(sc,sc*hs*(0.85+kk*0.7),sc));col.copy(gA).lerp(gB,clamp(g.wd*0.6+kk*0.3,0,1)).multiplyScalar(0.72+0.28*g.sun);return true;};
-const grassT=makeTiler({size:14,radius:10,per:1150,seed:1,rc:GX1+1,geo:tuftGeo(4,1.25,0.62),
+const grassT=makeTiler({size:14,radius:10,per:1150,seed:1,ro:-3,rc:GX1+1,geo:tuftGeo(4,1.25,0.62),
   mat:tileCull(grassBand(fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true)),GX0,GX1,true),ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(uGB.x.mul(0.45))).and(within(ip,GX1+1))),
   place:grassPlace(1,1,1)});
-const grassF=makeTiler({size:28,radius:13,per:900,seed:5,rc:GF1+1,geo:tuftGeo(3,1.25,0.62),
+const grassF=makeTiler({size:28,radius:13,per:900,seed:5,ro:0.5,rc:GF1+1,geo:tuftGeo(3,1.25,0.62),
   mat:tileCull(grassBand(grassBand(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:meadowTex,alphaTest:0.4,alphaToCoverage:true,roughness:1,envMapIntensity:0.55}),0.13,true),GX0,GX1,false),GF0,GF1,true),
     ip=>aheadOf(ip,3).and(ip.xz.sub(TSL.cameraPosition.xz).length().greaterThan(GX0-1)).and(within(ip,GF1+1))),
   place:grassPlace(0.6,1.9,0.7)});   // (wider, not much taller: a far tuft covers more ground, it is no bush)
@@ -3002,7 +3085,7 @@ const bladeT=(()=>{
    mat.alphaToCoverage=true;mat.opacityNode=k;
    mat.normalNode=normalize(mix(normalize(normalViewGeometry),cameraViewMatrix.mul(vec4(0,1,0,0)).xyz,0.6));}
   tileCull(mat,ip=>aheadOf(ip,1).and(within(ip,uGB.y.add(0.6))));
-  return makeTiler({size:6,radius:7,per:680,seed:3,rc:()=>uGB.value.y+0.6,geo:g,mat,
+  return makeTiler({size:6,radius:7,per:680,seed:3,ro:-4,rc:()=>uGB.value.y+0.6,geo:g,mat,
     place(x,z,a,b,c,M,col){const gi=gInfo(x,z);let pr=smooth(0.3,0.8,gi.wg);   // (by the ground's grass weight: soft edges, no square patches)
       pr*=(1-gi.tw)*(1-gi.ws)*(1-gi.wm)*(0.75+0.25*smooth(-0.35,0.35,nB(x*0.13,z*0.13)));if(c>pr)return false;
       const sc=0.7+b*0.65;_gQ.setFromAxisAngle(_gY,a*TAU);M.compose(_gP.set(x,terrainH(x,z)-0.015,z),_gQ,_gS.set(sc,sc*(0.8+((a*7.3)%1)*0.5),sc));
@@ -6059,7 +6142,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},get pfx(){return PFX;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
+(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},get pfx(){return PFX;},get rc(){return RC;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -7161,6 +7244,7 @@ function updateCamera(dt){
     _m.set(car.pos.x,cam.ry+0.3,car.pos.z);camera.lookAt(_m);camera.fov=48;
   }
   camera.updateProjectionMatrix();
+  if(RC.on){RC.frame();for(const H of RC.lists)rcRuns(H,H.SP,H.RG);}
   sky.position.copy(camera.position);
   // snap the shadow frustum to whole shadow-map texels so shadows don't shimmer while moving
   {const tx=(sc.right-sc.left)/sun.shadow.mapSize.x,a=car.pos.dot(SUN_R),b=car.pos.dot(SUN_U);
