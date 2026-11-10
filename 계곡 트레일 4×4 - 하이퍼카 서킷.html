@@ -2124,6 +2124,16 @@ const propCells=[];
 let FAR_MAX=1e9;
 let CONI=null,ALPFAR=null;const AFF={tick:null};
 const NEARSETS=[],uNearR=TSL.uniform(55),uViewPos=TSL.uniform(new V3()),FARCELLS=[];(()=>{try{window.__FARCELLS=FARCELLS;}catch(_){}})();
+// Instances that stay where they are put (trees, grass, rocks). Two things three does with instanced meshes cost the
+// frame dearly here. A buffer flagged as dynamic is uploaded whole on every render call, changed or not; and with motion
+// vectors on, every instanced mesh gets a second copy of its matrices ("previous"), the whole array copied into it after
+// each draw. The grass pools alone hold 1.4 million slots: ~105 MB uploaded and ~95 MB copied every frame (measured),
+// for data that changes a few pages at a time. So nothing is flagged dynamic any more (three then uploads only what
+// needsUpdate marks, by range), and for these sets the "previous" matrices are the matrices themselves: no copy, no
+// second buffer - and a slot refilled with another tree gets no false motion for a frame either.
+// (three r186: its instancing node clones instanceMatrix for the previous matrices and refreshes the clone with
+// array.set after each draw - the two hooks below; should a later three do it otherwise they simply stop mattering)
+function staticInst(m){const a=m.instanceMatrix;a.clone=()=>a;a.array.set=function(src,off){if(src!==this)Float32Array.prototype.set.call(this,src,off);};return m;}
 function fadeTree(mat,imp){if(mat.userData.fadeT)return mat;mat.userData.fadeT=1;
   const {float,vec2,fract,dot,screenCoordinate,smoothstep,length,attribute,select}=TSL;
   const ip=attribute('ipos','vec3'),f=smoothstep(uNearR.sub(6),uNearR,length(ip.xz.sub(uViewPos.xz)));
@@ -2140,11 +2150,11 @@ function nearSet(list,parts,opt={}){
   const PM=parts.map(()=>new Float32Array(n*16)),PC=parts.map(()=>new Float32Array(n*3));
   list.forEach((t,i)=>{parts.forEach(([,,fill],j)=>{fill(t,M,c);M.toArray(PM[j],i*16);c.toArray(PC[j],i*3);});
     const k=(Math.floor(t.x/GS)+4096)*8192+Math.floor(t.z/GS)+4096;if(!cells.has(k))cells.set(k,[]);cells.get(k).push(i);});
-  const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3).setUsage(THREE.DynamicDrawUsage);
+  const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3);
   const shadows=[];
   const meshes=parts.map(([geo,mat])=>{const g=new THREE.BufferGeometry();for(const nm in geo.attributes)g.setAttribute(nm,geo.attributes[nm]);if(geo.index)g.setIndex(geo.index);g.setAttribute('ipos',ipa);
-    const m=W(new THREE.InstancedMesh(g,mat,cap));m.name='near trees '+n+' part';m.count=0;m.frustumCulled=false;m.receiveShadow=true;
-    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3).setUsage(THREE.DynamicDrawUsage);scene.add(m);
+    const m=staticInst(W(new THREE.InstancedMesh(g,mat,cap)));m.name='near trees '+n+' part';m.count=0;m.frustumCulled=false;m.receiveShadow=true;
+    m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3);scene.add(m);
     // its shadow: the same model, material and instance buffers, seen only by the sun's shadow camera (layer 1) and
     // drawn only as far as the trees that can reach the shadow map, which come first in the buffers. (The trees cast
     // none themselves: every one out to 400 m went through the shadow pass, for a shadow map 100 m across.)
@@ -2193,7 +2203,7 @@ function cellInstanced(geo,mat,items,fill,opt={}){
     const M=new THREE.Matrix4(),c=new THREE.Color(),ip=new THREE.InstancedBufferAttribute(new Float32Array(n*3),3);
     const g=new THREE.BufferGeometry();for(const nm in opt.lo.attributes)g.setAttribute(nm,opt.lo.attributes[nm]);if(opt.lo.index)g.setIndex(opt.lo.index);g.setAttribute('ipos',ip);
     const mm=tileCull((opt.loMat||mat).clone(),q=>q.xz.sub(TSL.cameraPosition.xz).length().greaterThanEqual(NR));
-    const m=W(new THREE.InstancedMesh(g,mm,n));m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;
+    const m=staticInst(W(new THREE.InstancedMesh(g,mm,n)));m.frustumCulled=false;m.castShadow=false;m.receiveShadow=true;
     items.forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);ip.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);});scene.add(m);
     // the near model: only the items round the camera, as the near trees are (refilled as it moves, with shadow-only
     // copies of those that can reach the shadow map), the GPU keeping the ones inside NR. (One mesh over every item
@@ -2209,7 +2219,7 @@ function cellInstanced(geo,mat,items,fill,opt={}){
       cx=(x0+x1)/2;cz=(z0+z1)/2;rr=Math.hypot(x1-x0,z1-z0)/2;}
     g.boundingSphere=new THREE.Sphere(new V3(cx,ys/list.length,cz),rr+(opt.h||15));
     const mm=cull?tileCull(mat.clone(),q=>q.xz.sub(TSL.cameraPosition.xz).length().lessThan(opt.far)):mat;
-    const m=W(new THREE.InstancedMesh(g,mm,list.length));
+    const m=staticInst(W(new THREE.InstancedMesh(g,mm,list.length)));
     const ipa=opt.ipos||cull?new THREE.InstancedBufferAttribute(new Float32Array(list.length*3),3):null;if(ipa)g.setAttribute('ipos',ipa);
     list.forEach((it,i)=>{fill(it,M,c);m.setMatrixAt(i,M);m.setColorAt(i,c);if(ipa)ipa.setXYZ(i,M.elements[12],M.elements[13],M.elements[14]);});
     m.castShadow=!!opt.cast;m.receiveShadow=true;scene.add(m);
@@ -2856,11 +2866,11 @@ function makeTiler(o){
   const RMAX=o.radius,per=o.per,PG=Math.min(64,per),NP=(2*RMAX+1)**2*Math.ceil(per/PG),cap=NP*PG;
   const g=new THREE.BufferGeometry();for(const nm in o.geo.attributes)g.setAttribute(nm,o.geo.attributes[nm]);if(o.geo.index)g.setIndex(o.geo.index);
   // each instance's origin rides along (ipos) so the vertex stage can drop whole instances behind the camera or out of range
-  const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3).setUsage(THREE.DynamicDrawUsage);g.setAttribute('ipos',ipa);
-  const m=W(new THREE.InstancedMesh(g,o.mat,cap));m.name='tiles '+o.size+'m x'+o.per;
+  const IP=new Float32Array(cap*3),ipa=new THREE.InstancedBufferAttribute(IP,3);g.setAttribute('ipos',ipa);
+  const m=staticInst(W(new THREE.InstancedMesh(g,o.mat,cap)));m.name='tiles '+o.size+'m x'+o.per;
   const MA=m.instanceMatrix.array;MA.fill(0);   // (every instance starts collapsed to nothing)
   m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3).fill(1),3);const CA=m.instanceColor.array;
-  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  
   m.count=0;m.frustumCulled=false;m.receiveShadow=true;m.castShadow=!!o.cast;scene.add(m);
   const used=new Uint8Array(NP),own=new Array(NP).fill(null),dirtyA=new Set(),dirtyM=new Set();let top=0,low=0,nUsed=0;
   const alloc=()=>{while(low<NP&&used[low])low++;if(low>=NP)return -1;const p=low++;used[p]=1;nUsed++;if(p>=top)top=p+1;return p;};
@@ -5183,7 +5193,7 @@ const blob=(()=>{const cv=document.createElement('canvas');cv.width=cv.height=64
   // part of the road (the camera's motion over a still surface) and the road under it blurs with the rest. (Moved as an
   // object, it wrote the truck's own motion there, which the chase camera shares: the road under the whole quad, out
   // past the body, stayed sharp, a rectangle in the streaking road)
-  m.matrixAutoUpdate=false;m.frustumCulled=false;m.userData.base=Float32Array.from(pg.attributes.position.array);pg.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  m.matrixAutoUpdate=false;m.frustumCulled=false;m.userData.base=Float32Array.from(pg.attributes.position.array);
   scene.add(m);return m;})(),_blM=new THREE.Matrix4(),_blV=new V3(),_bl1=new V3(1,1,1);
 function setPaint(i){paintIdx=i;M_.paint.color.copy(C(PAINTS[i][1]));for(const m of HCP)m.color.copy(M_.paint.color);document.querySelectorAll('#swatches button').forEach((b,k)=>b.setAttribute('aria-pressed',String(k===i)));}
 
@@ -5224,7 +5234,7 @@ const P={x:new Float32Array(PMAX),y:new Float32Array(PMAX),z:new Float32Array(PM
 const pPos=new Float32Array(PMAX*3),pCol=new Float32Array(PMAX*3),pSize=new Float32Array(PMAX),pAlpha=new Float32Array(PMAX),pSeed=new Float32Array(PMAX*2);
 const pGeo=new THREE.InstancedBufferGeometry();(()=>{{const qd=new THREE.PlaneGeometry(1,1);pGeo.setIndex(qd.index);pGeo.setAttribute('position',qd.attributes.position);pGeo.setAttribute('uv',qd.attributes.uv);}})();
 pGeo.instanceCount=PMAX;
-(()=>{for(const[nm,arr,k]of[['ppos',pPos,3],['pcolor',pCol,3],['psize',pSize,1],['palpha',pAlpha,1],['pseed',pSeed,2]])pGeo.setAttribute(nm,new THREE.InstancedBufferAttribute(arr,k).setUsage(THREE.DynamicDrawUsage));})();
+(()=>{for(const[nm,arr,k]of[['ppos',pPos,3],['pcolor',pCol,3],['psize',pSize,1],['palpha',pAlpha,1],['pseed',pSeed,2]])pGeo.setAttribute(nm,new THREE.InstancedBufferAttribute(arr,k));})();
 // smoke and dust: four billowing puffs in a 2x2 atlas (fractal value noise pushing a soft round edge in and out, denser
 // and a little brighter where the noise is)
 const smokeTex=(()=>{const S=256,cv=document.createElement('canvas');cv.width=cv.height=S*2;const x=cv.getContext('2d'),img=x.createImageData(S*2,S*2),r=rng(911),N=64,g=new Float32Array(N*N*4);
@@ -5283,7 +5293,7 @@ const RIP=(()=>{const N=220,S=128,cv=document.createElement('canvas');cv.width=c
   for(let j=0;j<S;j++)for(let i=0;i<S;i++){const r=Math.hypot(i+0.5-S/2,j+0.5-S/2)/(S/2),a=Math.exp(-Math.pow((r-0.84)/0.05,2))*0.9+Math.exp(-Math.pow((r-0.66)/0.04,2))*0.3;
     const k=(j*S+i)*4;img.data[k]=img.data[k+1]=img.data[k+2]=255;img.data[k+3]=Math.round(clamp(a*(r<1?1:0),0,1)*255);}
   x.putImageData(img,0,0);const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.NoColorSpace;
-  const geo=new THREE.PlaneGeometry(1,1);geo.rotateX(-Math.PI/2);const ra=new Float32Array(N);geo.setAttribute('ralpha',new THREE.InstancedBufferAttribute(ra,1).setUsage(THREE.DynamicDrawUsage));
+  const geo=new THREE.PlaneGeometry(1,1);geo.rotateX(-Math.PI/2);const ra=new Float32Array(N);geo.setAttribute('ralpha',new THREE.InstancedBufferAttribute(ra,1));
   const {attribute,texture,uv,vec3}=TSL,m=new THREE.MeshBasicNodeMaterial({transparent:true,depthWrite:false});
   m.colorNode=vec3(0.86,0.9,0.92);m.opacityNode=attribute('ralpha','float').mul(texture(tex,uv()).a);
   const me=new THREE.InstancedMesh(geo,m,N);me.frustumCulled=false;me.renderOrder=2;me.count=N;scene.add(me);
@@ -5303,7 +5313,7 @@ const FOAM=(()=>{const N=320,S=128,cv=document.createElement('canvas');cv.width=
     for(let o=0;o<4;o++){f+=a*vn(u*fr+3,v*fr+7);a*=0.5;fr*=2.1;}
     const al=clamp((f-0.4)*3.4,0,1)*clamp(1-rr*rr,0,1),k=(j*S+i)*4;img.data[k]=img.data[k+1]=img.data[k+2]=255;img.data[k+3]=Math.round(al*255);}
   x.putImageData(img,0,0);const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.NoColorSpace;
-  const geo=new THREE.PlaneGeometry(1,1);geo.rotateX(-Math.PI/2);const fa=new Float32Array(N);geo.setAttribute('falpha',new THREE.InstancedBufferAttribute(fa,1).setUsage(THREE.DynamicDrawUsage));
+  const geo=new THREE.PlaneGeometry(1,1);geo.rotateX(-Math.PI/2);const fa=new Float32Array(N);geo.setAttribute('falpha',new THREE.InstancedBufferAttribute(fa,1));
   const {attribute,texture,uv,vec3}=TSL,m=new THREE.MeshBasicNodeMaterial({transparent:true,depthWrite:false});
   m.colorNode=vec3(0.9,0.93,0.94);m.opacityNode=attribute('falpha','float').mul(texture(tex,uv()).a);
   const me=new THREE.InstancedMesh(geo,m,N);me.frustumCulled=false;me.renderOrder=2;me.count=N;scene.add(me);
@@ -5409,7 +5419,7 @@ const trackGeo=new THREE.BufferGeometry();
   const n=TSEG*4,idx=new Uint16Array(TSEG*6);
   for(let s=0;s<TSEG;s++){const b=s*4,o=s*6;idx[o]=b;idx[o+1]=b+2;idx[o+2]=b+1;idx[o+3]=b+1;idx[o+4]=b+2;idx[o+5]=b+3;}
   trackGeo.setIndex(new THREE.BufferAttribute(idx,1));
-  for(const[nm,k]of[['position',3],['normal',3],['uv',2],['color',3],['tf',1]])trackGeo.setAttribute(nm,new THREE.BufferAttribute(new Float32Array(n*k),k).setUsage(THREE.DynamicDrawUsage));
+  for(const[nm,k]of[['position',3],['normal',3],['uv',2],['color',3],['tf',1]])trackGeo.setAttribute(nm,new THREE.BufferAttribute(new Float32Array(n*k),k));
   trackGeo.setDrawRange(0,0);
 }})();
 const trackMat=new THREE.MeshStandardNodeMaterial({map:trackTex,normalMap:trackNrm,normalScale:new THREE.Vector2(1.4,1.4),vertexColors:true,transparent:true,depthWrite:false,roughness:0.95,metalness:0,side:THREE.DoubleSide});
@@ -8905,10 +8915,10 @@ const nearTrack=(x,z,r)=>{if(!AP.trk)return false;const ci=Math.floor(x/4),cj=Ma
     const IPA=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3);ig.setAttribute('ipos',IPA);
     const im=W(new THREE.InstancedMesh(ig,CONI.impMat,cap));im.count=0;im.frustumCulled=false;im.castShadow=false;im.receiveShadow=true;
     im.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3);im.visible=false;scene.add(im);AP.treeMesh=im;
-    const near=LOWQ?null:(()=>{const NC=1600,IP2=new Float32Array(NC*3),ipa2=new THREE.InstancedBufferAttribute(IP2,3).setUsage(THREE.DynamicDrawUsage);
+    const near=LOWQ?null:(()=>{const NC=1600,IP2=new Float32Array(NC*3),ipa2=new THREE.InstancedBufferAttribute(IP2,3);
       const ms=CONI.parts.map(([geo,mat])=>{const gg=new THREE.BufferGeometry();for(const nm in geo.attributes)gg.setAttribute(nm,geo.attributes[nm]);if(geo.index)gg.setIndex(geo.index);gg.setAttribute('ipos',ipa2);
-        const m=W(new THREE.InstancedMesh(gg,mat,NC));m.count=0;m.frustumCulled=false;m.castShadow=true;m.receiveShadow=true;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(NC*3),3).setUsage(THREE.DynamicDrawUsage);scene.add(m);return m;});
+        const m=staticInst(W(new THREE.InstancedMesh(gg,mat,NC)));m.count=0;m.frustumCulled=false;m.castShadow=true;m.receiveShadow=true;
+        m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(NC*3),3);scene.add(m);return m;});
       let lx=1e9,lz=1e9,lr=-1;const M=new THREE.Matrix4(),c=new THREE.Color();
       return{reset(){lx=1e9;},update(x,z,R){if(!ATG.size){if(lr!==-2){for(const m of ms)m.count=0;lr=-2;}return;}if(Math.hypot(x-lx,z-lz)<5&&R===lr)return;lx=x;lz=z;lr=R;
         const Rr=R+6,R2=Rr*Rr;let k=0;
