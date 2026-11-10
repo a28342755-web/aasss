@@ -1,0 +1,316 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>안개 낀 아침 숲</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&display=swap">
+<style>
+  /* Layout: the forest fills the screen; one quiet caption sits at the bottom over a soft scrim. */
+  :root {
+    color-scheme: dark;
+    --bg: #101812;                       /* canopy shade, shown while loading */
+    --fg: #f1f4e8;                       /* morning light */
+    --muted: #c6d1ba;                    /* lichen */
+    --scrim: rgba(10, 18, 12, .62);
+    --display: "Gowun Batang", "Noto Serif KR", "Apple SD Gothic Neo", serif;
+    --body: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); overflow: hidden; }
+  #view { position: relative; height: 100%; }
+  canvas { display: block; touch-action: none; }
+  #caption {
+    position: absolute; inset: auto 0 0; pointer-events: none;
+    padding-block: 48px 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background: linear-gradient(transparent, var(--scrim));
+  }
+  h1 { margin: 0 0 4px; font: 700 1.5rem/1.2 var(--display); text-wrap: balance; }
+  p { margin: 0; color: var(--muted); font-size: .85rem; line-height: 1.5; }
+</style>
+
+<div id="view">
+  <div id="caption">
+    <h1>안개 낀 아침 숲</h1>
+    <p id="stand">숲을 불러오는 중…</p>
+    <p>드래그: 둘러보기 · 휠/핀치: 가까이 · 우클릭/두 손가락: 이동</p>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
+// Procedural trees with photo bark/leaf textures baked into the script (no image requests).
+import { Tree, TreePreset } from 'https://cdn.jsdelivr.net/npm/@dgreenheck/ez-tree@1.1.0/build/ez-tree.es.js';
+
+const view = document.getElementById('view');
+const lite = matchMedia('(pointer: coarse)').matches;            // phones: fewer plants, smaller shadow map
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const R = 95;                                                    // forest radius in metres; fog hides the edge
+const ROAM = 25;                                                 // how far the viewpoint may wander from the glade
+const EYE = 1.6;
+THREE.MathUtils.seededRandom(11);                                // same forest every visit
+const rnd = (lo = 0, hi = 1) => lo + (hi - lo) * THREE.MathUtils.seededRandom();
+const perlin = new ImprovedNoise();
+const height = (x, z) =>
+  5 * perlin.noise(x * .012, 0, z * .012) + 1.2 * perlin.noise(x * .05, 7, z * .05) + .2 * perlin.noise(x * .25, 3, z * .25);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, lite ? 1.5 : 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = .7;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;                           // nothing that casts a shadow moves
+renderer.shadowMap.needsUpdate = true;
+// Leaf shadows are cut out by the leaf textures, which finish decoding after startup.
+THREE.DefaultLoadingManager.onLoad = () => { renderer.shadowMap.needsUpdate = true; };
+view.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xb9cbc4, .018);
+const camera = new THREE.PerspectiveCamera(55, 1, .2, 6000);
+
+// Low morning sun
+const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(52), THREE.MathUtils.degToRad(140));
+const sky = new Sky();
+sky.scale.setScalar(5000);
+const su = sky.material.uniforms;
+su.turbidity.value = 8; su.rayleigh.value = 1.4; su.mieCoefficient.value = .008; su.mieDirectionalG.value = .86;
+su.sunPosition.value.copy(sunDir);
+scene.add(sky, new THREE.HemisphereLight(0xcfe0f5, 0x6f7446, 2.6));
+
+const sun = new THREE.DirectionalLight(0xffe7c4, 4.5);
+sun.position.copy(sunDir).multiplyScalar(300);
+sun.castShadow = true;
+sun.shadow.mapSize.setScalar(lite ? 2048 : 4096);
+Object.assign(sun.shadow.camera, { left: -R, right: R, top: R, bottom: -R, near: 1, far: 600 });
+sun.shadow.bias = -.0005;
+sun.shadow.normalBias = .05;
+scene.add(sun);
+
+// Forest floor: leaf litter drawn once on a canvas, tiled, tinted by large moss/dirt patches
+function litter() {
+  const S = 1024, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#544733';
+  g.fillRect(0, 0, S, S);
+  const pal = ['#6a573a', '#7a6646', '#55452c', '#8a7446', '#4a5230', '#5c683a', '#3d3120', '#958058'];
+  for (let i = 0; i < 26000; i++) {
+    const twig = i % 40 === 0, w = twig ? rnd(15, 40) : rnd(1.5, 7), h = twig ? 1 : w * rnd(.25, .5);
+    const x = rnd(40, S + 40), y = rnd(40, S + 40), a = rnd(0, 3.14);
+    g.fillStyle = pal[(rnd() * pal.length) | 0];
+    g.globalAlpha = rnd(.3, .7);
+    for (const [ox, oy] of [[0, 0], [S, 0], [0, S], [S, S]]) {   // repeat across the edges so the tile is seamless
+      g.beginPath(); g.ellipse(x - ox, y - oy, w, h, a, 0, 7); g.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.setScalar(80);
+  t.anisotropy = 8;
+  return t;
+}
+{
+  const g = new THREE.PlaneGeometry(500, 500, 250, 250).rotateX(-Math.PI / 2);
+  const p = g.attributes.position, col = [];
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i), moss = THREE.MathUtils.smoothstep(perlin.noise(x * .04, 20, z * .04) + .5 * perlin.noise(x * .15, 30, z * .15), -.4, .5);
+    p.setY(i, height(x, z));
+    col.push(1 - .4 * moss, .92 + .05 * moss, .8 - .4 * moss);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  const map = litter(), bumpMap = map.clone();
+  map.colorSpace = THREE.SRGBColorSpace;
+  const ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 1.5, roughness: 1, vertexColors: true }));
+  ground.receiveShadow = true;
+  scene.add(ground);
+}
+
+// Trees and undergrowth
+const time = { value: 0 };
+const noFlip = s => {                                            // foliage is lit as a volume, so back faces keep their normal
+  s.fragmentShader = s.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');
+};
+function crown(leaves) {
+  // Shade the crown as one soft volume instead of thousands of flat cards.
+  const g = leaves.geometry, p = g.attributes.position, n = g.attributes.normal, v = new THREE.Vector3();
+  g.computeBoundingBox();
+  const c = g.boundingBox.getCenter(new THREE.Vector3());
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).sub(c).normalize();
+    v.y += .5;
+    v.normalize();
+    n.setXYZ(i, v.x, v.y, v.z);
+  }
+  // ez-tree's wind shader predates instancing: add the instance transform and share one clock.
+  const lib = leaves.material.onBeforeCompile;
+  leaves.material.onBeforeCompile = (s, r) => {
+    lib(s, r);
+    s.uniforms.uTime = time;
+    s.vertexShader = s.vertexShader.replace('mvPosition = modelViewMatrix * mvPosition;', 'mvPosition = modelViewMatrix * instanceMatrix * mvPosition;');
+    noFlip(s);
+  };
+}
+const dummy = new THREE.Object3D(), tint = new THREE.Color();
+// A preset listed twice is twice as common and gets two differently shaped individuals.
+function scatter(presets, count, spacing, inner) {
+  const kinds = presets.map((name, i) => {
+    const t = new Tree(), o = t.options, b = o.branch;
+    o.copy(structuredClone(TreePreset[name]));
+    o.seed = 100 + i * 37;
+    // The presets are modelled as one hero tree; a whole forest needs each tree several times lighter.
+    for (const l of [1, 2, 3]) {
+      b.sections[l] = Math.min(b.sections[l], [0, 4, 2, 1][l]);
+      b.segments[l] = l > 1 || o.type === 'evergreen' ? 3 : 5;      // a conifer's first branches are already twigs
+    }
+    o.leaves.count = Math.ceil(o.leaves.count * .5);
+    o.leaves.size *= 1.3;
+    if (lite) o.leaves.billboard = 'single';
+    t.generate();
+    crown(t.leavesMesh);
+    return { t, scale: name.startsWith('Pine') ? .36 : .3, at: [] };
+  });
+  const spots = [];
+  for (let tries = 0; spots.length < count && tries < count * 30; tries++) {
+    const r = R * Math.sqrt(rnd()), a = rnd(0, 6.283), x = r * Math.cos(a), z = r * Math.sin(a);
+    if (r < inner || spots.some(s => (s.x - x) ** 2 + (s.z - z) ** 2 < spacing * spacing)) continue;
+    spots.push({ x, z });
+    const k = kinds[(rnd() * kinds.length) | 0];
+    dummy.position.set(x, height(x, z) - .15, z);
+    dummy.rotation.set(rnd(-.04, .04), rnd(0, 6.283), rnd(-.04, .04));
+    dummy.scale.setScalar(k.scale * rnd(.75, 1.3));
+    dummy.updateMatrix();
+    k.at.push(dummy.matrix.clone());
+  }
+  for (const { t, at } of kinds) for (const src of [t.branchesMesh, t.leavesMesh]) {
+    const m = new THREE.InstancedMesh(src.geometry, src.material, at.length);
+    at.forEach((mat, i) => {
+      m.setMatrixAt(i, mat);
+      if (src === t.leavesMesh) m.setColorAt(i, tint.setRGB(rnd(.7, 1), rnd(.82, 1), rnd(.55, .85)));
+    });
+    m.castShadow = m.receiveShadow = true;
+    scene.add(m);
+  }
+  return spots.length;
+}
+const q = lite ? .55 : 1;
+const trees = scatter(
+  ['Oak Medium', 'Oak Medium', 'Oak Large', 'Ash Medium', 'Ash Medium', 'Ash Large', 'Aspen Medium', 'Aspen Medium',
+    'Aspen Large', 'Pine Medium', 'Pine Large', 'Pine Large'], 300 * q | 0, 4.5, 12);
+const under = scatter(['Bush 1', 'Bush 2', 'Bush 3', 'Oak Small', 'Aspen Small', 'Pine Small'], 200 * q | 0, 3, 10);
+console.assert(trees > 100 && under > 50, 'forest came out too sparse', trees, under);
+
+// Grass: tapered, bent blades in clumps, thinning out with distance
+{
+  const g = new THREE.PlaneGeometry(.05, 1, 1, 2).translate(0, .5, 0);
+  const p = g.attributes.position, col = [];
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i);
+    p.setX(i, p.getX(i) * (1 - y * y));
+    p.setZ(i, .35 * y * y);
+    g.attributes.normal.setXYZ(i, 0, 1, 0);                      // lit like the ground it grows from
+    col.push(.05 + .17 * y, .1 + .26 * y, .03 + .07 * y);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  mat.onBeforeCompile = s => {
+    s.uniforms.uTime = time;
+    s.vertexShader = 'uniform float uTime;\n' + s.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      float ph = instanceMatrix[3].x * .35 + instanceMatrix[3].z * .27;
+      transformed.xz += position.y * position.y * .2 * vec2(sin(uTime * 1.7 + ph), cos(uTime * 1.3 + ph * 1.3));`);
+    noFlip(s);
+  };
+  const N = lite ? 80000 : 150000, GR = lite ? 60 : 85, grass = new THREE.InstancedMesh(g, mat, N);
+  let n = 0;
+  while (n < N) {
+    const r = GR * Math.sqrt(rnd()), a = rnd(0, 6.283), cx = r * Math.cos(a), cz = r * Math.sin(a);
+    if (rnd() < (r / GR) ** 2 || perlin.noise(cx * .06, 9, cz * .06) < -.25) continue;   // bare patches
+    for (let k = rnd(8, 20) | 0; k > 0 && n < N; k--, n++) {
+      const x = cx + rnd(-.3, .3), z = cz + rnd(-.3, .3);
+      dummy.position.set(x, height(x, z) - .02, z);
+      dummy.rotation.set(0, rnd(0, 6.283), 0);
+      dummy.scale.set(1, rnd(.15, .45), 1);
+      dummy.updateMatrix();
+      grass.setMatrixAt(n, dummy.matrix);
+      grass.setColorAt(n, tint.setRGB(rnd(.8, 1.3), rnd(.8, 1.1), rnd(.5, 1)));
+    }
+  }
+  grass.receiveShadow = true;
+  scene.add(grass);
+}
+
+// Boulders: noise-dented spheres, mossy on top, sunk into the ground
+{
+  const g = new THREE.SphereGeometry(1, 28, 20), p = g.attributes.position, v = new THREE.Vector3(), col = [];
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    v.multiplyScalar(1 + .35 * perlin.noise(v.x * 1.3, v.y * 1.3, v.z * 1.3) + .1 * perlin.noise(v.x * 4, v.y * 4, v.z * 4) + .03 * perlin.noise(v.x * 13, v.y * 13, v.z * 13));
+    p.setXYZ(i, v.x, v.y * .7, v.z);
+    const moss = THREE.MathUtils.smoothstep(v.y + .3 * perlin.noise(v.x * 3, 5, v.z * 3), .2, .8);
+    col.push(.12 - .07 * moss, .115 - .03 * moss, .11 - .085 * moss);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  const N = 70, rocks = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95 }), N);
+  for (let i = 0; i < N; i++) {
+    const r = rnd(5, 80), a = rnd(0, 6.283), x = r * Math.cos(a), z = r * Math.sin(a), s = rnd(.25, 1.3);
+    dummy.position.set(x, height(x, z) - s * .2, z);
+    dummy.rotation.set(rnd(-.3, .3), rnd(0, 6.283), rnd(-.3, .3));
+    dummy.scale.set(s * rnd(.8, 1.4), s, s * rnd(.8, 1.4));
+    dummy.updateMatrix();
+    rocks.setMatrixAt(i, dummy.matrix);
+  }
+  rocks.castShadow = rocks.receiveShadow = true;
+  scene.add(rocks);
+}
+
+// Viewpoint: orbit a point at eye height in the glade, drifting slowly until touched
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, height(0, 0) + EYE, 0);
+camera.position.set(-5, height(-5, 5) + 1.3, 5);
+controls.enableDamping = true;
+controls.screenSpacePanning = false;
+controls.minDistance = 1;
+controls.maxDistance = 45;
+controls.maxPolarAngle = 2;                                       // past level, so you can look up into the canopy
+controls.autoRotate = !still;
+controls.autoRotateSpeed = .3;
+controls.addEventListener('start', () => { controls.autoRotate = false; });
+
+new ResizeObserver(() => {
+  const w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}).observe(view);
+
+// shortcut: only resolution adapts to a slow GPU; add tree LODs if phones still stutter
+let last = 0, slow = 0;
+renderer.setAnimationLoop(ms => {
+  if (!still) time.value = ms / 1000;
+  slow = ms - last > 45 ? slow + 1 : Math.max(0, slow - 1);
+  last = ms;
+  if (slow > 30 && renderer.getPixelRatio() > .8) { slow = 0; renderer.setPixelRatio(renderer.getPixelRatio() * .8); }
+  controls.update();
+  const t = controls.target, c = camera.position, far = Math.hypot(t.x, t.z) / ROAM;
+  if (far > 1) { t.x /= far; t.z /= far; }
+  t.y = height(t.x, t.z) + EYE;
+  c.y = Math.max(c.y, height(c.x, c.z) + .5);                     // never dip under the forest floor
+  camera.lookAt(t);
+  renderer.render(scene, camera);
+});
+document.getElementById('stand').textContent = `참나무 · 물푸레나무 · 사시나무 · 소나무 ${trees}그루, 어린나무와 덤불 ${under}그루`;
+</script>
