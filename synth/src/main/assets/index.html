@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aster Synth</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Aster Synth</h1>
+    <select data-k="root" aria-label="키"></select>
+    <select data-k="scale" aria-label="스케일">
+      <option value="major">메이저</option>
+      <option value="minor">마이너</option>
+    </select>
+  </header>
+
+  <main id="pads" aria-label="코드 패드">
+    <label class="pad toggle" id="seventh"><input type="checkbox" data-k="seventh" />7th</label>
+  </main>
+
+  <section class="seq" aria-label="코드 진행">
+    <button id="rec" type="button" aria-pressed="false">녹음</button>
+    <button id="play" type="button">재생</button>
+    <div id="steps"></div>
+    <label><span>BPM <output id="bpmOut"></output></span><input type="range" data-k="bpm" min="40" max="200" /></label>
+  </section>
+
+  <section class="sound" aria-label="사운드">
+    <label>파형
+      <select data-k="wave">
+        <option value="sine">사인파</option>
+        <option value="triangle">삼각파</option>
+        <option value="sawtooth">톱니파</option>
+        <option value="square">사각파</option>
+      </select>
+    </label>
+    <label>필터 <input type="range" data-k="cutoff" min="0" max="1" step="0.01" /></label>
+    <label>어택 <input type="range" data-k="attack" min="0.005" max="1" step="0.005" /></label>
+    <label>릴리즈 <input type="range" data-k="release" min="0.05" max="3" step="0.05" /></label>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
