@@ -33,16 +33,16 @@ button:focus-visible{outline:2px solid var(--lamp);outline-offset:3px}
 #hint{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);margin:0;
   width:min(40ch,calc(100% - 32px));text-align:center;text-wrap:balance;word-break:keep-all;line-height:1.6;text-shadow:0 1px 8px var(--ink),0 0 2px var(--ink)}
 </style>
-<canvas id="c" role="img" aria-label="폭풍우 치는 칠흑 같은 밤바다를 항해하는 목조 범선"></canvas>
+<canvas id="c" role="img" aria-label="폭풍우 치는 칠흑 같은 밤바다에서 노를 젓는 1인용 목조선"></canvas>
 <div id="hud">
   <span>밝힌 등불 <b id="sc">0</b></span>
   <span id="brg"><i id="ar">↑</i> <b id="ds">0</b> m</span>
-  <span><b id="sp">0</b> 노트 · 돛 <b id="sl">0</b>%</span>
+  <span><b id="sp">0</b> 노트 · 젓기 <b id="rw">0</b>%</span>
 </div>
-<p id="hint">초록 등불까지 항해하세요. A·D 또는 ◀ ▶ 로 키를 잡고, W·S 또는 ▲ ▼ 로 돛을 조절합니다.</p>
+<p id="hint">초록 등불까지 노를 저어 가세요. A·D 또는 ◀ ▶ 로 방향을 틀고, W·S 또는 ▲ ▼ 로 젓는 세기를 조절합니다.</p>
 <div id="helm">
-  <div><button id="bl" data-k="KeyA" aria-label="좌현으로 키 돌리기">◀</button><button id="br" data-k="KeyD" aria-label="우현으로 키 돌리기">▶</button></div>
-  <div><button id="bd" data-k="KeyS" aria-label="돛 줄이기">▼</button><button id="bu" data-k="KeyW" aria-label="돛 펴기">▲</button></div>
+  <div><button id="bl" data-k="KeyA" aria-label="왼쪽으로 돌리기">◀</button><button id="br" data-k="KeyD" aria-label="오른쪽으로 돌리기">▶</button></div>
+  <div><button id="bd" data-k="KeyS" aria-label="천천히 젓기">▼</button><button id="bu" data-k="KeyW" aria-label="힘껏 젓기">▲</button></div>
 </div>
 <script>
 'use strict';
@@ -51,6 +51,7 @@ if(!gl){$('hint').textContent='이 기기는 WebGL을 지원하지 않아 바다
 
 // ---- sea state: one wave table drives both the shaders and the ship's buoyancy ----
 const G=9.81,HK=.75,WDIR=250*Math.PI/180; // HK: sideways (crest-sharpening) share of each wave
+const HL=2.3,BW=.78; // half length and half beam of the boat, m
 // [direction offset deg, wavelength m, amplitude m]; the first NV move geometry, the rest only shade
 const WAVES=[[0,95,3],[-18,62,1.9],[27,41,1.1],[-35,27,.62],[12,18,.36],[48,12,.21],[-52,8.1,.13],[-8,5.3,.075],
   [33,3.4,.04],[-41,2.3,.028],[5,1.6,.02],[70,1.1,.013]].map(([a,L,A])=>{
@@ -112,7 +113,7 @@ ${wsrc(NV)}
   vec3 col=mix(DEEP*(1.+uFlash*30.),skyBase(R),fr);
   float m=max(dot(R,uMoon),0.);
   col+=MOONC*(pow(m,500.)*1.2+pow(m,60.)*.03);
-  vec3 L=uLamp-vW;float ld=length(L);L/=ld;float la=uLampI/(1.+ld*ld*.012);
+  vec3 L=uLamp-vW;float ld=length(L);L/=ld;float la=uLampI/(1.+ld*ld*.06);
   vec3 B=uBeac.xyz-vW;float bd=length(B);B/=bd;float ba=uBeac.w/(1.+bd*bd*.02);
   col+=LAMPC*la*(pow(max(dot(reflect(-L,n),V),0.),120.)*.6+.012*max(dot(n,L),0.));
   col+=BEACC*ba*(pow(max(dot(reflect(-B,n),V),0.),60.)*1.5+.012*max(dot(n,B),0.));
@@ -121,8 +122,9 @@ ${wsrc(NV)}
   vec2 sp=vec2(dot(p,WD),dot(p,vec2(-WD.y,WD.x)));
   foam+=.08*smoothstep(.55,.85,noise(sp*vec2(.05,.9)+vec2(uT*.3,0.)))*smoothstep(-.1,.3,crest);
   // shortcut: the wake is a straight band in the ship's frame, so it swings with the stern in turns; store a trail if that shows
-  vec2 rel=vW.xz-uShip.xy;float lz=dot(rel,uShip.zw),lx=dot(rel,vec2(-uShip.w,uShip.z)),ws=max(-lz-8.,0.);
-  float wk=.8*smoothstep(1.25,1.,length(vec2(lx/4.2,lz/14.)))+uSpd*step(.001,ws)*exp(-ws/22.)*smoothstep(2.+ws*.1,.4,abs(lx));
+  vec2 rel=vW.xz-uShip.xy;float lz=dot(rel,uShip.zw),lx=dot(rel,vec2(-uShip.w,uShip.z)),ws=max(-lz-1.6,0.),hu=(lz+2.3)/4.6;
+  if(hu>0.&&hu<1.&&abs(lx)<.72*0.78*pow(max(sin(3.14159*min(1.,.22+.78*hu)),0.),.6))discard; // no sea inside the open hull (mirrors wid())
+  float wk=.7*smoothstep(1.35,1.,length(vec2(lx/.85,lz/2.6)))+uSpd*step(.001,ws)*exp(-ws/6.)*smoothstep(.5+ws*.12,.1,abs(lx));
   foam=clamp(foam+wk*smoothstep(.42,.7,fn+wk*.12),0.,1.);
   vec3 fl=AMB*2.+uFlash*FLASHC*.5+MOONC*.004+LAMPC*la*(.1+.35*max(dot(n,L),0.))+BEACC*ba*(.1+.35*max(dot(n,B),0.));
   col=mix(col,fl,foam*.85);
@@ -134,14 +136,12 @@ void main(){vec3 V=normalize(uCam-vW),n=normalize(vN);if(dot(n,V)<0.)n=-n;
   vec3 base=vC.rgb,col;float mat=vC.a;
   if(mat>1.5)col=base*2.5; // lantern glass
   else{
-    vec3 L=uLamp-vW;float ld=length(L);L/=ld;float la=uLampI/(1.+ld*ld*.012),ndl=dot(normalize(vN),L),dl=max(dot(n,L),0.);
+    vec3 L=uLamp-vW;float ld=length(L);L/=ld;float la=uLampI/(1.+ld*ld*.06),dl=max(dot(n,L),0.);
     if(mat<.5){ // planks: seams across the board, grain along it
-      float pc=abs(n.y)>.7?vL.x*2.6:vL.y*2.8,pf=fract(pc),id=floor(pc);
-      float gr=noise(vec2(vL.z*1.2+id*7.3,pc*9.))*.5+noise(vec2(vL.z*6.+id*3.1,pc*30.))*.5;
+      float pc=vL.y*9.,pf=fract(pc),id=floor(pc);
+      float gr=noise(vec2(vL.z*4.+id*7.3,pc*9.))*.5+noise(vec2(vL.z*20.+id*3.1,pc*30.))*.5;
       base*=(.55+.6*gr)*(.35+.65*smoothstep(0.,.07,pf)*smoothstep(1.,.93,pf));
-    }else{ // canvas lets lamplight through
-      base*=(.78+.22*noise(vL.xy*1.3))*(.86+.14*smoothstep(0.,.05,abs(fract(vL.x*.55)-.5)));
-      dl=abs(ndl)*.7+.3;}
+    }else{base*=.8+.2*noise(vL.xy*30.);dl=dl*.75+.25;} // oilskin: soft wrap
     vec3 lit=AMB*(.6+.4*n.y)+uFlash*FLASHC*(.25+.5*max(dot(n,uFlashDir),0.))+MOONC*.03*max(dot(n,uMoon),0.)+LAMPC*la*(dl+.07);
     col=base*lit;
     if(mat<.5)col+=LAMPC*la*pow(max(dot(reflect(-L,n),V),0.),24.)*.12; // wet timber
@@ -156,7 +156,7 @@ const RAIN_V=`attribute vec4 aP;uniform mat4 uVP;uniform vec3 uCam,uLamp;uniform
 const vec3 BOX=vec3(70.,45.,70.),VEL=vec3(${fx(Math.cos(WDIR)*11)},-27.,${fx(Math.sin(WDIR)*11)});
 void main(){vec3 p=aP.xyz*BOX+VEL*uT;p=mod(p-uCam+BOX*.5,BOX)-BOX*.5+uCam-VEL*.03*aP.w;
   float ld=distance(p,uLamp);
-  vC=(vec3(.012,.015,.02)+vec3(1.,.55,.22)*.5/(1.+ld*ld*.02)+uFlash*vec3(.3,.35,.5))*(1.-.8*aP.w);
+  vC=(vec3(.012,.015,.02)+vec3(1.,.55,.22)*.4/(1.+ld*ld*.1)+uFlash*vec3(.3,.35,.5))*(1.-.8*aP.w);
   gl_Position=uVP*vec4(p,1.);}`;
 const RAIN_F=`precision mediump float;varying vec3 vC;void main(){gl_FragColor=vec4(vC,1.);}`;
 
@@ -190,27 +190,25 @@ function cyl(a,b,r0,col,r1=r0,n=7){const d=[b[0]-a[0],b[1]-a[1],b[2]-a[2]],L=Mat
   const e2=[d[1]*e1[2]-d[2]*e1[1],d[2]*e1[0]-d[0]*e1[2],d[0]*e1[1]-d[1]*e1[0]].map(x=>x/L);
   surf((u,v)=>{const A=u*2*Math.PI,r=r0+(r1-r0)*v,c=Math.cos(A)*r,s=Math.sin(A)*r;return[0,1,2].map(i=>a[i]+d[i]*v+e1[i]*c+e2[i]*s)},n,1,col)}
 
-const HL=13,HULL=[.19,.105,.055,0],TRIM=[.3,.2,.08,0],DECK=[.3,.2,.11,0],SPAR=[.22,.13,.07,0],ROPE=[.06,.05,.04,0],SAIL=[.72,.67,.55,1],GLASS=[1,.52,.18,2];
-const wid=u=>3.6*Math.pow(Math.max(0,Math.sin(Math.PI*Math.min(1,.2+.8*u))),.6),
-  sheer=u=>2.3+2.4*Math.pow(Math.max(0,1-u),2.5)+1.9*u*u*u,keel=u=>2.4*(1-.75*u**4),
+const HULL=[.19,.105,.055,0],TRIM=[.3,.2,.08,0],DECK=[.3,.2,.11,0],SPAR=[.22,.13,.07,0],ROPE=[.06,.05,.04,0],
+  COAT=[.42,.3,.05,1],DARK=[.05,.05,.06,1],SKIN=[.5,.36,.27,1],GLASS=[1,.52,.18,2];
+const wid=u=>BW*Math.pow(Math.max(0,Math.sin(Math.PI*Math.min(1,.22+.78*u))),.6), // mirrored in SEA_F
+  sheer=u=>.42+.12*Math.pow(Math.max(0,1-u),2.5)+.28*u*u*u,keel=u=>.32*(1-.75*u**4),zu=z=>(z+HL)/(2*HL),
   hullAt=(s,u,v)=>{const h=sheer(u),d=keel(u);
-    return[s*wid(u)*Math.pow(Math.sin(Math.max(0,v)*Math.PI/2),.55),-d+(h+d)*Math.pow(Math.max(0,v),1.25),-HL+2*HL*u+(2.2*u**3-.9*(1-u)**3)*v]},
-  deckV=u=>Math.pow((sheer(u)-1+keel(u))/(sheer(u)+keel(u)),.8),deckY=z=>sheer((z+HL)/(2*HL))-1;
+    return[s*wid(u)*Math.pow(Math.sin(Math.max(0,v)*Math.PI/2),.55),-d+(h+d)*Math.pow(Math.max(0,v),1.25),-HL+2*HL*u+(.45*u**3-.12*(1-u)**3)*v]},
+  inner=(z,y)=>{const u=zu(z);return hullAt(1,u,Math.pow((y+keel(u))/(sheer(u)+keel(u)),.8))[0]}; // hull half-width at height y
 for(const s of[-1,1]){surf((u,v)=>hullAt(s,u,v*.86),26,9,HULL);surf((u,v)=>hullAt(s,u,.86+v*.14),26,2,TRIM)} // sides and gunwale strake
 surf((s,v)=>{const p=hullAt(1,0,v);return[p[0]*(2*s-1),p[1],p[2]]},2,8,HULL); // transom
-surf((u,s)=>{const p=hullAt(1,u,deckV(u));return[p[0]*(2*s-1),p[1],p[2]]},26,4,DECK); // deck
-cyl([0,deckY(12),12.4],[0,deckY(12)+3.4,20.5],.2,SPAR,.1); // bowsprit
-// [z, masthead height, sails as [foot y, head y, foot width, head width, belly]]
-for(const[z,top,sails]of[[-8.5,17.5,[[6.5,13.5,7.4,5.6,1.1]]],[-1,26.5,[[5.6,13.8,12.4,11,1.9],[14.8,22,10.2,7,1.5]]],[7.5,21.5,[[5.6,12.3,10.6,9.4,1.6],[13.2,18.8,8.6,5.8,1.2]]]]){
-  cyl([0,deckY(z)-.1,z],[0,top,z],.3,SPAR,.14);
-  for(const s of[-1,1])for(const dz of[-1.6,-.6])cyl([s*wid((z+HL)/(2*HL))*.96,deckY(z)+1,z+dz],[0,top-1.5,z],.035,ROPE,.035,4); // shrouds
-  for(const[y0,y1,w0,w1,b]of sails){
-    for(const[y,w]of[[y0,w0],[y1,w1]])cyl([-w/2-.5,y,z+.4],[w/2+.5,y,z+.4],.13,SPAR,.13,6);
-    surf((u,v)=>[(u-.5)*(w0+(w1-w0)*v),y0+(y1-y0)*v,z+.42+b*Math.sin(Math.PI*u)*Math.sin(Math.PI*(.12+.8*v))],10,8,SAIL)}}
-cyl([0,26,-1],[0,deckY(12)+3.4,20.5],.035,ROPE,.035,4);cyl([0,21,7.5],[0,deckY(12)+2.6,18.6],.035,ROPE,.035,4);cyl([0,17,-8.5],[0,sheer(0)-.2,-13.6],.035,ROPE,.035,4); // stays
-const LAMP=[0,7.7,-14.4];
-cyl([0,sheer(0)-1,-13.5],[0,LAMP[1]-.3,LAMP[2]],.07,SPAR);cyl([0,LAMP[1]-.35,LAMP[2]],[0,LAMP[1]+.35,LAMP[2]],.26,GLASS,.2); // stern lantern
+for(const z of[-1.75,.18,1.45])surf((u,v)=>[(u-.5)*2*inner(z,.22),.22,z+v*.26],1,1,DECK); // thwarts
+// the rower, facing aft in oilskins
+cyl([0,.24,.33],[0,.84,.24],.2,COAT,.17);cyl([0,1.02,.22],[0,1.14,.22],.19,COAT,.07);
+surf((u,v)=>[.1*Math.sin(Math.PI*v)*Math.cos(2*Math.PI*u),.98+.1*Math.cos(Math.PI*v),.22+.1*Math.sin(Math.PI*v)*Math.sin(2*Math.PI*u)],8,5,SKIN);
+for(const s of[-1,1]){cyl([s*.09,.3,.3],[s*.11,.26,-.15],.075,DARK);cyl([s*.2,.76,.25],[s*.24,.56,-.1],.06,COAT,.05)}
+const LAMP=[0,1.5,-2.4];
+cyl([0,.45,-2.38],[0,LAMP[1]-.12,LAMP[2]],.02,SPAR);cyl([0,LAMP[1]-.12,LAMP[2]],[0,LAMP[1]+.12,LAMP[2]],.08,GLASS,.06); // stern lantern
 const shipBuf=buf(new Float32Array(M)),shipN=M.length/10;
+M=[];cyl([-.5,0,0],[1.75,0,0],.02,SPAR,.02,5);surf((u,v)=>[1.45+.6*u,(v-.5)*.14,0],1,1,SPAR); // one oar, along +x from its rowlock
+const oarBuf=buf(new Float32Array(M)),oarN=M.length/10,LOCK=[wid(zu(-.08)),sheer(zu(-.08))+.02,-.08];
 M=[];cyl([0,-.8,0],[0,1.1,0],1.1,[.25,.05,.04,0],.5,9);cyl([0,1.1,0],[0,3,0],.08,ROPE);cyl([0,3,0],[0,3.6,0],.25,[.3,1,.7,2],.18); // beacon buoy
 const buoyBuf=buf(new Float32Array(M)),buoyN=M.length/10,MESH=[['aP',3,0],['aN',3,12],['aC',4,24]];
 const RAIN=1400,rv=new Float32Array(RAIN*8);
@@ -228,9 +226,9 @@ const mul=(a,b)=>{const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r
   norm=v=>{const l=Math.hypot(...v);return v.map(x=>x/l)};
 
 // ---- game state ----
-const S={t:40,x:0,z:0,h:0,v:3,sail:.6,rud:0,y:0,dy:0,p:0,dp:0,r:0,dr:0,cy:.42,ey:14,bx:0,bz:0,score:0,f0:-99,nf:43,fd:[0,1,0]};
-function placeBeacon(a=S.h+(Math.random()-.5)*2.4,d=380+Math.random()*240){S.bx=S.x+Math.sin(a)*d;S.bz=S.z+Math.cos(a)*d}
-placeBeacon(-.05,240);
+const S={t:40,x:0,z:0,h:0,v:1.5,row:.6,ph:0,rud:0,y:0,dy:0,p:0,dp:0,r:0,dr:0,cy:.42,ey:4,bx:0,bz:0,score:0,f0:-99,nf:43,fd:[0,1,0]};
+function placeBeacon(a=S.h+(Math.random()-.5)*2.4,d=120+Math.random()*90){S.bx=S.x+Math.sin(a)*d;S.bz=S.z+Math.cos(a)*d}
+placeBeacon(-.05,110);
 const MOON=norm([.66,.19,.72]),CALM=matchMedia('(prefers-reduced-motion: reduce)').matches?.25:1; // gentler lightning on request
 const spring=(k,target,w,z,dt)=>{S['d'+k]+=(w*w*(target-S[k])-2*z*w*S['d'+k])*dt;S[k]+=S['d'+k]*dt};
 
@@ -250,28 +248,29 @@ function frame(now){requestAnimationFrame(frame);
   if(cv.width!==cw||cv.height!==ch){cv.width=cw;cv.height=ch}
   gl.viewport(0,0,cw,ch);
 
-  // helm and sail
+  // steering and rowing effort
   const steer=(K.KeyD||K.ArrowRight?1:0)-(K.KeyA||K.ArrowLeft?1:0),trim=(K.KeyW||K.ArrowUp?1:0)-(K.KeyS||K.ArrowDown?1:0);
-  S.sail=Math.min(1,Math.max(0,S.sail+trim*dt*.5));S.rud+=(steer-S.rud)*Math.min(1,dt*2.5);
-  S.h-=S.rud*(.08+.03*S.v)*dt; // starboard is -heading in this frame
+  S.row=Math.min(1,Math.max(0,S.row+trim*dt*.5));S.rud+=(steer-S.rud)*Math.min(1,dt*2.5);
+  S.h-=S.rud*(.35+.08*S.v)*dt; // starboard is -heading in this frame
   const fwx=Math.sin(S.h),fwz=Math.cos(S.h),ptx=fwz,ptz=-fwx;
   // buoyancy: fit the hull to the water under bow, stern and both beams
-  const hb=seaY(S.x+fwx*10,S.z+fwz*10,t),hs=seaY(S.x-fwx*10,S.z-fwz*10,t),hp=seaY(S.x+ptx*3,S.z+ptz*3,t),hq=seaY(S.x-ptx*3,S.z-ptz*3,t);
-  spring('y',(hb+hs+hp+hq)/4+.35,3.2,.6,dt);spring('p',Math.atan2(hb-hs,20),2.6,.5,dt);spring('r',Math.atan2(hp-hq,6)*.7+S.rud*S.v*.006,2.2,.45,dt);
-  S.v=Math.max(-1,S.v+(S.sail*3.2-S.v*.36-G*Math.sin(S.p)*.12)*dt); // sail drive, hull drag, and the slope of the swell
+  const hb=seaY(S.x+fwx*1.8,S.z+fwz*1.8,t),hs=seaY(S.x-fwx*1.8,S.z-fwz*1.8,t),hp=seaY(S.x+ptx*.6,S.z+ptz*.6,t),hq=seaY(S.x-ptx*.6,S.z-ptz*.6,t);
+  spring('y',(hb+hs+hp+hq)/4+.05,4.5,.6,dt);spring('p',Math.atan2(hb-hs,3.6),4,.5,dt);spring('r',Math.atan2(hp-hq,1.2)*.7,4,.5,dt);
+  S.v=Math.max(-1,S.v+(S.row*1.5-S.v*.5-G*Math.sin(S.p)*.12)*dt); // oars, hull drag, and the slope of the swell
+  S.ph+=dt*(S.row>.03?1.5+2.5*S.row:0); // stroke rate follows effort
   S.x+=fwx*S.v*dt;S.z+=fwz*S.v*dt;
   const bx=S.bx-S.x,bz=S.bz-S.z,bdist=Math.hypot(bx,bz);
-  if(bdist<22){S.score++;placeBeacon()}
+  if(bdist<8){S.score++;placeBeacon()}
 
   // lightning
   if(t>S.nf){S.f0=t;S.nf=t+5+Math.random()*10;const a=Math.random()*6.283;S.fd=norm([Math.sin(a),.25,Math.cos(a)])}
   const ft=t-S.f0,flash=CALM*(Math.exp(-ft*7)+(ft>.22?.7*Math.exp(-(ft-.22)*9):0)+(ft>.55?.4*Math.exp(-(ft-.55)*6):0))*(.85+.15*Math.sin(ft*80));
 
-  // camera: off the starboard quarter so the sails do not hide the way ahead
+  // camera: close and low off the starboard quarter
   S.cy+=(S.h+.42-S.cy)*Math.min(1,dt*1.3);
-  const cfx=Math.sin(S.cy),cfz=Math.cos(S.cy),ex=S.x-cfx*48,ez=S.z-cfz*48;
-  S.ey+=(Math.max(S.y*.5+14,seaY(ex,ez,t)+3.5)-S.ey)*Math.min(1,dt*2.5);
-  const eye=[ex,S.ey,ez],F=norm([S.x+fwx*3-ex,S.y*.6+9-S.ey,S.z+fwz*3-ez]),R=norm([-F[2],0,F[0]]),
+  const cfx=Math.sin(S.cy),cfz=Math.cos(S.cy),ex=S.x-cfx*10,ez=S.z-cfz*10;
+  S.ey+=(Math.max(S.y+3,seaY(ex,ez,t)+1.5)-S.ey)*Math.min(1,dt*3);
+  const eye=[ex,S.ey,ez],F=norm([S.x+fwx-ex,S.y+1.6-S.ey,S.z+fwz-ez]),R=norm([-F[2],0,F[0]]),
     Up=[R[1]*F[2]-R[2]*F[1],R[2]*F[0]-R[0]*F[2],R[0]*F[1]-R[1]*F[0]],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   const asp=cw/ch,tf=Math.tan(25*Math.PI/180)*Math.max(1,1.15/asp),near=1,far=3000; // widen on portrait screens
   const VP=mul([1/(tf*asp),0,0,0,0,1/tf,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0],
@@ -287,17 +286,19 @@ function frame(now){requestAnimationFrame(frame);
   draw(pSky,skyBuf,8,[['aP',2,0]],gl.TRIANGLES,3);
   gl.enable(gl.DEPTH_TEST);gl.clear(gl.DEPTH_BUFFER_BIT);
   use(pShip);gl.uniformMatrix4fv(U(pShip,'uM'),false,shipM);draw(pShip,shipBuf,40,MESH,gl.TRIANGLES,shipN);
+  for(const s of[1,-1]){const a=.5*Math.sin(S.ph),o=mul(rotY(s>0?a:Math.PI-a),rotZ(-.22-.1*Math.cos(S.ph)));o[12]=s*LOCK[0];o[13]=LOCK[1];o[14]=LOCK[2];
+    gl.uniformMatrix4fv(U(pShip,'uM'),false,mul(shipM,o));draw(pShip,oarBuf,40,MESH,gl.TRIANGLES,oarN)}
   gl.uniformMatrix4fv(U(pShip,'uM'),false,model(S.bx,by,S.bz,t*.3,.15*Math.sin(t*1.1),.15*Math.sin(t*.9)));draw(pShip,buoyBuf,40,MESH,gl.TRIANGLES,buoyN);
   use(pSea);gl.uniform2f(U(pSea,'uCen'),Math.round(S.x/CELL)*CELL,Math.round(S.z/CELL)*CELL);
-  gl.uniform4f(U(pSea,'uShip'),S.x,S.z,fwx,fwz);gl.uniform1f(U(pSea,'uSpd'),Math.min(1,Math.max(0,S.v/8)));
+  gl.uniform4f(U(pSea,'uShip'),S.x,S.z,fwx,fwz);gl.uniform1f(U(pSea,'uSpd'),Math.min(1,Math.max(0,S.v/3)));
   draw(pSea,seaBuf,8,[['aP',2,0]],gl.TRIANGLES,gi.length,true);
   gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE);gl.depthMask(false);
-  glowData.set([...lamp,5,1,.6,.25,.9*lampI,...beac,9,.3,1,.7,pulse]);gl.bindBuffer(gl.ARRAY_BUFFER,glowBuf);gl.bufferSubData(gl.ARRAY_BUFFER,0,glowData);
+  glowData.set([...lamp,1.5,1,.6,.25,.9*lampI,...beac,9,.3,1,.7,pulse]);gl.bindBuffer(gl.ARRAY_BUFFER,glowBuf);gl.bufferSubData(gl.ARRAY_BUFFER,0,glowData);
   use(pGlow);gl.uniform1f(U(pGlow,'uPx'),ch/(2*tf));draw(pGlow,glowBuf,32,[['aP',4,0],['aC',4,16]],gl.POINTS,2);
   use(pRain);draw(pRain,rainBuf,16,[['aP',4,0]],gl.LINES,RAIN*2);
 
   if((hudT-=dt)<0){hudT=.15;$('sc').textContent=S.score;$('ds').textContent=Math.round(bdist);
-    $('sp').textContent=(Math.max(0,S.v)*1.944).toFixed(1);$('sl').textContent=Math.round(S.sail*100);
+    $('sp').textContent=(Math.max(0,S.v)*1.944).toFixed(1);$('rw').textContent=Math.round(S.row*100);
     $('ar').style.transform=`rotate(${Math.atan2(bx*-cfz+bz*cfx,bx*cfx+bz*cfz)}rad)`} // bearing as seen on screen
 }
 requestAnimationFrame(frame);
