@@ -6142,7 +6142,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},get pfx(){return PFX;},get rc(){return RC;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
+(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},get pfx(){return PFX;},get rc(){return RC;},get pace(){return PACE;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -7832,12 +7832,33 @@ const PFX=(()=>{
 // 0.1 (to 0.7 at most: the TAA and the sharpening keep it close), back up by 0.05 after 6 s over 58. A step down that
 // gains under 5% (the CPU, not the GPU, holds the frame) is undone and the scale left alone for 2 min. Steps 2 s apart
 // (a change reallocates the render targets). Returns whether the scale changed
-const DR={s:1,t:-1e9,prev:0,last:1,hold:0,up:0};
-function drStep(D,fps,now){D.up=fps>58?D.up+1:0;if(now<D.hold||now-D.t<2000)return false;
-  if(D.prev){const gain=fps>=D.prev*1.05;D.prev=0;if(!gain){D.s=D.last;D.hold=now+120000;D.t=now;return true;}}
-  if(fps<50&&D.s>0.7){D.last=D.s;D.prev=fps;D.s=Math.max(0.7,+(D.s-0.1).toFixed(2));D.t=now;return true;}
-  if(D.up>=12&&D.s<1){D.last=D.s;D.s=Math.min(1,+(D.s+0.05).toFixed(2));D.up=0;D.t=now;return true;}
+const DR={s:1,t:-1e9,prev:0,last:1,hold:0,holdD:0,up:0,dn:0,rose:false,bad:9,badT:0,badD:0};
+// The frame rate (read every half second) against the rate aimed for (T: 60, or what the pacing below draws when that
+// is less). Under 95 % of it two readings running, the resolution steps down a tenth (it used to wait for 50 fps, and
+// could sit at 52 for good); over 97 % for six seconds it steps back up a twentieth. A scale that proved too much is
+// remembered (bad): the way back up stops short of it for a minute, then tries it again - and if it fails again goes
+// straight back to the scale it rose from and waits twice as long (up to eight minutes), so a GPU that sits between
+// two steps is not sent up and down every few seconds. (A step down that gains nothing - the CPU is what holds the
+// frame back - is undone, and tried again after two minutes, then four, then eight.)
+function drStep(D,fps,now,T=60){D.up=fps>T*0.97?D.up+1:0;D.dn=fps<T*0.95?D.dn+1:0;if(now<D.hold||now-D.t<2000)return false;
+  if(D.prev){const gain=fps>=D.prev*1.05;D.prev=0;if(!gain){D.s=D.last;D.holdD=Math.min(480000,(D.holdD||60000)*2);D.hold=now+D.holdD;D.t=now;return true;}D.holdD=0;}
+  if(D.dn>=2&&D.s>0.7){D.badD=D.s===D.bad?Math.min(480000,D.badD*2):60000;D.bad=D.s;D.badT=now+D.badD;
+    const to=D.rose?D.last:Math.max(0.7,+(D.s-0.1).toFixed(2));D.rose=false;D.last=D.s;D.prev=fps;D.s=to;D.t=now;return true;}
+  if(D.up>=12&&D.s<1&&(+(D.s+0.05).toFixed(2)<D.bad||now>=D.badT)){D.last=D.s;D.s=Math.min(1,+(D.s+0.05).toFixed(2));D.rose=true;D.up=0;D.t=now;return true;}
   return false;}
+// The frame rate is held near 60. On a display that refreshes faster (120, 144, 165, 240 Hz) every refresh was a whole
+// frame drawn - the GPU flat out for frames this game does not need. There, only every Nth refresh is drawn (every 2nd
+// at 120-144 Hz: 60-72 fps; every 3rd at 165-200: 55-67; every 4th at 240: 60), always the same N, so the frames stay
+// evenly spaced. The display's rate is read off the callbacks' own timestamps (the 25th percentile of their intervals:
+// single refreshes, even while some frames run long), snapped to a rate displays have, and read again every 90
+// callbacks (a window dragged to another monitor); N changes only when two readings in a row agree. Up to 100 Hz there
+// is no even way down to about 60, and every refresh is drawn.
+const PACE={n:1,k:0,hz:60,last:0,d:new Float32Array(90),i:0,want:1};
+function pace(P,now){const dt=now-P.last;P.last=now;
+  if(dt>2&&dt<50){P.d[P.i++]=dt;if(P.i===90){P.i=0;const raw=1000/Float32Array.from(P.d).sort()[22];let hz=60;
+      for(const r of[50,72,75,90,100,120,144,165,180,200,240,300,360])if(Math.abs(r-raw)<Math.abs(hz-raw))hz=r;
+      const n=Math.max(1,Math.floor((hz+15)/60));if(n===P.want){P.n=n;P.hz=hz;}P.want=n;}}
+  return ++P.k%P.n===0;}
 const QUAL=(()=>{
   const t={name:'최고',pr:2,px:8.3e6,msaa:4,blades:7,gb:[35,42.5],grass:10,grassFar:13,peb:7,near:WINTER?220:400,lodK:0};
   const Q={fps:0,fa:0,fn:0};
@@ -7850,7 +7871,7 @@ const QUAL=(()=>{
     resize();Q.show();};
   Q.show=()=>{const el=$('gfx');if(el)el.textContent=`${t.name} · ${Q.fps||'—'} fps${DR.s<1?` · 해상도 ${Math.round(DR.s*100)}%`:''}`;};
   Q.tick=raw=>{if(raw>0.25)return;
-    Q.fa+=raw;Q.fn++;if(Q.fa>=0.5){Q.fps=Math.round(Q.fn/Q.fa);Q.fa=Q.fn=0;if(drive.started&&!garage.on&&drStep(DR,Q.fps,performance.now())){setPR();resize();}Q.show();}};
+    Q.fa+=raw;Q.fn++;if(Q.fa>=0.5){Q.fps=Math.round(Q.fn/Q.fa);Q.fa=Q.fn=0;if(drive.started&&!garage.on&&drStep(DR,Q.fps,performance.now(),Math.min(60,PACE.hz/PACE.n))){setPR();resize();}Q.show();}};
   return Q;})();
 function resize(){
   const w=app.clientWidth,h=app.clientHeight;renderer.setSize(w,h);PFX.resize();camera.aspect=w/h;camera.updateProjectionMatrix();
@@ -8539,6 +8560,7 @@ function showErr(err){const m=String(err&&err.message||err);if(m===errShown)retu
   clearTimeout(errTimer);errTimer=setTimeout(()=>{el.hidden=true;errShown='';},8000);}
 function frame(now){
   requestAnimationFrame(frame);
+  if(!pace(PACE,now))return;   // (not this refresh: see PACE)
   try{tick(now);}catch(err){showErr(err);}
 }
 function tick(now){
