@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>미니 MMORPG</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2d4a2b; color: #fff;
+    font: 14px system-ui, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #hud, #log { position: fixed; left: 8px; pointer-events: none; text-shadow: 0 1px 2px #000; }
+  #hud { top: 8px; font-weight: bold; }
+  #log { bottom: 56px; }
+  #chat { position: fixed; left: 8px; right: 8px; bottom: 8px; margin: 0; }
+  input, button { font: inherit; font-size: 16px; padding: 8px; border-radius: 8px; border: 0; box-sizing: border-box; }
+  #msg { width: 100%; background: #0008; color: #fff; }
+  #msg::placeholder { color: #ccc; }
+  #login { position: fixed; inset: 0; display: grid; place-content: center; gap: 8px; background: #000c; text-align: center; }
+  #login[hidden] { display: none; }
+  #err { color: #f88; min-height: 1.2em; margin: 0; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<div id="log" aria-live="polite"></div>
+<form id="chat"><input id="msg" aria-label="채팅" placeholder="채팅 입력 후 Enter" maxlength="100" autocomplete="off"></form>
+<form id="login">
+  <h1>미니 MMORPG</h1>
+  <label for="name">캐릭터 이름 (글자·숫자 1~12자)</label>
+  <input id="name" maxlength="12" required autocomplete="off">
+  <button>접속</button>
+  <p id="err" role="alert"></p>
+  <p>땅을 누르면 이동, 몬스터를 누르면 공격<br>마을에서 멀수록 몬스터가 강합니다</p>
+</form>
+<script>
+const $ = id => document.getElementById(id), cv = $('c'), g = cv.getContext('2d');
+// getRandomValues, not randomUUID: this must work over plain http on a LAN address
+const token = localStorage.token ||= [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+let ents = new Map(), me, world, tgt;
+
+const send = o => fetch('/act', { method: 'POST', body: JSON.stringify({ name: me.n, token, ...o }) });
+
+function log(text) {
+  const d = document.createElement('div');
+  d.textContent = text; // textContent: chat is untrusted
+  $('log').append(d);
+  while ($('log').childElementCount > 8) $('log').firstChild.remove();
+}
+
+$('name').value = localStorage.name || '';
+$('login').onsubmit = e => {
+  e.preventDefault();
+  localStorage.name = $('name').value;
+  const es = new EventSource(`/events?name=${encodeURIComponent($('name').value)}&token=${token}`);
+  es.onerror = () => $('hud').textContent = $('err').textContent = '서버 연결 끊김 — 재접속 중…';
+  es.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.err) { es.close(); $('err').textContent = m.err; $('login').hidden = false; }
+    else if (m.world) { world = m.world; $('err').textContent = ''; $('login').hidden = true; }
+    else if (m.chat) log(m.chat);
+    else {
+      const next = new Map();
+      for (const s of m.e) { const o = ents.get(s.id); s.dx = o ? o.dx : s.x; s.dy = o ? o.dy : s.y; next.set(s.id, s); }
+      ents = next; me = ents.get(m.you);
+      $('hud').textContent = `Lv ${me.lv} · HP ${me.hp}/${me.mhp} · XP ${m.xp}/${m.nxp}`;
+    }
+  };
+};
+
+$('chat').onsubmit = e => {
+  e.preventDefault();
+  if (me && $('msg').value.trim()) send({ chat: $('msg').value });
+  $('msg').value = '';
+  $('msg').blur(); // hide the phone keyboard
+};
+
+cv.onpointerdown = e => {
+  if (!me) return;
+  const x = me.dx + e.clientX - innerWidth / 2, y = me.dy + e.clientY - innerHeight / 2;
+  const hit = [...ents.values()].find(o => !o.n && Math.hypot(o.dx - x, o.dy - y) < 36);
+  tgt = hit && hit.id;
+  send(hit ? { attack: hit.id } : { move: [x, y] });
+};
+
+function resize() {
+  const r = devicePixelRatio;
+  cv.width = innerWidth * r; cv.height = innerHeight * r;
+  g.setTransform(r, 0, 0, r, 0, 0);
+}
+onresize = resize; resize();
+
+const MOB = [...'🐛🐗🐺👹🐉'];
+(function draw() {
+  requestAnimationFrame(draw);
+  g.fillStyle = '#2d4a2b'; g.fillRect(0, 0, innerWidth, innerHeight);
+  if (!me || !world) return;
+  for (const o of ents.values()) { o.dx += (o.x - o.dx) * 0.2; o.dy += (o.y - o.dy) * 0.2; } // smooth 10Hz snapshots
+  const ox = innerWidth / 2 - me.dx, oy = innerHeight / 2 - me.dy;
+
+  g.strokeStyle = '#ffffff14'; g.beginPath(); // grid, so movement is visible
+  for (let x = ox % 100; x < innerWidth; x += 100) { g.moveTo(x, 0); g.lineTo(x, innerHeight); }
+  for (let y = oy % 100; y < innerHeight; y += 100) { g.moveTo(0, y); g.lineTo(innerWidth, y); }
+  g.stroke();
+  g.fillStyle = '#ffffff22'; g.beginPath(); g.arc(ox + world.W / 2, oy + world.W / 2, world.TOWN, 0, 7); g.fill();
+  g.strokeStyle = '#000'; g.strokeRect(ox, oy, world.W, world.W);
+
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const o of ents.values()) {
+    const x = ox + o.dx, y = oy + o.dy;
+    if (o.id === tgt) { g.strokeStyle = '#fc0'; g.beginPath(); g.arc(x, y, 26, 0, 7); g.stroke(); }
+    g.font = '32px serif'; g.fillStyle = '#fff';
+    g.fillText(o.n ? '🧙' : MOB[Math.min(4, o.lv >> 1)], x, y);
+    g.font = '12px system-ui'; g.fillStyle = o === me ? '#fe6' : '#fff';
+    g.fillText(`Lv${o.lv} ${o.n || ''}`, x, y - 34);
+    g.fillStyle = '#000'; g.fillRect(x - 20, y - 26, 40, 4);
+    g.fillStyle = o.n ? '#4c6' : '#e44'; g.fillRect(x - 20, y - 26, 40 * o.hp / o.mhp, 4);
+  }
+})();
+</script>
+</body>
+</html>
