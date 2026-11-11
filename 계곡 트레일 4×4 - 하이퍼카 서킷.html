@@ -6142,7 +6142,7 @@ function jpStep(dt){
   JP.lp.copy(car.pos);JP.lq.copy(car.q);JP.lv.copy(car.vel);JP.lw.copy(car.w);
 }
 // (for testing: the car's state and the physics step, read by a test harness; the game itself never uses it)
-(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},get pfx(){return PFX;},get rc(){return RC;},get pace(){return PACE;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
+(()=>{try{window.__vtPhys={car,wheels,drive,axleS,JP,place:placeCar,get fly(){return fly;},get ctl(){return ctl;},get renderer(){return renderer;},get cells(){return propCells;},get trees(){return trees;},get cam(){return cam;},get scene(){return scene;},get camera(){return camera;},get pfx(){return PFX;},get rc(){return RC;},get pace(){return PACE;},get sIn(){return SIN;},sf:(x,z)=>surfaceAt(x,z),get h(){return H_STEP;},set h(v){H_STEP=v;}};}catch(_){}})();
 function step(dt){
   car.force.set(0,0,0);car.torque.set(0,0,0);physY=car.pos.y;
   // the pose the wheels are solved against this step (the body then moves on: the wheels are drawn relative to it)
@@ -6427,6 +6427,20 @@ function scGearbox(dt,vF){
   else if(ctl.throttle>0.02){drive.lu=clamp(drive.lu+dt*clamp((drive.rpm-tgt)/300,-5,4),0,1);return;}
   else want=ctl.brake>0.1||drive.hold?0:(drive.turb>1100?1:0.035);
   drive.lu+=clamp(want-drive.lu,-dt*8,dt*(synced?20:5));}
+// How the steering answers (handleInput). tau, back: the time constants of the wheel following the key, turning in and
+// letting go (seconds at a crawl; both grow by 1 + speed/vt). a0 + a1/(1 + (speed/va)^2): the slip angle allowed on top
+// of the lock that the speed permits (0.06 rad at a crawl, as before; less with speed). Measured with a 0.6 s key pulse
+// on the circuit straight, against the old law (2.1 locks a second / (1 + speed/33), 0.06 rad at any speed):
+//   half lock in 0.13-0.20 s where it took 0.43 s at 100 km/h and 0.60 s at 180; the yaw rate half way there in 0.17 s
+//   where it took 0.30 s; the stability control no busier than before on a held key (0.36-0.42 at 180 km/h in the
+//   hypercars, 0.50 at 100 in the 4x4, where it reached 0.69) - with the old allowance the quick wheel went well past
+//   the grip at speed (62 % of yaw overshoot at 180 km/h and the stability control flat out).
+const SIN=SC?{tau:0.11,back:0.075,vt:45,a0:0.02,a1:0.04,va:25}:{tau:0.11,back:0.075,vt:60,a0:0,a1:0.06,va:20};
+// The wheel's step toward the key in one frame: quickly at first, easing in to the lock. The gap closes with a time
+// constant (in the hypercars 0.11 s at a crawl, 0.18 s at 100 km/h, 0.23 s at 180; a third shorter letting go or
+// reversing the lock), the last few per cent at a steady rate so that it ends, and never faster than six locks a second.
+function steerStep(st,sIn,av,dt,S){const e=sIn-st,tau=(sIn===0||Math.sign(sIn)!==Math.sign(st)?S.back:S.tau)*(1+av/S.vt);
+  return st+Math.sign(e)*Math.min(Math.abs(e),Math.max(Math.abs(e)*(1-Math.exp(-dt/tau)),0.5*dt),6*dt);}
 function handleInput(dt){
   ctl.hand=false;pollGamepad();
   const on=drive.started&&!garage.on;
@@ -6471,11 +6485,14 @@ function handleInput(dt){
   if(gp.active&&on&&Math.abs(gp.lx)>0.08)sIn=-gp.lx;
   if(flying)sIn=fly.out.steer;
   const av=Math.abs(vF);
-  const rate=((sIn===0||Math.sign(sIn)!==Math.sign(ctl.steer))?3.6:2.1)/(1+av*0.03);
-  ctl.steer+=clamp(sIn-ctl.steer,-rate*dt,rate*dt);
+  // (the old law was a steady 2.1 locks a second divided by 1 + speed/33, and that was what made the car slow to answer:
+  // the chassis itself follows the wheel within a tenth of a second. The fly keeps it, and the old lock: its steering
+  // reflexes were tuned through them.)
+  if(flying){const rate=((sIn===0||Math.sign(sIn)!==Math.sign(ctl.steer))?3.6:2.1)/(1+av*0.03);ctl.steer+=clamp(sIn-ctl.steer,-rate*dt,rate*dt);}
+  else ctl.steer=steerStep(ctl.steer,sIn,av,dt,SIN);
   // full lock at a crawl; with speed the lock is capped near what the tyres can turn into cornering force
   // (about 0.6 g plus the slip angle they run at), so a held key carves a firm turn instead of scrubbing the fronts
-  const maxA=Math.min(MAXLOCK,Math.atan(WB*STEER_G/Math.max(av*av,1))+0.06),d=ctl.steer*maxA;
+  const maxA=Math.min(MAXLOCK,Math.atan(WB*STEER_G/Math.max(av*av,1))+(flying?0.06:SIN.a0+SIN.a1/(1+(av/SIN.va)**2))),d=ctl.steer*maxA;
   if(Math.abs(d)<1e-4){wheels[0].steer=wheels[1].steer=d;}
   else{const L=WB,Rr=L/Math.tan(Math.abs(d)),inn=Math.atan(L/(Rr-HALF_TRACK)),out=Math.atan(L/(Rr+HALF_TRACK)),s=Math.sign(d);
     wheels[0].steer=s*(d>0?inn:out);wheels[1].steer=s*(d>0?out:inn);}
