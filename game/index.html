@@ -50,16 +50,16 @@ const $=id=>document.getElementById(id),cv=$('c'),gl=cv.getContext('webgl',{anti
 if(!gl){$('hint').textContent='이 기기는 WebGL을 지원하지 않아 바다를 그릴 수 없습니다.';throw new Error('no webgl')}
 
 // ---- sea state: one wave table drives both the shaders and the ship's buoyancy ----
-const G=9.81,HK=.75,WDIR=250*Math.PI/180; // HK: sideways (crest-sharpening) share of each wave
+const G=9.81,HK=.78,WDIR=250*Math.PI/180; // HK: sideways (crest-sharpening) share of each wave
 const HL=2.3,BW=.78; // half length and half beam of the boat, m
-// [direction offset deg, wavelength m, amplitude m]; the first NV move geometry, the rest only shade
-const WAVES=[[0,95,3],[-18,62,1.9],[27,41,1.1],[-35,27,.62],[12,18,.36],[48,12,.21],[-52,8.1,.13],[-8,5.3,.075],
-  [33,3.4,.04],[-41,2.3,.028],[5,1.6,.02],[70,1.1,.013]].map(([a,L,A])=>{
-  const k=2*Math.PI/L,r=WDIR+a*Math.PI/180;return{x:Math.cos(r),z:Math.sin(r),k,A,w:Math.sqrt(G*k)}}),NV=8;
+// [direction offset deg, wavelength m, amplitude m]; the first NV move geometry (the last two of those are a cross swell), the rest only shade
+const WAVES=[[0,80,3.06],[-20,52,1.74],[28,34,1.03],[-38,22,.595],[14,15,.382],[50,10,.239],[-55,7,.156],[-8,4.9,.109],[36,3.4,.07],[-27,2.5,.048],
+  [72,58,1.29],[-78,29,.6],[60,1.8,.0315],[-48,1.25,.02],[20,.9,.013]].map(([a,L,A])=>{
+  const k=2*Math.PI/L,r=WDIR+a*Math.PI/180;return{x:Math.cos(r),z:Math.sin(r),k,A,w:Math.sqrt(G*k)}}),NV=12;
 function disp(x,z,t){let ox=0,oy=0,oz=0;for(let i=0;i<NV;i++){const w=WAVES[i],th=w.k*(w.x*x+w.z*z)-w.w*t,c=Math.cos(th)*HK*w.A;
   ox+=w.x*c;oy+=w.A*Math.sin(th);oz+=w.z*c}return[ox,oy,oz]}
-// surface height above world point (x,z): undo the sideways shift by fixed-point iteration
-function seaY(x,z,t,hit){let px=x,pz=z,d;for(let i=0;i<6;i++){d=disp(px,pz,t);px=x-d[0];pz=z-d[2]}
+// surface height above world point (x,z): undo the sideways shift by fixed-point iteration, damped because steep crests make it overshoot
+function seaY(x,z,t,hit){let px=x,pz=z,d;for(let i=0;i<10;i++){d=disp(px,pz,t);px+=.7*(x-px-d[0]);pz+=.7*(z-pz-d[2])}
   d=disp(px,pz,t);if(hit){hit[0]=px+d[0];hit[1]=pz+d[2]}return d[1]}
 {const o=[];seaY(37,-12,5,o);console.assert(Math.hypot(o[0]-37,o[1]+12)<.3,'wave inversion drifted',o)}
 
@@ -68,7 +68,7 @@ const fx=n=>n.toFixed(5),wsrc=(a,b)=>WAVES.slice(a,b).map(w=>`W(vec2(${fx(w.x)},
 const FC=`precision highp float;
 uniform float uT,uFlash,uLampI;uniform vec3 uCam,uMoon,uFlashDir,uLamp;uniform vec4 uBeac;
 const vec3 MOONC=vec3(.55,.68,.9),LAMPC=vec3(1.,.52,.18),BEACC=vec3(.3,1.,.7),FLASHC=vec3(.6,.7,1.),AMB=vec3(.0035,.0045,.007);
-float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float hash(vec2 p){vec3 q=fract(p.xyx*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);} // sine-free: steadier on phone GPUs
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
 vec3 skyBase(vec3 d){float y=max(d.y,0.),m=max(dot(d,uMoon),0.);
@@ -76,7 +76,8 @@ vec3 skyBase(vec3 d){float y=max(d.y,0.),m=max(dot(d,uMoon),0.);
   c+=MOONC*(pow(m,5.)*.004+pow(m,48.)*.02);
   c+=uFlash*FLASHC*(.03+.25*pow(max(dot(normalize(vec3(d.x,.25,d.z)),uFlashDir),0.),3.))*(1.-.6*y);
   return c;}
-vec3 fog(vec3 c,vec3 w){vec3 v=w-uCam;return mix(skyBase(normalize(vec3(v.x,0.,v.z))),c,exp(-length(v)*.0022));}
+// spray hangs low over the water, so distant troughs haze over sooner than the crests above them
+vec3 fog(vec3 c,vec3 w){vec3 v=w-uCam;return mix(skyBase(normalize(vec3(v.x,0.,v.z))),c,exp(-length(v)*(.0022+.004*exp(-max(w.y+3.,0.)*.25))));}
 vec3 tone(vec3 c){return pow(1.-exp(-c),vec3(.4545))+(hash(gl_FragCoord.xy+fract(uT))-.5)/255.;}
 `;
 const SKY_V=`attribute vec2 aP;uniform vec3 uF,uR,uU;varying vec3 vD;
@@ -86,48 +87,65 @@ float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*noise(p);p=p*2.03+ve
 void main(){vec3 d=normalize(vD),col=skyBase(d);
   if(d.y>0.){float hz=smoothstep(0.,.2,d.y),m=max(dot(d,uMoon),0.);
     vec2 q=d.xz/(d.y+.18)*1.4+uT*vec2(.025,.01);
-    float cl=fbm(q+fbm(q*.5)*1.5),gap=smoothstep(.62,.3,cl);
+    float cl=fbm(q+fbm(q*.5)*1.5),gap=1.-smoothstep(.3,.62,cl);
     col+=hz*MOONC*(pow(m,10.)*.02*(.2+gap)+pow(m,90.)*.12*gap+smoothstep(.99955,.9997,m)*gap*gap*1.5);
     col+=hz*cl*.0006;
     col+=hz*uFlash*FLASHC*cl*cl*(.15+2.*pow(max(dot(normalize(vec3(d.x,.25,d.z)),uFlashDir),0.),5.));}
   gl_FragColor=vec4(tone(col),1.);}`;
 const SEA_V=`attribute vec2 aP;uniform mat4 uVP;uniform vec2 uCen;uniform float uT;varying vec2 vP0;varying vec3 vW;
 const float HK=${fx(HK)};
-#define W(D,K,A,O) th=K*dot(D,p)-O*uT;c=cos(th)*HK*A;d+=vec3(D.x*c,A*sin(th),D.y*c);
-void main(){vec2 p=uCen+aP*(60.+1440.*aP*aP*aP*aP);float th,c;vec3 d=vec3(0.);
+// each wave flattens out once the grid grows too coarse to carry it (6 to 10 wavelengths away); the shading keeps it
+#define W(D,K,A,O) th=K*dot(D,p)-O*uT;a=A*clamp(2.5-dd*K*.04,0.,1.);c=cos(th)*HK*a;d+=vec3(D.x*c,a*sin(th),D.y*c);
+void main(){vec2 o=aP*(60.+1440.*aP*aP*aP*aP),p=uCen+o;float th,c,a,dd=length(o);vec3 d=vec3(0.);
 ${wsrc(0,NV)}
   vP0=p;vW=vec3(p.x,0.,p.y)+d;gl_Position=uVP*vec4(vW,1.);}`;
 const SEA_F=FC+`varying vec2 vP0;varying vec3 vW;uniform vec4 uShip;uniform float uSpd;
 const float HK=${fx(HK)};const vec2 WD=vec2(${fx(Math.cos(WDIR))},${fx(Math.sin(WDIR))});const vec3 DEEP=vec3(.0003,.0007,.0009);
-#define W(D,K,A,O) th=K*dot(D,p)-O*uT;n.xz-=D*(K*A*cos(th)*fd);n.y-=HK*K*A*sin(th)*fd;
-void main(){vec2 p=vP0;vec3 v=uCam-vW;float dist=length(v);vec3 V=v/dist;
-  float th,fd=1.;vec3 n=vec3(0.,1.,0.);
+// value noise with its gradient in yz
+vec3 noised(vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f),du=6.*f*(1.-f);
+  float a=hash(i),b=hash(i+vec2(1.,0.)),c=hash(i+vec2(0.,1.)),d=hash(i+vec2(1.,1.)),k=a-b-c+d;
+  return vec3(a+(b-a)*u.x+(c-a)*u.y+k*u.x*u.y,du*(vec2(b-a,c-a)+k*u.yx));}
+// cr: how sharply the surface is pinched (breaking crests); tr: the same a moment ago (foam left on the back of the wave)
+#define W(D,K,A,O) th=K*dot(D,p)-O*uT;s=sin(th)*K*A*fd;c=cos(th)*K*A*fd;n.xz-=D*c;cr+=HK*s;tr+=HK*(s*.7+c*.72);
+void main(){vec2 p=vP0,rel=vW.xz-uShip.xy;
+  float lz=dot(rel,uShip.zw),lx=dot(rel,vec2(-uShip.w,uShip.z)),hu=(lz+${fx(HL)})/${fx(2*HL)};
+  if(hu>0.&&hu<1.&&abs(lx)<.72*${fx(BW)}*pow(max(sin(3.14159*min(1.,.22+.78*hu)),0.),.6))discard; // no sea inside the open hull (mirrors wid())
+  vec3 v=uCam-vW;float dist=length(v);vec3 V=v/dist;
+  float th,s,c,fd=1.,cr=0.,tr=0.;vec3 n=vec3(0.,1.,0.);
 ${wsrc(0,NV)}
-  float crest=1.-n.y;fd=exp(-dist*.012);
+  float crest=cr,trail=tr,nr=1./(1.+dist*dist*.0004);fd=nr;
 ${wsrc(NV)}
-  vec2 q=p*.8+uT*vec2(.4,.25);float n0=noise(q);
-  n.xz-=vec2(noise(q+vec2(.2,0.))-n0,noise(q+vec2(0.,.2))-n0)*(.35*fd);
-  n=normalize(n);
-  float fr=.02+.98*pow(1.-max(dot(n,V),0.),5.);
+  // wind ripples: three octaves of gradient noise, crests lying across the wind
+  vec2 wq=vec2(dot(p,WD),dot(p,vec2(-WD.y,WD.x)));
+  vec2 gr=noised(wq*vec2(1.5,.8)-vec2(uT*1.1,0.)).yz*vec2(1.5,.8)*.07*nr
+    +noised(wq*vec2(4.3,2.3)-vec2(uT*2.,uT*.3)).yz*vec2(4.3,2.3)*.022/(1.+dist*dist*.002)
+    +noised(wq*vec2(11.,6.)-vec2(uT*3.4,0.)).yz*vec2(11.,6.)*.007/(1.+dist*dist*.012);
+  n.xz-=WD*gr.x+vec2(-WD.y,WD.x)*gr.y;n.y=max(1.-cr,.05);n=normalize(n);
+  // unresolved roughness makes the far sea reflect less than a mirror would
+  float ndv=max(dot(n,V),0.),fr=(.02+.98*pow(1.-ndv,5.))*(.55+.45*exp(-dist*.004));
   vec3 R=reflect(-V,n);R.y=abs(R.y);
   vec3 col=mix(DEEP*(1.+uFlash*30.),skyBase(R),fr);
+  col+=vec3(.001,.006,.006)*pow(max(dot(-V.xz,normalize(uMoon.xz)),0.),2.)*smoothstep(.05,.7,crest)*(1.-fr); // moonlight through thin crests
   float m=max(dot(R,uMoon),0.);
-  col+=MOONC*(pow(m,500.)*1.2+pow(m,60.)*.03);
+  col+=MOONC*(pow(m,mix(50.,600.,nr))*mix(.2,1.6,nr)+pow(m,20.)*.012);
   vec3 L=uLamp-vW;float ld=length(L);L/=ld;float la=uLampI/(1.+ld*ld*.06);
   vec3 B=uBeac.xyz-vW;float bd=length(B);B/=bd;float ba=uBeac.w/(1.+bd*bd*.02);
   col+=LAMPC*la*(pow(max(dot(reflect(-L,n),V),0.),120.)*.6+.012*max(dot(n,L),0.));
   col+=BEACC*ba*(pow(max(dot(reflect(-B,n),V),0.),60.)*1.5+.012*max(dot(n,B),0.));
-  float fn=noise(p*.3+uT*.04)*.45+noise(p*1.4-uT*.08)*.3+noise(p*5.+uT*.2)*.25;
-  float foam=smoothstep(.36,.52,crest+(fn-.5)*.6);
-  vec2 sp=vec2(dot(p,WD),dot(p,vec2(-WD.y,WD.x)));
-  foam+=.08*smoothstep(.55,.85,noise(sp*vec2(.05,.9)+vec2(uT*.3,0.)))*smoothstep(-.1,.3,crest);
-  // shortcut: the wake is a straight band in the ship's frame, so it swings with the stern in turns; store a trail if that shows
-  vec2 rel=vW.xz-uShip.xy;float lz=dot(rel,uShip.zw),lx=dot(rel,vec2(-uShip.w,uShip.z)),ws=max(-lz-1.6,0.),hu=(lz+2.3)/4.6;
-  if(hu>0.&&hu<1.&&abs(lx)<.72*0.78*pow(max(sin(3.14159*min(1.,.22+.78*hu)),0.),.6))discard; // no sea inside the open hull (mirrors wid())
-  float wk=.7*smoothstep(1.35,1.,length(vec2(lx/.85,lz/2.6)))+uSpd*step(.001,ws)*exp(-ws/6.)*smoothstep(.5+ws*.12,.1,abs(lx));
-  foam=clamp(foam+wk*smoothstep(.42,.7,fn+wk*.12),0.,1.);
-  vec3 fl=AMB*2.+uFlash*FLASHC*.5+MOONC*.004+LAMPC*la*(.1+.35*max(dot(n,L),0.))+BEACC*ba*(.1+.35*max(dot(n,B),0.));
-  col=mix(col,fl,foam*.85);
+  // how much foam: breaking caps, what they leave on the back of the wave, long wind streaks, the boat's wake
+  float f1=noise(p*.33+uT*vec2(.03,.02)),ws=max(-lz-1.6,0.);
+  float amt=smoothstep(.5,.8,crest+(f1-.5)*.35)+.5*smoothstep(.3,.8,trail+(f1-.5)*.4)
+    +.25*smoothstep(.62,.88,noise(wq*vec2(.025,1.2)+vec2(uT*.4,0.)))*smoothstep(-.2,.3,crest)
+    // shortcut: the wake is a straight band in the boat's frame, so it swings with the stern in turns; store a trail if that shows
+    +.7*(1.-smoothstep(1.,1.35,length(vec2(lx/.85,lz/2.6))))+uSpd*step(.001,ws)*exp(-ws/6.)*(1.-smoothstep(.1,.5+ws*.12,abs(lx)));
+  amt=min(amt,1.);
+  // its texture: wind-stretched patches veined by two ridged octaves; more foam uncovers more of it
+  vec2 fq=wq*vec2(.45,1.4)+uT*vec2(.05,.02);
+  float tex=noise(fq)*.4+noise(fq*2.3+7.)*.25+(1.-abs(noise(fq*5.1+3.)*2.-1.))*.2+(1.-abs(noise(fq*11.7)*2.-1.))*.15;
+  float foam=smoothstep(0.,.3,amt*1.3+tex-1.)*(.45+.55*amt);
+  vec2 rc=p*14.;foam=min(foam+.5*step(.985,hash(floor(rc)+floor(uT*9.)*7.31))*step(length(fract(rc)-.5),.3)/(1.+dist*dist*.004),1.); // rain pocks
+  vec3 fl=(AMB*3.5+uFlash*FLASHC*.5+MOONC*(.005+.012*max(dot(n,uMoon),0.))+LAMPC*la*(.05+.25*max(dot(n,L),0.))+BEACC*ba*(.05+.25*max(dot(n,B),0.)))*(.6+.7*tex);
+  col=mix(col,fl,foam*.9);
   gl_FragColor=vec4(tone(fog(col,vW)),1.);}`;
 const SHIP_V=`attribute vec3 aP,aN;attribute vec4 aC;uniform mat4 uVP,uM;varying vec3 vW,vN,vL;varying vec4 vC;
 void main(){vec4 w=uM*vec4(aP,1.);vW=w.xyz;vN=(uM*vec4(aN,0.)).xyz;vL=aP;vC=aC;gl_Position=uVP*w;}`;
@@ -140,7 +158,7 @@ void main(){vec3 V=normalize(uCam-vW),n=normalize(vN);if(dot(n,V)<0.)n=-n;
     if(mat<.5){ // planks: seams across the board, grain along it
       float pc=vL.y*9.,pf=fract(pc),id=floor(pc);
       float gr=noise(vec2(vL.z*4.+id*7.3,pc*9.))*.5+noise(vec2(vL.z*20.+id*3.1,pc*30.))*.5;
-      base*=(.55+.6*gr)*(.35+.65*smoothstep(0.,.07,pf)*smoothstep(1.,.93,pf));
+      base*=(.55+.6*gr)*(.35+.65*smoothstep(0.,.07,pf)*(1.-smoothstep(.93,1.,pf)));
     }else{base*=.8+.2*noise(vL.xy*30.);dl=dl*.75+.25;} // oilskin: soft wrap
     vec3 lit=AMB*(.6+.4*n.y)+uFlash*FLASHC*(.25+.5*max(dot(n,uFlashDir),0.))+MOONC*.03*max(dot(n,uMoon),0.)+LAMPC*la*(dl+.07);
     col=base*lit;
@@ -153,7 +171,7 @@ void main(){gl_Position=uVP*vec4(aP.xyz,1.);gl_PointSize=max(aP.w*uPx/gl_Positio
 const GLOW_F=`precision mediump float;varying vec4 vC;
 void main(){float r=length(gl_PointCoord-.5)*2.,a=pow(max(1.-r,0.),2.2)*.55+pow(max(1.-r*3.5,0.),2.);gl_FragColor=vec4(vC.rgb*vC.a*a,1.);}`;
 const RAIN_V=`attribute vec4 aP;uniform mat4 uVP;uniform vec3 uCam,uLamp;uniform float uT,uFlash;varying vec3 vC;
-const vec3 BOX=vec3(70.,45.,70.),VEL=vec3(${fx(Math.cos(WDIR)*11)},-27.,${fx(Math.sin(WDIR)*11)});
+const vec3 BOX=vec3(70.,45.,70.),VEL=vec3(${fx(Math.cos(WDIR)*16)},-27.,${fx(Math.sin(WDIR)*16)});
 void main(){vec3 p=aP.xyz*BOX+VEL*uT;p=mod(p-uCam+BOX*.5,BOX)-BOX*.5+uCam-VEL*.03*aP.w;
   float ld=distance(p,uLamp);
   vC=(vec3(.012,.015,.02)+vec3(1.,.55,.22)*.4/(1.+ld*ld*.1)+uFlash*vec3(.3,.35,.5))*(1.-.8*aP.w);
@@ -226,9 +244,10 @@ const mul=(a,b)=>{const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r
   norm=v=>{const l=Math.hypot(...v);return v.map(x=>x/l)};
 
 // ---- game state ----
-const S={t:40,x:0,z:0,h:0,v:1.5,row:.6,ph:0,rud:0,y:0,dy:0,p:0,dp:0,r:0,dr:0,cy:.42,ey:4,bx:0,bz:0,score:0,f0:-99,nf:43,fd:[0,1,0]};
+const S={t:40,x:0,z:0,h:0,v:1.5,row:.6,ph:0,rud:0,y:0,dy:0,p:0,dp:0,r:0,dr:0,cy:.42,ey:9,bx:0,bz:0,score:0,q:1,lag:.016,f0:-99,nf:43,fd:[0,1,0]};
 function placeBeacon(a=S.h+(Math.random()-.5)*2.4,d=120+Math.random()*90){S.bx=S.x+Math.sin(a)*d;S.bz=S.z+Math.cos(a)*d}
 placeBeacon(-.05,110);
+S.y=seaY(0,0,S.t);S.ey=S.y+7; // start afloat, with the camera already clear of the nearest crest
 const MOON=norm([.66,.19,.72]),CALM=matchMedia('(prefers-reduced-motion: reduce)').matches?.25:1; // gentler lightning on request
 const spring=(k,target,w,z,dt)=>{S['d'+k]+=(w*w*(target-S[k])-2*z*w*S['d'+k])*dt;S[k]+=S['d'+k]*dt};
 
@@ -243,8 +262,9 @@ addEventListener('contextmenu',e=>e.preventDefault());
 let last=performance.now(),hudT=0;
 function frame(now){requestAnimationFrame(frame);
   const dt=Math.min((now-last)/1000,.05);last=now;S.t+=dt;const t=S.t;
-  // shortcut: pixel ratio capped at 1.5 to keep phones smooth; scale adaptively if frame rate still drops
-  const dpr=Math.min(devicePixelRatio||1,1.5),cw=cv.clientWidth*dpr|0,ch=cv.clientHeight*dpr|0;
+  // shortcut: pixel ratio capped at 1.5, then stepped down (never back up) while frames run long; measure on target phones before tuning further
+  S.lag+=(dt-S.lag)*.05;if(S.lag>.03&&S.q>.5){S.q*=.85;S.lag=.016}
+  const dpr=Math.min(devicePixelRatio||1,1.5)*S.q,cw=cv.clientWidth*dpr|0,ch=cv.clientHeight*dpr|0;
   if(cv.width!==cw||cv.height!==ch){cv.width=cw;cv.height=ch}
   gl.viewport(0,0,cw,ch);
 
@@ -263,13 +283,14 @@ function frame(now){requestAnimationFrame(frame);
   if(bdist<8){S.score++;placeBeacon()}
 
   // lightning
-  if(t>S.nf){S.f0=t;S.nf=t+5+Math.random()*10;const a=Math.random()*6.283;S.fd=norm([Math.sin(a),.25,Math.cos(a)])}
+  if(t>S.nf){S.f0=t;S.nf=t+4+Math.random()*8;const a=Math.random()*6.283;S.fd=norm([Math.sin(a),.25,Math.cos(a)])}
   const ft=t-S.f0,flash=CALM*(Math.exp(-ft*7)+(ft>.22?.7*Math.exp(-(ft-.22)*9):0)+(ft>.55?.4*Math.exp(-(ft-.55)*6):0))*(.85+.15*Math.sin(ft*80));
 
   // camera: close and low off the starboard quarter
   S.cy+=(S.h+.42-S.cy)*Math.min(1,dt*1.3);
   const cfx=Math.sin(S.cy),cfz=Math.cos(S.cy),ex=S.x-cfx*10,ez=S.z-cfz*10;
-  S.ey+=(Math.max(S.y+3,seaY(ex,ez,t)+1.5)-S.ey)*Math.min(1,dt*3);
+  // stay above the water here, and high enough to see the rower over a crest halfway between
+  S.ey+=(Math.max(S.y+3.2,seaY(ex,ez,t)+2,2*seaY((ex+S.x)/2,(ez+S.z)/2,t)-S.y+.6)-S.ey)*Math.min(1,dt*3);
   const eye=[ex,S.ey,ez],F=norm([S.x+fwx-ex,S.y+1.6-S.ey,S.z+fwz-ez]),R=norm([-F[2],0,F[0]]),
     Up=[R[1]*F[2]-R[2]*F[1],R[2]*F[0]-R[0]*F[2],R[0]*F[1]-R[1]*F[0]],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
   const asp=cw/ch,tf=Math.tan(25*Math.PI/180)*Math.max(1,1.15/asp),near=1,far=3000; // widen on portrait screens
