@@ -1,0 +1,1787 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Mallang Pudding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" media="print" onload="this.media='all'">
+<style>
+:root{
+  --ink:#27211d;--ink2:#5b5048;--muted:#8a7d72;--rule:rgba(39,33,29,.13);
+  --glass:rgba(252,248,242,.72);--glass2:rgba(252,248,242,.92);--paper:#fbf7f1;
+  --lift:0 1px 0 rgba(255,255,255,.65) inset,0 12px 30px -14px rgba(60,40,20,.38);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#cdc2b5;color:var(--ink);font:14px/1.35 'Instrument Sans',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+#view{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;outline:none}
+#view.hold{cursor:grabbing}
+#view.over{cursor:pointer}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.mast{position:fixed;left:max(18px,env(safe-area-inset-left));top:max(16px,env(safe-area-inset-top));pointer-events:none;user-select:none}
+.mast h1{margin:0;font:italic 400 clamp(40px,5.4vw,64px)/.86 'Instrument Serif',Georgia,'Times New Roman',serif;letter-spacing:-.015em}
+.mast p{margin:10px 0 0 2px;font-size:11px;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+.mast p span{color:var(--ink2)}
+.top{position:fixed;right:max(16px,env(safe-area-inset-right));top:max(16px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:8px;z-index:3}
+.pill{appearance:none;border:1px solid var(--rule);background:var(--glass);-webkit-backdrop-filter:blur(14px) saturate(1.2);backdrop-filter:blur(14px) saturate(1.2);border-radius:999px;padding:9px 15px;cursor:pointer;box-shadow:var(--lift);font-weight:500;font-size:13px;display:inline-flex;gap:8px;align-items:center}
+.pill:hover{background:var(--glass2)}
+.pill svg{width:15px;height:15px}
+#panel{width:min(300px,calc(100vw - 32px));background:var(--glass2);-webkit-backdrop-filter:blur(18px) saturate(1.2);backdrop-filter:blur(18px) saturate(1.2);border:1px solid var(--rule);border-radius:16px;box-shadow:var(--lift);padding:14px 16px 12px}
+#panel[hidden]{display:none}
+#panel h2{margin:0 0 8px;font:400 24px/1 'Instrument Serif',Georgia,serif}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px;border-top:1px solid var(--rule)}
+.row label{font-size:13px;flex:1;cursor:pointer}
+.row label small{display:block;font-size:11px;color:var(--muted)}
+.row input[type=range]{width:140px;accent-color:var(--ink)}
+.row input[type=checkbox]{width:18px;height:18px;accent-color:var(--ink);margin:0;cursor:pointer}
+.btns{display:flex;gap:8px;padding-top:10px;border-top:1px solid var(--rule)}
+.btns button{flex:1;appearance:none;border:1px solid var(--rule);background:rgba(255,255,255,.55);border-radius:10px;padding:9px 6px;cursor:pointer;font-size:13px}
+.btns button:hover{background:#fff}
+.fps{margin-top:10px;font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);letter-spacing:.04em}
+.bar{position:fixed;left:50%;transform:translateX(-50%);bottom:max(14px,env(safe-area-inset-bottom));display:flex;align-items:center;padding:6px;background:var(--glass);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);border:1px solid var(--rule);border-radius:20px;box-shadow:var(--lift);max-width:calc(100vw - 20px);z-index:2}
+.grp{display:flex;align-items:center;gap:4px;padding:0 8px;min-height:48px}
+.chip{appearance:none;border:0;white-space:nowrap;flex:none;display:flex;align-items:center;gap:7px;padding:4px 12px 4px 4px;border-radius:13px;background:transparent;cursor:pointer;font:500 14px 'Instrument Sans',sans-serif;color:var(--ink2);transition:background .15s}
+.chip img{width:36px;height:36px;border-radius:10px;background:var(--c);opacity:.55;transition:opacity .15s}
+.chip:hover{background:rgba(255,255,255,.45)}
+.chip[aria-pressed=true]{background:rgba(255,255,255,.8);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.chip[aria-pressed=true] img{opacity:1}
+#drop{appearance:none;border:0;background:var(--ink);color:var(--paper);height:48px;padding:0 20px 0 22px;border-radius:14px;font:400 24px/1 'Instrument Serif',Georgia,serif;cursor:pointer;margin:0 4px 0 6px;display:flex;align-items:center;gap:10px}
+#drop:hover{background:#000}
+#drop kbd{font:500 9px/1 'Instrument Sans',sans-serif;letter-spacing:.12em;opacity:.6;border:1px solid rgba(255,255,255,.35);border-radius:4px;padding:3px 4px}
+.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(max(14px,env(safe-area-inset-bottom)) + 74px);margin:0;font-size:12px;color:var(--ink2);white-space:nowrap;pointer-events:none;transition:opacity .8s;text-shadow:0 1px 0 rgba(255,255,255,.5)}
+.hint.gone{opacity:0}
+#fallback{position:fixed;inset:0;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at 50% 28%,#f1e9df,#d6c9ba);z-index:10;overflow:auto}
+#fallback[hidden]{display:none}
+.card{max-width:470px;background:var(--paper);border:1px solid var(--rule);border-radius:20px;padding:30px 28px 24px;box-shadow:0 30px 60px -30px rgba(60,40,20,.45)}
+.card .k{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.card h2{margin:0 0 12px;font:400 38px/1 'Instrument Serif',Georgia,serif}
+.card p{margin:0 0 10px;color:var(--ink2)}
+.card .why{margin:16px 0;padding:12px 14px;border-radius:12px;background:#f1ebe3;font-size:13px;color:var(--ink)}
+.card code{font:12px ui-monospace,Menlo,monospace}
+@media (max-width:640px){
+  .bar{flex-wrap:wrap;justify-content:center;width:calc(100vw - 20px)}
+  .grp{padding:0 2px;gap:2px}
+  .chip{padding:3px 8px 3px 3px;font-size:13px;gap:5px}
+  .chip img{width:32px;height:32px}
+  #drop{width:100%;justify-content:center;margin:4px 2px 0}
+  #drop kbd{display:none}
+  .hint{bottom:calc(max(14px,env(safe-area-inset-bottom)) + 124px);font-size:11px;white-space:normal;text-align:center;width:calc(100vw - 40px)}
+  .mast h1{font-size:42px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<canvas id="view" tabindex="0" role="application" aria-roledescription="3D puddings" aria-label="Three character puddings on a frosted glass plate. Tap one to make it jiggle, drag to stretch it, press and hold to squish it, drag the table to orbit, scroll or pinch to zoom. Press Space or R to drop them."></canvas>
+<header class="mast"><h1>Pudding</h1><p>Jiggly character puddings <span>· WebGPU</span></p></header>
+<div class="top">
+  <button class="pill" id="setBtn" aria-expanded="false" aria-controls="panel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h7M12 4h2M2 12h2M7 12h7M9 2.5v3M7 10.5v3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>Settings</button>
+  <section id="panel" hidden aria-labelledby="setTitle">
+    <h2 id="setTitle">Settings</h2>
+    <div class="row"><label for="soft">Softness</label><input id="soft" type="range" min="0" max="100" value="78"></div>
+    <div class="row"><label for="decay">Wobble decay</label><input id="decay" type="range" min="0" max="100" value="18"></div>
+    <div class="row"><label for="slow">¼ speed</label><input id="slow" type="checkbox"></div>
+    <div class="row"><label for="mesh">Show mesh</label><input id="mesh" type="checkbox"></div>
+    <div class="row"><label for="snd">Sound</label><input id="snd" type="checkbox"></div>
+    <div class="row"><label for="pause">Pause</label><input id="pause" type="checkbox"></div>
+    <div class="btns"><button id="resetToys" type="button">Stand up</button><button id="resetView" type="button">Reset view</button></div>
+    <div class="fps" id="fps">— fps</div>
+  </section>
+</div>
+<p class="hint" id="hint">Tap to jiggle · drag to stretch · hold to squish · drag the table to orbit · scroll or pinch to zoom</p>
+<footer class="bar">
+  <div class="grp" role="group" aria-label="Puddings on the plate" id="chars"></div>
+  <button id="drop" type="button" aria-keyshortcuts="Space R">Drop <kbd aria-hidden="true">SPACE</kbd></button>
+</footer>
+<div id="fallback" hidden role="alert">
+  <div class="card">
+    <p class="k">Mallang Pudding</p>
+    <h2>This needs WebGPU</h2>
+    <p>The puddings are simulated on the CPU and rendered with raw WebGPU shaders (soft shadows, contact shading, skinned soft bodies). There is no WebGL fallback, so the scene can't start here.</p>
+    <p class="why" id="why">Checking…</p>
+    <p>Try a current Chrome, Edge or Arc on desktop or Android, or Safari 26+. On Linux Chrome you may need <code>chrome://flags/#enable-unsafe-webgpu</code>. The page must be served over https or from localhost.</p>
+  </div>
+</div>
+
+<script id="soft-physics">
+'use strict';
+/* ============================================================
+   Soft-body physics for arbitrary shapes. A shape is a voxel lattice
+   (5 tets per cell) built from a signed distance function; the visible
+   surface and the collision proxies are embedded in its cells.
+   Small-step XPBD. No DOM here (the headless test runs it in Node).
+   ============================================================ */
+const SoftPhysics = (() => {
+  const G = 25;
+  const RP = 4.2, PT = 0.12, RIM_R = 0.26, RIM_Y = 0.16;   // plate radius/thickness, rim tube radius/centre height
+  const MU_S = 1.0, MU_K = 0.7, MU_DS = 0.5, MU_DK = 0.35;
+  const ROLL_K = 3.5, SPIN_K = 7.0;
+  const SLEEP_V = 0.1, SLEEP_T = 0.3, ABSORB_T = 0.45;   // 0.1 u/s of wobble is a few thousandths of a unit: invisible
+  const SLOP = 0.004;   // contact slop: resting bodies may overlap a hair instead of fighting (that fight jitters)
+  const T_EVEN = [[0, 1, 2, 4], [3, 1, 2, 7], [5, 1, 4, 7], [6, 2, 4, 7], [1, 2, 4, 7]];
+  const T_ODD = [[1, 0, 3, 5], [2, 0, 3, 6], [4, 0, 5, 6], [7, 3, 5, 6], [0, 3, 5, 6]];
+
+  // a squishy: the 2D silhouette (signed distance d) inflated to half-thickness ht; a smooth max of width k rounds the rim
+  function puffy(d, ht, k, z) {
+    const b = Math.abs(z) - ht, hh = Math.max(k - Math.abs(d - b), 0) / k;
+    return Math.max(d, b) + hh * hh * k * 0.25;
+  }
+
+  // a pudding mould: truncated cone (bottom radius rb, top radius rt, height h, base at y=0) with rounded edges r and a soft dome
+  function pudding(x, y, z, rb, rt, h, r) {
+    const q = Math.hypot(x, z), py = y - h / 2, r1 = rb - r, r2 = rt - r, he = h / 2 - r;   // Quilez's trapezoid in (radius, height)
+    const k2x = r2 - r1, k2y = 2 * he;
+    const cax = q - Math.min(q, py < 0 ? r1 : r2), cay = Math.abs(py) - he;
+    const t = Math.min(Math.max(((r2 - q) * k2x + (he - py) * k2y) / (k2x * k2x + k2y * k2y), 0), 1);
+    const cbx = q - r2 + k2x * t, cby = py - he + k2y * t, s = cbx < 0 && cay < 0 ? -1 : 1;
+    const dome = 0.07 * Math.max(0, 1 - q / rt) * Math.min(Math.max((y - h + 0.45) / 0.45, 0), 1);
+    return s * Math.sqrt(Math.min(cax * cax + cay * cay, cbx * cbx + cby * cby)) - r - dome;
+  }
+  const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+
+  // watertight mesh of the zero level set (naive surface nets), vertices projected onto the surface
+  function surfaceNets(sdf, lo, hi, h) {
+    const n = [0, 1, 2].map(a => Math.ceil((hi[a] - lo[a]) / h) + 1), [nx, ny, nz] = n;
+    const val = new Float32Array(nx * ny * nz), P = (i, j, k) => i + nx * (j + ny * k);
+    for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) val[P(i, j, k)] = sdf(lo[0] + i * h, lo[1] + j * h, lo[2] + k * h);
+    const C = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k), cid = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1);
+    const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+    const pos = [], v = new Float64Array(8);
+    for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      let neg = 0;
+      for (let b = 0; b < 8; b++) { v[b] = val[P(i + (b & 1), j + (b >> 1 & 1), k + (b >> 2 & 1))]; if (v[b] < 0) neg++; }
+      if (neg === 0 || neg === 8) continue;
+      let sx = 0, sy = 0, sz = 0, c = 0;
+      for (const [a, b] of E) {
+        if ((v[a] < 0) === (v[b] < 0)) continue;
+        const t = v[a] / (v[a] - v[b]);
+        sx += (a & 1) + ((b & 1) - (a & 1)) * t; sy += (a >> 1 & 1) + ((b >> 1 & 1) - (a >> 1 & 1)) * t; sz += (a >> 2 & 1) + ((b >> 2 & 1) - (a >> 2 & 1)) * t; c++;
+      }
+      cid[C(i, j, k)] = pos.length / 3;
+      pos.push(lo[0] + (i + sx / c) * h, lo[1] + (j + sy / c) * h, lo[2] + (k + sz / c) * h);
+    }
+    const idx = [], e = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const p = [i, j, k];
+      for (let a = 0; a < 3; a++) {
+        const b = (a + 1) % 3, c = (a + 2) % 3;
+        if (p[a] >= n[a] - 1 || p[b] < 1 || p[c] < 1 || p[b] > n[b] - 2 || p[c] > n[c] - 2) continue;
+        const v0 = val[P(i, j, k)], v1 = val[P(i + e[a][0], j + e[a][1], k + e[a][2])];
+        if ((v0 < 0) === (v1 < 0)) continue;
+        const q = (db, dc) => { const r = p.slice(); r[b] -= db; r[c] -= dc; return cid[C(r[0], r[1], r[2])]; };
+        const c0 = q(0, 0), c1 = q(1, 0), c2 = q(1, 1), c3 = q(0, 1);
+        if (c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0) continue;
+        if (v0 < 0) idx.push(c0, c1, c2, c0, c2, c3); else idx.push(c0, c2, c1, c0, c3, c2);
+      }
+    }
+    // Taubin smoothing (shrink-free) irons out the nets' stair steps; normals then come from the smoothed faces
+    const P3 = Float64Array.from(pos), NVn = P3.length / 3, nb = Array.from({ length: NVn }, () => new Set());
+    for (let t = 0; t < idx.length; t += 3) for (let k = 0; k < 3; k++) { const a = idx[t + k], b = idx[t + (k + 1) % 3]; nb[a].add(b); nb[b].add(a); }
+    const tmp = new Float64Array(P3.length);
+    for (let it = 0; it < 8; it++) for (const lam of [0.5, -0.53]) {
+      for (let v = 0; v < NVn; v++) {
+        let sx = 0, sy = 0, sz = 0; for (const u of nb[v]) { sx += P3[u * 3]; sy += P3[u * 3 + 1]; sz += P3[u * 3 + 2]; }
+        const n = nb[v].size || 1;
+        tmp[v * 3] = P3[v * 3] + lam * (sx / n - P3[v * 3]); tmp[v * 3 + 1] = P3[v * 3 + 1] + lam * (sy / n - P3[v * 3 + 1]); tmp[v * 3 + 2] = P3[v * 3 + 2] + lam * (sz / n - P3[v * 3 + 2]);
+      }
+      P3.set(tmp);
+    }
+    const nrm = new Float64Array(P3.length);
+    for (let t = 0; t < idx.length; t += 3) {
+      const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+      const ux = P3[b] - P3[a], uy = P3[b + 1] - P3[a + 1], uz = P3[b + 2] - P3[a + 2], vx = P3[c] - P3[a], vy = P3[c + 1] - P3[a + 1], vz = P3[c + 2] - P3[a + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      for (const o of [a, b, c]) { nrm[o] += nx; nrm[o + 1] += ny; nrm[o + 2] += nz; }
+    }
+    for (let o = 0; o < nrm.length; o += 3) { const l = Math.hypot(nrm[o], nrm[o + 1], nrm[o + 2]) || 1; nrm[o] /= l; nrm[o + 1] /= l; nrm[o + 2] /= l; }
+    return { pos: P3, nrm, idx: Uint32Array.from(idx) };
+  }
+
+  const inv3 = m => { // column-major 3x3 inverse
+    const [a, b, c, d, e, f, g, h, i] = m;
+    const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g, r = 1 / (a * A + b * B + c * C);
+    return [A * r, (c * h - b * i) * r, (b * f - c * e) * r, B * r, (a * i - c * g) * r, (c * d - a * f) * r, C * r, (b * g - a * h) * r, (a * e - b * d) * r];
+  };
+
+  // voxel lattice + embedding of the mesh + collision proxies + a sampled SDF for body-body contact and picking
+  function buildShape(sdf, lo, hi, cell, mesh) {
+    const dims = [0, 1, 2].map(a => Math.max(1, Math.ceil((hi[a] - lo[a]) / cell))), [cx, cy, cz] = dims;
+    const org = [0, 1, 2].map(a => (lo[a] + hi[a]) / 2 - dims[a] * cell / 2);
+    const gi = (i, j, k) => i + cx * (j + cy * k);
+    const ijk = (x, y, z) => [x, y, z].map((v, a) => Math.min(dims[a] - 1, Math.max(0, Math.floor((v - org[a]) / cell))));
+    const active = new Uint8Array(cx * cy * cz);
+    for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++)
+      if (sdf(org[0] + (i + 0.5) * cell, org[1] + (j + 0.5) * cell, org[2] + (k + 0.5) * cell) < 0.87 * cell) active[gi(i, j, k)] = 1;
+    const NVm = mesh.pos.length / 3;
+    for (let v = 0; v < NVm; v++) { const [i, j, k] = ijk(mesh.pos[v * 3], mesh.pos[v * 3 + 1], mesh.pos[v * 3 + 2]); active[gi(i, j, k)] = 1; }
+    const ngi = (i, j, k) => i + (cx + 1) * (j + (cy + 1) * k), nid = new Int32Array((cx + 1) * (cy + 1) * (cz + 1)).fill(-1);
+    const Xl = [], cellMap = new Int32Array(cx * cy * cz).fill(-1), cn = [], cijk = [];
+    for (let k = 0; k < cz; k++) for (let j = 0; j < cy; j++) for (let i = 0; i < cx; i++) {
+      if (!active[gi(i, j, k)]) continue;
+      cellMap[gi(i, j, k)] = cijk.length; cijk.push([i, j, k]);
+      for (let b = 0; b < 8; b++) {
+        const a = [i + (b & 1), j + (b >> 1 & 1), k + (b >> 2 & 1)], g = ngi(a[0], a[1], a[2]);
+        if (nid[g] < 0) { nid[g] = Xl.length / 3; Xl.push(org[0] + a[0] * cell, org[1] + a[1] * cell, org[2] + a[2] * cell); }
+        cn.push(nid[g]);
+      }
+    }
+    const NN = Xl.length / 3, NCL = cijk.length, X = Float64Array.from(Xl), cellN = Int32Array.from(cn);
+    const com = [0, 0, 0];
+    for (let n = 0; n < NN; n++) for (let a = 0; a < 3; a++) com[a] += X[n * 3 + a] / NN;
+    const Xc = X.map((v, i) => v - com[i % 3]);
+    const cellOff = new Float64Array(NCL * 24);
+    for (let c = 0; c < NCL; c++) {
+      const m = [0, 0, 0];
+      for (let b = 0; b < 8; b++) for (let a = 0; a < 3; a++) m[a] += X[cellN[c * 8 + b] * 3 + a] / 8;
+      for (let b = 0; b < 8; b++) for (let a = 0; a < 3; a++) cellOff[(c * 8 + b) * 3 + a] = X[cellN[c * 8 + b] * 3 + a] - m[a];
+    }
+    const vol6 = (p, q, r, s) => {
+      const e = (u, w) => [X[w * 3] - X[u * 3], X[w * 3 + 1] - X[u * 3 + 1], X[w * 3 + 2] - X[u * 3 + 2]];
+      const a = e(p, q), b = e(p, r), d = e(p, s);
+      return (a[1] * b[2] - a[2] * b[1]) * d[0] + (a[2] * b[0] - a[0] * b[2]) * d[1] + (a[0] * b[1] - a[1] * b[0]) * d[2];
+    };
+    const tl = [];
+    for (let c = 0; c < NCL; c++) {
+      const [i, j, k] = cijk[c];
+      for (const t of ((i + j + k) & 1) ? T_ODD : T_EVEN) {
+        const q = t.map(b => cellN[c * 8 + b]);
+        if (vol6(q[0], q[1], q[2], q[3]) < 0) { const s = q[2]; q[2] = q[3]; q[3] = s; }
+        tl.push(...q);
+      }
+    }
+    const NT = tl.length / 4, tetN = Int32Array.from(tl);
+    const tetV6 = new Float64Array(NT), tetOff = new Float64Array(NT * 12), tetDmInv = new Float64Array(NT * 9);
+    for (let t = 0; t < NT; t++) {
+      const q = [0, 1, 2, 3].map(a => tetN[t * 4 + a]);
+      tetV6[t] = vol6(q[0], q[1], q[2], q[3]);
+      const m = [0, 0, 0];
+      for (const n of q) for (let a = 0; a < 3; a++) m[a] += X[n * 3 + a] / 4;
+      q.forEach((n, s) => { for (let a = 0; a < 3; a++) tetOff[t * 12 + s * 3 + a] = X[n * 3 + a] - m[a]; });
+      const Dm = [];
+      for (let s = 1; s < 4; s++) for (let a = 0; a < 3; a++) Dm.push(X[q[s] * 3 + a] - X[q[0] * 3 + a]);
+      tetDmInv.set(inv3(Dm), t * 9);
+    }
+    const eset = new Map();
+    for (let t = 0; t < NT; t++) for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) {
+      const p = Math.min(tetN[t * 4 + a], tetN[t * 4 + b]), q = Math.max(tetN[t * 4 + a], tetN[t * 4 + b]);
+      eset.set(p * NN + q, [p, q]);
+    }
+    const NE = eset.size, edges = new Int32Array(NE * 2), edgeL = new Float64Array(NE);
+    [...eset.values()].forEach(([p, q], e) => { edges[e * 2] = p; edges[e * 2 + 1] = q; edgeL[e] = Math.hypot(X[p * 3] - X[q * 3], X[p * 3 + 1] - X[q * 3 + 1], X[p * 3 + 2] - X[q * 3 + 2]); });
+    const embed = (x, y, z, outN, outW, o) => {
+      const [i, j, k] = ijk(x, y, z), c = cellMap[gi(i, j, k)];
+      const f = [(x - org[0]) / cell - i, (y - org[1]) / cell - j, (z - org[2]) / cell - k];
+      for (let b = 0; b < 8; b++) {
+        outN[o + b] = cellN[c * 8 + b];
+        outW[o + b] = (b & 1 ? f[0] : 1 - f[0]) * (b & 2 ? f[1] : 1 - f[1]) * (b & 4 ? f[2] : 1 - f[2]);
+      }
+      return f;
+    };
+    const vN = new Int32Array(NVm * 8), vW = new Float64Array(NVm * 8), vF = new Float64Array(NVm * 3);
+    let minY = Infinity, halfW = 0;
+    for (let v = 0; v < NVm; v++) {
+      vF.set(embed(mesh.pos[v * 3], mesh.pos[v * 3 + 1], mesh.pos[v * 3 + 2], vN, vW, v * 8), v * 3);
+      minY = Math.min(minY, mesh.pos[v * 3 + 1]); halfW = Math.max(halfW, Math.abs(mesh.pos[v * 3] - com[0]));
+    }
+    // collision proxies: an even subset of surface points, one per small hash cell
+    const ps = cell * 0.7, seen = new Set(), pv = [];
+    for (let v = 0; v < NVm; v++) {
+      const key = [0, 1, 2].map(a => Math.floor(mesh.pos[v * 3 + a] / ps)).join(',');
+      if (!seen.has(key)) { seen.add(key); pv.push(v); }
+    }
+    const NP = pv.length, pN = new Int32Array(NP * 8), pW = new Float64Array(NP * 8), pW2 = new Float64Array(NP);
+    let nBottom = 0;
+    pv.forEach((v, p) => {
+      for (let b = 0; b < 8; b++) { pN[p * 8 + b] = vN[v * 8 + b]; pW[p * 8 + b] = vW[v * 8 + b]; pW2[p] += vW[v * 8 + b] ** 2; }
+      if (mesh.pos[v * 3 + 1] < minY + 0.06) nBottom++;
+    });
+    // sampled SDF (rest shape) for body-body contact and ray picking
+    const sg = 0.05, so = lo.map(v => v - 0.1), sn = [0, 1, 2].map(a => Math.ceil((hi[a] - lo[a] + 0.2) / sg) + 1);
+    const sv = new Float32Array(sn[0] * sn[1] * sn[2]);
+    for (let k = 0; k < sn[2]; k++) for (let j = 0; j < sn[1]; j++) for (let i = 0; i < sn[0]; i++) sv[i + sn[0] * (j + sn[1] * k)] = sdf(so[0] + i * sg, so[1] + j * sg, so[2] + k * sg);
+    return {
+      NN, NCL, NT, NE, NP, X, Xc, com, cell, org, dims, cellMap, cellN, cellOff, tetN, tetV6, tetOff, tetDmInv, edges, edgeL,
+      vN, vW, vF, NV: NVm, pN, pW, pW2, minYc: minY - com[1], halfW,
+      adh: 0.8 * NN * G / Math.max(4, nBottom),   // base suction per proxy, ~0.8x the weight in total
+      sg, so, sn, sv,
+    };
+  }
+  // trilinear sample of a shape's SDF grid; outside the grid, add the distance to it
+  function sdfAt(S, x, y, z) {
+    const g = S.sg, n = S.sn;
+    let u = (x - S.so[0]) / g, v = (y - S.so[1]) / g, w = (z - S.so[2]) / g;
+    const cu = Math.min(Math.max(u, 0), n[0] - 1.001), cv = Math.min(Math.max(v, 0), n[1] - 1.001), cw = Math.min(Math.max(w, 0), n[2] - 1.001);
+    const extra = Math.hypot(u - cu, v - cv, w - cw) * g;
+    const i = Math.floor(cu), j = Math.floor(cv), k = Math.floor(cw), fu = cu - i, fv = cv - j, fw = cw - k, sx = 1, sy = n[0], sz = n[0] * n[1];
+    const o = i + j * sy + k * sz, d = S.sv;
+    const a = d[o] + (d[o + sx] - d[o]) * fu, b = d[o + sy] + (d[o + sy + sx] - d[o + sy]) * fu;
+    const c = d[o + sz] + (d[o + sz + sx] - d[o + sz]) * fu, e = d[o + sz + sy] + (d[o + sz + sy + sx] - d[o + sz + sy]) * fu;
+    const p = a + (b - a) * fv, q = c + (e - c) * fv;
+    return p + (q - p) * fw + extra;
+  }
+  const GR = new Float64Array(3);
+  function sdfGrad(S, x, y, z) {
+    const e = S.sg * 0.5;
+    GR[0] = sdfAt(S, x + e, y, z) - sdfAt(S, x - e, y, z); GR[1] = sdfAt(S, x, y + e, z) - sdfAt(S, x, y - e, z); GR[2] = sdfAt(S, x, y, z + e) - sdfAt(S, x, y, z - e);
+    const l = Math.hypot(GR[0], GR[1], GR[2]) || 1;
+    GR[0] /= l; GR[1] /= l; GR[2] /= l;
+  }
+  // trilinear weights of a shape-space point in its lattice; returns the cell, or -1 outside the lattice
+  const GW = new Float64Array(8);
+  function gridWeights(S, x, y, z) {
+    const f = [(x - S.org[0]) / S.cell, (y - S.org[1]) / S.cell, (z - S.org[2]) / S.cell], c = [0, 0, 0];
+    for (let a = 0; a < 3; a++) { c[a] = Math.min(S.dims[a] - 1, Math.max(0, Math.floor(f[a]))); f[a] = Math.min(1, Math.max(0, f[a] - c[a])); }
+    const cl = S.cellMap[c[0] + S.dims[0] * (c[1] + S.dims[1] * c[2])];
+    if (cl < 0) return -1;
+    for (let b = 0; b < 8; b++) GW[b] = (b & 1 ? f[0] : 1 - f[0]) * (b & 2 ? f[1] : 1 - f[1]) * (b & 4 ? f[2] : 1 - f[2]);
+    return cl;
+  }
+
+  // rotation extraction (Müller et al. 2016), warm-started quaternion, always a proper rotation
+  const Rm = new Float64Array(9);
+  function extractRot(a00, a10, a20, a01, a11, a21, a02, a12, a22, q, o, iters) {
+    let x = q[o], y = q[o + 1], z = q[o + 2], w = q[o + 3];
+    let r00, r10, r20, r01, r11, r21, r02, r12, r22;
+    for (let it = 0; ; it++) {
+      const xx = x * x, yy = y * y, zz = z * z, xy = x * y, xz = x * z, yz = y * z, wx = w * x, wy = w * y, wz = w * z;
+      r00 = 1 - 2 * (yy + zz); r10 = 2 * (xy + wz); r20 = 2 * (xz - wy);
+      r01 = 2 * (xy - wz); r11 = 1 - 2 * (xx + zz); r21 = 2 * (yz + wx);
+      r02 = 2 * (xz + wy); r12 = 2 * (yz - wx); r22 = 1 - 2 * (xx + yy);
+      if (it === iters) break;
+      let ox = r10 * a20 - r20 * a10 + r11 * a21 - r21 * a11 + r12 * a22 - r22 * a12;
+      let oy = r20 * a00 - r00 * a20 + r21 * a01 - r01 * a21 + r22 * a02 - r02 * a22;
+      let oz = r00 * a10 - r10 * a00 + r01 * a11 - r11 * a01 + r02 * a12 - r12 * a02;
+      const den = 1 / (Math.abs(r00 * a00 + r10 * a10 + r20 * a20 + r01 * a01 + r11 * a11 + r21 * a21 + r02 * a02 + r12 * a12 + r22 * a22) + 1e-9);
+      ox *= den; oy *= den; oz *= den;
+      const ang = Math.sqrt(ox * ox + oy * oy + oz * oz);
+      if (ang < 1e-9) { it = iters - 1; continue; }
+      const s = Math.sin(ang * 0.5) / ang, qw = Math.cos(ang * 0.5), qx = ox * s, qy = oy * s, qz = oz * s;
+      const nx = qw * x + qx * w + qy * z - qz * y, ny = qw * y - qx * z + qy * w + qz * x, nz = qw * z + qx * y - qy * x + qz * w, nw = qw * w - qx * x - qy * y - qz * z;
+      const il = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz + nw * nw);
+      x = nx * il; y = ny * il; z = nz * il; w = nw * il;
+    }
+    q[o] = x; q[o + 1] = y; q[o + 2] = z; q[o + 3] = w;
+    Rm[0] = r00; Rm[1] = r10; Rm[2] = r20; Rm[3] = r01; Rm[4] = r11; Rm[5] = r21; Rm[6] = r02; Rm[7] = r12; Rm[8] = r22;
+  }
+  const quatMat = (q, R) => {
+    const [x, y, z, w] = q;
+    R[0] = 1 - 2 * (y * y + z * z); R[1] = 2 * (x * y + w * z); R[2] = 2 * (x * z - w * y);
+    R[3] = 2 * (x * y - w * z); R[4] = 1 - 2 * (x * x + z * z); R[5] = 2 * (y * z + w * x);
+    R[6] = 2 * (x * z + w * y); R[7] = 2 * (y * z - w * x); R[8] = 1 - 2 * (x * x + y * y);
+    return R;
+  };
+  const qmul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+  const axisQ = (ax, ay, az, t) => [ax * Math.sin(t / 2), ay * Math.sin(t / 2), az * Math.sin(t / 2), Math.cos(t / 2)];
+
+  class Body {
+    constructor(i, S) {
+      this.i = i; this.S = S;
+      this.x = new Float64Array(S.NN * 3); this.xp = new Float64Array(S.NN * 3); this.v = new Float64Array(S.NN * 3);
+      this.qt = new Float64Array(S.NT * 4); this.qc = new Float64Array(S.NCL * 4);
+      this.fr = new Float64Array(S.NN * 3); this.fw = new Float64Array(S.NN);   // friction gather (see proxyContact)
+      this.q = new Float64Array([0, 0, 0, 1]); this.R = new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+      this.c = new Float64Array(3); this.vc = new Float64Array(3); this.w = new Float64Array(3);
+      this.min = new Float64Array(3); this.max = new Float64Array(3);
+      this.awake = true; this.calm = 0; this.speed = 0; this.rig = 1; this.wob = 1; this.contacts = 0; this.air = 1;
+      this.absorb = 0; this.absorbT = 0;
+    }
+  }
+
+  // ---------------- solver pieces ----------------
+  function integrate(d, h) {
+    const x = d.x, xp = d.xp, v = d.v, gh = G * h, N3 = d.S.NN * 3;
+    for (let o = 0; o < N3; o += 3) {
+      xp[o] = x[o]; xp[o + 1] = x[o + 1]; xp[o + 2] = x[o + 2];
+      v[o + 1] -= gh;
+      x[o] += v[o] * h; x[o + 1] += v[o + 1] * h; x[o + 2] += v[o + 2] * h;
+    }
+  }
+  function solveCells(d, beta) {   // co-rotational shape matching per cell
+    const x = d.x, q = d.qc, S = d.S, cellN = S.cellN, cellOff = S.cellOff;
+    for (let c = 0; c < S.NCL; c++) {
+      const o8 = c * 8;
+      let cx = 0, cy = 0, cz = 0;
+      for (let b = 0; b < 8; b++) { const n = cellN[o8 + b] * 3; cx += x[n]; cy += x[n + 1]; cz += x[n + 2]; }
+      cx *= 0.125; cy *= 0.125; cz *= 0.125;
+      let a00 = 0, a01 = 0, a02 = 0, a10 = 0, a11 = 0, a12 = 0, a20 = 0, a21 = 0, a22 = 0;
+      for (let b = 0; b < 8; b++) {
+        const n = cellN[o8 + b] * 3, r = (o8 + b) * 3, px = x[n] - cx, py = x[n + 1] - cy, pz = x[n + 2] - cz, X0 = cellOff[r], X1 = cellOff[r + 1], X2 = cellOff[r + 2];
+        a00 += px * X0; a01 += px * X1; a02 += px * X2; a10 += py * X0; a11 += py * X1; a12 += py * X2; a20 += pz * X0; a21 += pz * X1; a22 += pz * X2;
+      }
+      extractRot(a00, a10, a20, a01, a11, a21, a02, a12, a22, q, c * 4, 1);
+      const r00 = Rm[0], r10 = Rm[1], r20 = Rm[2], r01 = Rm[3], r11 = Rm[4], r21 = Rm[5], r02 = Rm[6], r12 = Rm[7], r22 = Rm[8];
+      for (let b = 0; b < 8; b++) {
+        const n = cellN[o8 + b] * 3, r = (o8 + b) * 3, X0 = cellOff[r], X1 = cellOff[r + 1], X2 = cellOff[r + 2];
+        x[n] += beta * (cx + r00 * X0 + r01 * X1 + r02 * X2 - x[n]);
+        x[n + 1] += beta * (cy + r10 * X0 + r11 * X1 + r12 * X2 - x[n + 1]);
+        x[n + 2] += beta * (cz + r20 * X0 + r21 * X1 + r22 * X2 - x[n + 2]);
+      }
+    }
+  }
+  function solveTets(d, beta) {   // co-rotational shape matching per tet (rotation from the deformation gradient)
+    const x = d.x, q = d.qt, S = d.S, tetN = S.tetN, Dm = S.tetDmInv, tetOff = S.tetOff;
+    for (let t = 0; t < S.NT; t++) {
+      const t4 = t * 4, n0 = tetN[t4] * 3, n1 = tetN[t4 + 1] * 3, n2 = tetN[t4 + 2] * 3, n3 = tetN[t4 + 3] * 3;
+      const e1x = x[n1] - x[n0], e1y = x[n1 + 1] - x[n0 + 1], e1z = x[n1 + 2] - x[n0 + 2];
+      const e2x = x[n2] - x[n0], e2y = x[n2 + 1] - x[n0 + 1], e2z = x[n2 + 2] - x[n0 + 2];
+      const e3x = x[n3] - x[n0], e3y = x[n3 + 1] - x[n0 + 1], e3z = x[n3 + 2] - x[n0 + 2];
+      const m = t * 9, m0 = Dm[m], m1 = Dm[m + 1], m2 = Dm[m + 2], m3 = Dm[m + 3], m4 = Dm[m + 4], m5 = Dm[m + 5], m6 = Dm[m + 6], m7 = Dm[m + 7], m8 = Dm[m + 8];
+      extractRot(
+        e1x * m0 + e2x * m1 + e3x * m2, e1y * m0 + e2y * m1 + e3y * m2, e1z * m0 + e2z * m1 + e3z * m2,
+        e1x * m3 + e2x * m4 + e3x * m5, e1y * m3 + e2y * m4 + e3y * m5, e1z * m3 + e2z * m4 + e3z * m5,
+        e1x * m6 + e2x * m7 + e3x * m8, e1y * m6 + e2y * m7 + e3y * m8, e1z * m6 + e2z * m7 + e3z * m8, q, t4, 1);
+      const cx = (x[n0] + x[n1] + x[n2] + x[n3]) * 0.25, cy = (x[n0 + 1] + x[n1 + 1] + x[n2 + 1] + x[n3 + 1]) * 0.25, cz = (x[n0 + 2] + x[n1 + 2] + x[n2 + 2] + x[n3 + 2]) * 0.25;
+      const r00 = Rm[0], r10 = Rm[1], r20 = Rm[2], r01 = Rm[3], r11 = Rm[4], r21 = Rm[5], r02 = Rm[6], r12 = Rm[7], r22 = Rm[8], to = t * 12;
+      for (let a = 0; a < 4; a++) {
+        const n = tetN[t4 + a] * 3, X0 = tetOff[to + a * 3], X1 = tetOff[to + a * 3 + 1], X2 = tetOff[to + a * 3 + 2];
+        x[n] += beta * (cx + r00 * X0 + r01 * X1 + r02 * X2 - x[n]);
+        x[n + 1] += beta * (cy + r10 * X0 + r11 * X1 + r12 * X2 - x[n + 1]);
+        x[n + 2] += beta * (cz + r20 * X0 + r21 * X1 + r22 * X2 - x[n + 2]);
+      }
+    }
+  }
+  function solveVolumes(d) {   // XPBD tet volume, hard: nearly incompressible, and inverted tets are pushed back
+    const x = d.x, S = d.S, tetN = S.tetN, V6 = S.tetV6;
+    for (let t = 0; t < S.NT; t++) {
+      const t4 = t * 4, n0 = tetN[t4] * 3, n1 = tetN[t4 + 1] * 3, n2 = tetN[t4 + 2] * 3, n3 = tetN[t4 + 3] * 3;
+      const e1x = x[n1] - x[n0], e1y = x[n1 + 1] - x[n0 + 1], e1z = x[n1 + 2] - x[n0 + 2];
+      const e2x = x[n2] - x[n0], e2y = x[n2 + 1] - x[n0 + 1], e2z = x[n2 + 2] - x[n0 + 2];
+      const e3x = x[n3] - x[n0], e3y = x[n3 + 1] - x[n0 + 1], e3z = x[n3 + 2] - x[n0 + 2];
+      const g1x = e2y * e3z - e2z * e3y, g1y = e2z * e3x - e2x * e3z, g1z = e2x * e3y - e2y * e3x;
+      const g2x = e3y * e1z - e3z * e1y, g2y = e3z * e1x - e3x * e1z, g2z = e3x * e1y - e3y * e1x;
+      const g3x = e1y * e2z - e1z * e2y, g3y = e1z * e2x - e1x * e2z, g3z = e1x * e2y - e1y * e2x;
+      const g0x = -g1x - g2x - g3x, g0y = -g1y - g2y - g3y, g0z = -g1z - g2z - g3z;
+      const C = e1x * g1x + e1y * g1y + e1z * g1z - V6[t];
+      const w = g0x * g0x + g0y * g0y + g0z * g0z + g1x * g1x + g1y * g1y + g1z * g1z + g2x * g2x + g2y * g2y + g2z * g2z + g3x * g3x + g3y * g3y + g3z * g3z;
+      if (w < 1e-12) continue;
+      const l = -C / w;
+      x[n0] += l * g0x; x[n0 + 1] += l * g0y; x[n0 + 2] += l * g0z; x[n1] += l * g1x; x[n1 + 1] += l * g1y; x[n1 + 2] += l * g1z;
+      x[n2] += l * g2x; x[n2 + 1] += l * g2y; x[n2 + 2] += l * g2z; x[n3] += l * g3x; x[n3 + 1] += l * g3y; x[n3 + 2] += l * g3z;
+    }
+  }
+  function solveStrain(d) {   // hard strain limit: no edge past 1.55x or below 0.55x its rest length
+    const x = d.x, S = d.S, edges = S.edges, edgeL = S.edgeL;
+    for (let e = 0; e < S.NE; e++) {
+      const a = edges[e * 2] * 3, b = edges[e * 2 + 1] * 3, dx = x[b] - x[a], dy = x[b + 1] - x[a + 1], dz = x[b + 2] - x[a + 2];
+      const l = Math.sqrt(dx * dx + dy * dy + dz * dz), L0 = edgeL[e];
+      let tgt;
+      if (l > 1.55 * L0) tgt = 1.55 * L0; else if (l < 0.55 * L0) tgt = 0.55 * L0; else continue;
+      const s = 0.5 * (l - tgt) / Math.max(l, 1e-9);
+      x[a] += dx * s; x[a + 1] += dy * s; x[a + 2] += dz * s; x[b] -= dx * s; x[b + 1] -= dy * s; x[b + 2] -= dz * s;
+    }
+  }
+  // positional contact of one embedded surface point, spread over its 8 nodes. Friction is only gathered here and
+  // applied per node as an average afterwards: neighbouring points share nodes, and applying each in turn rings sideways
+  function proxyContact(d, x, xp, pN, pW, o8, W, nx, ny, nz, pen, mus, muk) {
+    const lam = pen / W, fr = d.fr, fw = d.fw;
+    let sx = 0, sy = 0, sz = 0, qx = 0, qy = 0, qz = 0;
+    for (let k = 0; k < 8; k++) {
+      const n = pN[o8 + k] * 3, w = pW[o8 + k];
+      x[n] += nx * lam * w; x[n + 1] += ny * lam * w; x[n + 2] += nz * lam * w;
+      sx += x[n] * w; sy += x[n + 1] * w; sz += x[n + 2] * w; qx += xp[n] * w; qy += xp[n + 1] * w; qz += xp[n + 2] * w;
+    }
+    const dx = sx - qx, dy = sy - qy, dz = sz - qz, dn = dx * nx + dy * ny + dz * nz;
+    const tx = dx - nx * dn, ty = dy - ny * dn, tz = dz - nz * dn, tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+    if (tl < 1e-12) return;
+    const k = tl < mus * pen ? 1 : Math.min(muk * pen / tl, 1);
+    for (let j = 0; j < 8; j++) { const n = pN[o8 + j], w = pW[o8 + j], o = n * 3; fr[o] -= tx * k * w; fr[o + 1] -= ty * k * w; fr[o + 2] -= tz * k * w; fw[n] += w; }
+  }
+  function solveFloor(d, mus, h, sticky) {
+    const S = d.S, x = d.x, xp = d.xp, pN = S.pN, pW = S.pW, pW2 = S.pW2;
+    const reach = Math.max(-d.min[0], d.max[0], -d.min[2], d.max[2]);
+    if (d.min[1] > 0.2 && reach < RP - RIM_R - 0.3) return 0;   // nowhere near the plate or the rim
+    const cap = sticky ? S.adh * h * h : 0;
+    let cnt = 0;
+    for (let p = 0; p < S.NP; p++) {
+      const o8 = p * 8;
+      let px = 0, py = 0, pz = 0;
+      for (let k = 0; k < 8; k++) { const n = pN[o8 + k] * 3, w = pW[o8 + k]; px += x[n] * w; py += x[n + 1] * w; pz += x[n + 2] * w; }
+      const r = Math.sqrt(px * px + pz * pz);
+      if (r > RP - 0.6 && r < RP + 0.6 && r > 1e-6) {   // raised rim (torus)
+        const qx = r - RP, qy = py - RIM_Y, ql = Math.sqrt(qx * qx + qy * qy);
+        if (ql < RIM_R && ql > 1e-9) { const s = qx / ql / r; proxyContact(d, x, xp, pN, pW, o8, pW2[p], px * s, qy / ql, pz * s, RIM_R - ql, mus, MU_K); cnt++; continue; }
+      }
+      const fy = r < RP ? 0 : -PT;
+      if (py < fy) { proxyContact(d, x, xp, pN, pW, o8, pW2[p], 0, 1, 0, fy - py, mus, MU_K); cnt++; }
+      else if (cap && py < fy + 0.06) {   // squishies are a little sticky while held: the base peels off edge by edge
+        const dy = Math.min((py - fy) * 0.35, cap) / pW2[p];
+        for (let k = 0; k < 8; k++) x[pN[o8 + k] * 3 + 1] -= pW[o8 + k] * dy;
+      }
+    }
+    if (cnt) {
+      const fr = d.fr, fw = d.fw;
+      for (let n = 0; n < S.NN; n++) {
+        if (fw[n] > 0) { const o = n * 3, iw = 1 / fw[n]; x[o] += fr[o] * iw; x[o + 1] += fr[o + 1] * iw; x[o + 2] += fr[o + 2] * iw; }
+        fw[n] = 0; fr[n * 3] = fr[n * 3 + 1] = fr[n * 3 + 2] = 0;
+      }
+    }
+    return cnt;
+  }
+  function frameOf(d) {   // rigid frame of the whole body (global shape match)
+    const x = d.x, Xc = d.S.Xc, N3 = d.S.NN * 3, NN = d.S.NN;
+    let cx = 0, cy = 0, cz = 0;
+    for (let o = 0; o < N3; o += 3) { cx += x[o]; cy += x[o + 1]; cz += x[o + 2]; }
+    cx /= NN; cy /= NN; cz /= NN;
+    let a00 = 0, a01 = 0, a02 = 0, a10 = 0, a11 = 0, a12 = 0, a20 = 0, a21 = 0, a22 = 0;
+    for (let o = 0; o < N3; o += 3) {
+      const px = x[o] - cx, py = x[o + 1] - cy, pz = x[o + 2] - cz, X0 = Xc[o], X1 = Xc[o + 1], X2 = Xc[o + 2];
+      a00 += px * X0; a01 += px * X1; a02 += px * X2; a10 += py * X0; a11 += py * X1; a12 += py * X2; a20 += pz * X0; a21 += pz * X1; a22 += pz * X2;
+    }
+    extractRot(a00, a10, a20, a01, a11, a21, a02, a12, a22, d.q, 0, 4);
+    d.R.set(Rm); d.c[0] = cx; d.c[1] = cy; d.c[2] = cz;
+  }
+  // surface points of A against the rest SDF of B (in B's frame); B's surface point is pushed back through its cell
+  function pushPair(A, B) {
+    const SA = A.S, SB = B.S, R = B.R, c = B.c, com = SB.com, x = A.x, xp = A.xp, bx = B.x, bxp = B.xp, wb = B.awake ? 1 : 0;
+    const pN = SA.pN, pW = SA.pW, mn = B.min, mx = B.max;
+    let hits = 0;
+    for (let p = 0; p < SA.NP; p++) {
+      const o8 = p * 8;
+      let px = 0, py = 0, pz = 0;
+      for (let k = 0; k < 8; k++) { const n = pN[o8 + k] * 3, w = pW[o8 + k]; px += x[n] * w; py += x[n + 1] * w; pz += x[n + 2] * w; }
+      if (px < mn[0] - 0.05 || px > mx[0] + 0.05 || py < mn[1] - 0.05 || py > mx[1] + 0.05 || pz < mn[2] - 0.05 || pz > mx[2] + 0.05) continue;
+      const dx = px - c[0], dy = py - c[1], dz = pz - c[2];
+      const lx = R[0] * dx + R[1] * dy + R[2] * dz + com[0], ly = R[3] * dx + R[4] * dy + R[5] * dz + com[1], lz = R[6] * dx + R[7] * dy + R[8] * dz + com[2];
+      const dist = sdfAt(SB, lx, ly, lz), pen = -dist - SLOP;
+      if (pen <= 0) continue;
+      sdfGrad(SB, lx, ly, lz);
+      const gx = GR[0], gy = GR[1], gz = GR[2];
+      const nx = R[0] * gx + R[3] * gy + R[6] * gz, ny = R[1] * gx + R[4] * gy + R[7] * gz, nz = R[2] * gx + R[5] * gy + R[8] * gz;
+      const cb = wb ? gridWeights(SB, lx - gx * dist, ly - gy * dist, lz - gz * dist) : -1;
+      let WB = 0;
+      if (cb >= 0) for (let b = 0; b < 8; b++) WB += GW[b] * GW[b];
+      const WA = SA.pW2[p], lam = pen / (WA + WB), c8 = cb * 8;
+      let sx = 0, sy = 0, sz = 0, qx = 0, qy = 0, qz = 0;
+      for (let k = 0; k < 8; k++) {
+        const n = pN[o8 + k] * 3, w = pW[o8 + k];
+        x[n] += nx * lam * w; x[n + 1] += ny * lam * w; x[n + 2] += nz * lam * w;
+        sx += (x[n] - xp[n]) * w; sy += (x[n + 1] - xp[n + 1]) * w; sz += (x[n + 2] - xp[n + 2]) * w;
+      }
+      if (cb >= 0) for (let b = 0; b < 8; b++) {
+        const m = SB.cellN[c8 + b] * 3, w = GW[b];
+        bx[m] -= nx * lam * w; bx[m + 1] -= ny * lam * w; bx[m + 2] -= nz * lam * w;
+        qx += (bx[m] - bxp[m]) * w; qy += (bx[m + 1] - bxp[m + 1]) * w; qz += (bx[m + 2] - bxp[m + 2]) * w;
+      }
+      const rx = sx - qx, ry = sy - qy, rz = sz - qz, rn = rx * nx + ry * ny + rz * nz;
+      const tx = rx - nx * rn, ty = ry - ny * rn, tz = rz - nz * rn, tl = Math.sqrt(tx * tx + ty * ty + tz * tz);
+      if (tl > 1e-12) {
+        const k = (tl < MU_DS * pen ? 1 : Math.min(MU_DK * pen / tl, 1)) / (WA + WB);
+        for (let j = 0; j < 8; j++) { const n = pN[o8 + j] * 3, w = pW[o8 + j] * k; x[n] -= tx * w; x[n + 1] -= ty * w; x[n + 2] -= tz * w; }
+        if (cb >= 0) for (let b = 0; b < 8; b++) { const m = SB.cellN[c8 + b] * 3, w = GW[b] * k; bx[m] += tx * w; bx[m + 1] += ty * w; bx[m + 2] += tz * w; }
+      }
+      hits++;
+    }
+    return hits;
+  }
+  function fitRigid(d) {   // least-squares rigid velocity (linear + angular) of the node cloud
+    const x = d.x, v = d.v, NN = d.S.NN, N3 = NN * 3;
+    let cx = 0, cy = 0, cz = 0, vx = 0, vy = 0, vz = 0;
+    for (let o = 0; o < N3; o += 3) { cx += x[o]; cy += x[o + 1]; cz += x[o + 2]; vx += v[o]; vy += v[o + 1]; vz += v[o + 2]; }
+    cx /= NN; cy /= NN; cz /= NN; vx /= NN; vy /= NN; vz /= NN;
+    let Lx = 0, Ly = 0, Lz = 0, Ixx = 0, Iyy = 0, Izz = 0, Ixy = 0, Ixz = 0, Iyz = 0;
+    for (let o = 0; o < N3; o += 3) {
+      const rx = x[o] - cx, ry = x[o + 1] - cy, rz = x[o + 2] - cz, ux = v[o] - vx, uy = v[o + 1] - vy, uz = v[o + 2] - vz;
+      Lx += ry * uz - rz * uy; Ly += rz * ux - rx * uz; Lz += rx * uy - ry * ux;
+      Ixx += ry * ry + rz * rz; Iyy += rx * rx + rz * rz; Izz += rx * rx + ry * ry; Ixy -= rx * ry; Ixz -= rx * rz; Iyz -= ry * rz;
+    }
+    const A = Iyy * Izz - Iyz * Iyz, B = Ixz * Iyz - Ixy * Izz, C = Ixy * Iyz - Ixz * Iyy, r = 1 / (Ixx * A + Ixy * B + Ixz * C);
+    const D = Ixx * Izz - Ixz * Ixz, E = Ixy * Ixz - Ixx * Iyz, F = Ixx * Iyy - Ixy * Ixy;
+    d.w[0] = (A * Lx + B * Ly + C * Lz) * r; d.w[1] = (B * Lx + D * Ly + E * Lz) * r; d.w[2] = (C * Lx + E * Ly + F * Lz) * r;
+    d.vc[0] = vx; d.vc[1] = vy; d.vc[2] = vz; d.c[0] = cx; d.c[1] = cy; d.c[2] = cz;
+  }
+  // new velocities; damping acts on the wobble only (deviation from the rigid fit), never on the rigid motion
+  function postSolve(d, h, kWob) {
+    const x = d.x, xp = d.xp, v = d.v, ih = 1 / h, N3 = d.S.NN * 3;
+    for (let o = 0; o < N3; o++) v[o] = (x[o] - xp[o]) * ih;
+    fitRigid(d);
+    const wx = d.w[0], wy = d.w[1], wz = d.w[2], vx = d.vc[0], vy = d.vc[1], vz = d.vc[2], cx = d.c[0], cy = d.c[1], cz = d.c[2];
+    let dwx = 0, dwy = 0, dwz = 0, dvy = 0, boost = 1;
+    if (d.contacts > 0) {   // rotational resistance on the plate
+      const kr = 1 - Math.exp(-ROLL_K * h), ks = 1 - Math.exp(-SPIN_K * h);
+      dwx = -wx * kr; dwy = -wy * ks; dwz = -wz * kr;
+    }
+    if (d.absorbT > 0) {   // heavy landing: soak up the rebound and the ringing, fading out smoothly
+      d.absorbT -= h;
+      const a = d.absorb * Math.max(0, d.absorbT / ABSORB_T);
+      boost = 1 + 7 * a;
+      const vmax = 0.25 + 2.5 * (1 - a);
+      if (vy > vmax) dvy = vmax - vy;
+    }
+    const k = 1 - Math.exp(-kWob * boost * h);
+    for (let o = 0; o < N3; o += 3) {
+      const rx = x[o] - cx, ry = x[o + 1] - cy, rz = x[o + 2] - cz;
+      const gx = vx + wy * rz - wz * ry, gy = vy + wz * rx - wx * rz, gz = vz + wx * ry - wy * rx;
+      v[o] += k * (gx - v[o]) + dwy * rz - dwz * ry;
+      v[o + 1] += k * (gy - v[o + 1]) + dwz * rx - dwx * rz + dvy;
+      v[o + 2] += k * (gz - v[o + 2]) + dwx * ry - dwy * rx;
+    }
+  }
+  function solveGrab(g, h) {
+    const d = g.die, x = d.x, R = g.R0, h2 = h * h, t = g.t;
+    for (let k = 0; k < g.n; k++) {
+      const o = g.nodes[k] * 3, w = g.w[k], ox = g.off[k * 3], oy = g.off[k * 3 + 1], oz = g.off[k * 3 + 2];
+      const dx = t[0] + R[0] * ox + R[3] * oy + R[6] * oz - x[o], dy = t[1] + R[1] * ox + R[4] * oy + R[7] * oz - x[o + 1], dz = t[2] + R[2] * ox + R[5] * oy + R[8] * oz - x[o + 2];
+      const b = g.k * w * h2;
+      let cx = dx * b, cy = dy * b, cz = dz * b;
+      const cl = Math.sqrt(cx * cx + cy * cy + cz * cz), cap = g.cap * w * h2;   // force cap
+      if (cl > cap) { const s = cap / cl; cx *= s; cy *= s; cz *= s; }
+      x[o] += cx; x[o + 1] += cy; x[o + 2] += cz;
+    }
+  }
+
+  class World {
+    constructor(shapes) {
+      this.bodies = shapes.map((S, i) => new Body(i, S));
+      this.act = this.bodies.slice();
+      this.softness = 0.78; this.decay = 0.18;
+      this.grab = null; this.onImpact = null; this.pairWas = new Set(); this.stepMs = 0;
+    }
+    setActive(ids) { this.act = this.bodies.filter(b => ids.includes(b.i)); if (this.grab && !this.act.includes(this.grab.die)) this.grab = null; }
+    place(d, p, q, v = [0, 0, 0], w = [0, 0, 0]) {
+      const R = quatMat(q, new Float64Array(9)), Xc = d.S.Xc;
+      for (let o = 0; o < d.S.NN * 3; o += 3) {
+        const X0 = Xc[o], X1 = Xc[o + 1], X2 = Xc[o + 2];
+        const rx = R[0] * X0 + R[3] * X1 + R[6] * X2, ry = R[1] * X0 + R[4] * X1 + R[7] * X2, rz = R[2] * X0 + R[5] * X1 + R[8] * X2;
+        d.x[o] = p[0] + rx; d.x[o + 1] = p[1] + ry; d.x[o + 2] = p[2] + rz;
+        d.v[o] = v[0] + w[1] * rz - w[2] * ry; d.v[o + 1] = v[1] + w[2] * rx - w[0] * rz; d.v[o + 2] = v[2] + w[0] * ry - w[1] * rx;
+      }
+      d.xp.set(d.x);
+      for (let i = 0; i < d.S.NT; i++) d.qt.set(q, i * 4);
+      for (let i = 0; i < d.S.NCL; i++) d.qc.set(q, i * 4);
+      d.q.set(q); d.R.set(R); d.c.set(p);
+      d.awake = true; d.calm = 0; d.rig = 1; d.wob = 1; d.contacts = 0; d.air = 1; d.absorb = 0; d.absorbT = 0;
+      this.aabb(d);
+    }
+    wake(d) { if (!d.awake) { d.awake = true; d.calm = 0; d.rig = 1; d.wob = 1; d.xp.set(d.x); } }
+    sleep(d) { d.awake = false; d.v.fill(0); d.calm = 0; frameOf(d); }
+    allAsleep() { return this.act.every(d => !d.awake); }
+    aabb(d) {
+      const x = d.x; let a = Infinity, b = Infinity, c = Infinity, e = -Infinity, f = -Infinity, g = -Infinity;
+      for (let o = 0; o < d.S.NN * 3; o += 3) {
+        if (x[o] < a) a = x[o]; if (x[o] > e) e = x[o]; if (x[o + 1] < b) b = x[o + 1]; if (x[o + 1] > f) f = x[o + 1]; if (x[o + 2] < c) c = x[o + 2]; if (x[o + 2] > g) g = x[o + 2];
+      }
+      d.min[0] = a; d.min[1] = b; d.min[2] = c; d.max[0] = e; d.max[1] = f; d.max[2] = g;
+    }
+    gap(a, b) { let g = 0; for (let k = 0; k < 3; k++) g = Math.max(g, a.min[k] - b.max[k], b.min[k] - a.max[k]); return g; }
+    step(dt) {
+      if (dt <= 0 || !this.act.length) return;
+      const t0 = (typeof performance !== 'undefined' ? performance : Date).now();
+      const ns = Math.max(1, Math.min(18, Math.ceil(dt * 360 - 1e-6))), h = dt / ns, hs = (h * 480) * (h * 480), s = this.softness;   // 360 Hz substeps; stiffness is scaled so feel doesn't depend on it
+      const bc = Math.min(1, (0.018 - 0.0145 * s) * hs), bt = Math.min(1, (0.012 - 0.0095 * s) * hs);   // squishier than a gummy
+      const kWob = 0.8 + 15 * this.decay * this.decay + 60 * Math.pow(this.decay, 8);   // the far end turns into slow-rise foam
+      const act = this.act, g = this.grab, pairs = [];
+      for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) {
+        const a = act[i], b = act[j];
+        if ((a.awake || b.awake) && this.gap(a, b) < 0.25) pairs.push(a, b);
+      }
+      const pairHit = new Set();
+      for (let it = 0; it < ns; it++) {
+        for (const d of act) if (d.awake) integrate(d, h);
+        for (const d of act) if (d.awake) { solveCells(d, bc); solveTets(d, bt); solveVolumes(d); solveStrain(d); }
+        if (g && g.die.awake) solveGrab(g, h);
+        for (const d of act) if (d.awake) frameOf(d);
+        for (let p = 0; p < pairs.length; p += 2) {
+          const a = pairs[p], b = pairs[p + 1];
+          let n = 0;
+          if (a.awake) n += pushPair(a, b);
+          if (b.awake) n += pushPair(b, a);
+          if (n) pairHit.add(a.i * 8 + b.i);
+        }
+        for (const d of act) {
+          if (!d.awake) continue;
+          const held = g && g.die === d, c = solveFloor(d, held ? MU_S * 1.4 : MU_S, h, held);
+          if (c >= 3 && d.air > 0.06 && d.vc[1] < -1.2 && !held) {
+            const k = Math.min(1, Math.max(0.2, (-d.vc[1] - 1) / 6));
+            d.absorb = d.absorbT > 0 ? Math.max(d.absorb, k) : k; d.absorbT = ABSORB_T;
+            if (this.onImpact) this.onImpact(d, Math.min(1, -d.vc[1] / 9));
+          }
+          d.contacts = c; d.air = c ? 0 : d.air + h;
+          postSolve(d, h, kWob);
+        }
+      }
+      for (const key of pairHit) if (!this.pairWas.has(key) && this.onImpact) {
+        const a = this.bodies[key >> 3], b = this.bodies[key & 7], rv = Math.hypot(a.vc[0] - b.vc[0], a.vc[1] - b.vc[1], a.vc[2] - b.vc[2]);
+        if (rv > 1.2) this.onImpact(a, Math.min(1, rv / 10) * 0.7);
+      }
+      this.pairWas = pairHit;
+      this.stepMs = (typeof performance !== 'undefined' ? performance : Date).now() - t0;
+    }
+    update(dt) {
+      this.step(dt);
+      const act = this.act;
+      for (const d of act) this.aabb(d);
+      for (const d of act) {
+        if (!d.awake) continue;
+        if (this.grab && this.grab.die === d) { d.calm = 0; continue; }
+        let m = 0; const v = d.v;
+        for (let o = 0; o < d.S.NN * 3; o += 3) { const s = v[o] * v[o] + v[o + 1] * v[o + 1] + v[o + 2] * v[o + 2]; if (s > m) m = s; }
+        d.speed = Math.sqrt(m);
+        // calm = the rigid motion has stopped and the wobble is tiny (smoothed, so contact noise doesn't count)
+        const rig = Math.hypot(d.vc[0], d.vc[1], d.vc[2]) + 0.5 * Math.hypot(d.w[0], d.w[1], d.w[2]), k = Math.min(1, dt * 12);
+        d.rig += (rig - d.rig) * k; d.wob += (d.speed - d.wob) * k;
+        if (d.rig < SLEEP_V * 0.6 && d.wob < SLEEP_V * 3) { d.calm += dt; if (d.calm > SLEEP_T) this.sleep(d); } else d.calm = 0;
+        if (d.c[1] < -4) this.place(d, [0, 2, 0], [0, 0, 0, 1]);   // safety net
+      }
+      // only a body that is actually moving wakes its sleeping neighbours
+      for (const a of act) if (a.awake && (a.rig > SLEEP_V || (this.grab && this.grab.die === a)))
+        for (const b of act) if (!b.awake && this.gap(a, b) < 0.2) this.wake(b);
+    }
+    // ---------- interaction ----------
+    local(d, p) {   // world point -> the body's rest shape space
+      const R = d.R, x = p[0] - d.c[0], y = p[1] - d.c[1], z = p[2] - d.c[2], m = d.S.com;
+      return [R[0] * x + R[1] * y + R[2] * z + m[0], R[3] * x + R[4] * y + R[5] * z + m[1], R[6] * x + R[7] * y + R[8] * z + m[2]];
+    }
+    pick(o, dir) {
+      let best = null;
+      for (const d of this.act) {
+        const lo = this.local(d, o), R = d.R;
+        const ld = [R[0] * dir[0] + R[1] * dir[1] + R[2] * dir[2], R[3] * dir[0] + R[4] * dir[1] + R[5] * dir[2], R[6] * dir[0] + R[7] * dir[1] + R[8] * dir[2]];
+        let t = 0, hit = false;
+        for (let i = 0; i < 160 && t < 200; i++) {
+          const s = sdfAt(d.S, lo[0] + ld[0] * t, lo[1] + ld[1] * t, lo[2] + ld[2] * t) - 0.03;
+          if (s < 1e-3) { hit = true; break; }
+          t += Math.max(s * 0.9, 0.004);
+        }
+        if (hit && (!best || t < best.t)) best = { die: d, t };
+      }
+      if (!best) return null;
+      const d = best.die, p = [o[0] + dir[0] * best.t, o[1] + dir[1] * best.t, o[2] + dir[2] * best.t], l = this.local(d, p), R = d.R;
+      sdfGrad(d.S, l[0], l[1], l[2]);
+      const n = [R[0] * GR[0] + R[3] * GR[1] + R[6] * GR[2], R[1] * GR[0] + R[4] * GR[1] + R[7] * GR[2], R[2] * GR[0] + R[5] * GR[1] + R[8] * GR[2]];
+      return { die: d, p, n };
+    }
+    startGrab(d, p) {
+      this.wake(d); d.absorbT = 0; frameOf(d);
+      const l = this.local(d, p), X = d.S.X, nodes = [], w = [], off = [];
+      let sw = 0;
+      for (let n = 0; n < d.S.NN; n++) {
+        const dx = X[n * 3] - l[0], dy = X[n * 3 + 1] - l[1], dz = X[n * 3 + 2] - l[2], wt = Math.exp(-(dx * dx + dy * dy + dz * dz) / (0.3 * 0.3));
+        if (wt < 0.06) continue;
+        nodes.push(n); w.push(wt); off.push(dx, dy, dz); sw += wt;
+      }
+      const NN = d.S.NN, D_LIFT = 0.42;   // pull distance at which the spring carries the whole weight
+      this.grab = { die: d, n: nodes.length, nodes: Int32Array.from(nodes), w: Float64Array.from(w), off: Float64Array.from(off),
+        k: NN * G / (D_LIFT * sw), cap: 3.0 * NN * G / sw, t: new Float64Array(p), R0: new Float64Array(d.R) };
+      return this.grab;
+    }
+    endGrab() {
+      const g = this.grab; if (!g) return; this.grab = null;
+      const d = g.die; fitRigid(d);
+      // no launches or wild spin on release
+      const vl = Math.hypot(d.vc[0], d.vc[1], d.vc[2]), wl = Math.hypot(d.w[0], d.w[1], d.w[2]);
+      const sv = vl > 2.2 ? 2.2 / vl : 1, sw = wl > 2.5 ? 2.5 / wl : 1, x = d.x, v = d.v, c = d.c, w = d.w, vc = d.vc;
+      for (let o = 0; o < d.S.NN * 3; o += 3) {
+        const rx = x[o] - c[0], ry = x[o + 1] - c[1], rz = x[o + 2] - c[2];
+        const ax = w[1] * rz - w[2] * ry, ay = w[2] * rx - w[0] * rz, az = w[0] * ry - w[1] * rx;
+        const gx = vc[0] + ax, gy = vc[1] + ay, gz = vc[2] + az;
+        v[o] = vc[0] * sv + ax * sw + (v[o] - gx) * 0.6; v[o + 1] = vc[1] * sv + ay * sw + (v[o + 1] - gy) * 0.6; v[o + 2] = vc[2] * sv + az * sw + (v[o + 2] - gz) * 0.6;
+      }
+    }
+    poke(d, p, n, amp = 1) {
+      this.wake(d); frameOf(d);
+      const l = this.local(d, p), X = d.S.X, NN = d.S.NN, x = d.x, v = d.v, c = d.c, dv = new Float64Array(NN * 3);
+      let mx = 0, my = 0, mz = 0;
+      for (let k = 0, o = 0; k < NN; k++, o += 3) {
+        const dx = X[o] - l[0], dy = X[o + 1] - l[1], dz = X[o + 2] - l[2];
+        const f = -3.4 * amp * Math.exp(-(dx * dx + dy * dy + dz * dz) / (0.32 * 0.32));
+        // local squish + a volume-preserving squash mode about the poke axis so the whole toy rings
+        const rx = x[o] - c[0], ry = x[o + 1] - c[1], rz = x[o + 2] - c[2], al = rx * n[0] + ry * n[1] + rz * n[2], B = 2.4 * amp;
+        dv[o] = n[0] * f + B * (-n[0] * al + 0.5 * (rx - n[0] * al));
+        dv[o + 1] = n[1] * f + B * (-n[1] * al + 0.5 * (ry - n[1] * al));
+        dv[o + 2] = n[2] * f + B * (-n[2] * al + 0.5 * (rz - n[2] * al));
+        mx += dv[o]; my += dv[o + 1]; mz += dv[o + 2];
+      }
+      mx /= NN; my /= NN; mz /= NN;
+      for (let o = 0; o < NN * 3; o += 3) { v[o] += dv[o] - mx; v[o + 1] += dv[o + 1] - my; v[o + 2] += dv[o + 2] - mz; }
+    }
+    // slots in a row across the camera's right vector, each toy facing the camera
+    slots(yaw) {
+      const rx = Math.cos(yaw), rz = -Math.sin(yaw), gap = 0.35, ws = this.act.map(d => d.S.halfW * 2);
+      let at = -(ws.reduce((a, b) => a + b, 0) + gap * (ws.length - 1)) / 2;
+      return this.act.map((d, i) => { const m = at + ws[i] / 2; at += ws[i] + gap; return [rx * m, rz * m]; });
+    }
+    arrange(yaw, rnd = Math.random) {
+      this.grab = null;
+      this.slots(yaw).forEach(([x, z], i) => {
+        const d = this.act[i], th = yaw + (rnd() - 0.5) * 0.15;
+        this.place(d, [x, -d.S.minYc + 0.003, z], [0, Math.sin(th / 2), 0, Math.cos(th / 2)]);
+      });
+    }
+    drop(yaw, rnd = Math.random) {
+      this.grab = null;
+      this.slots(yaw).forEach(([x, z], i) => {
+        const d = this.act[i];
+        let q = axisQ(0, 1, 0, yaw + (rnd() - 0.5) * 0.6);
+        q = qmul(axisQ(1, 0, 0, (rnd() - 0.5) * 0.22), q); q = qmul(axisQ(0, 0, 1, (rnd() - 0.5) * 0.22), q);
+        this.place(d, [x + (rnd() - 0.5) * 0.3, -d.S.minYc + 1.3 + i * 0.35 + rnd() * 0.4, z + (rnd() - 0.5) * 0.3], q, [0, -0.5, 0], [(rnd() - 0.5) * 0.5, (rnd() - 0.5) * 1.2, (rnd() - 0.5) * 0.5]);
+      });
+    }
+  }
+  return { World, puffy, pudding, smin, surfaceNets, buildShape, sdfAt, G, RP, PT, RIM_R, RIM_Y };
+})();
+if (typeof module !== 'undefined') module.exports = SoftPhysics;
+</script>
+
+<script type="module">
+/* ============================================================
+   Renderer (raw WebGPU) + interaction
+   ============================================================ */
+const SP = SoftPhysics;
+const $ = id => document.getElementById(id);
+// world size of each cut-out's square image: the crops were 542, 564 and 673 px in the source picture, so this keeps their relative sizes
+const CHARS = [
+  { key: 'chiikawa', name: 'ちいかわ', size: 1.853, tint: '#f6d9e1' },
+  { key: 'hachiware', name: 'ハチワレ', size: 1.928, tint: '#d6e6fa' },
+  { key: 'usagi', name: 'うさぎ', size: 2.3, tint: '#f8ecc8' },
+];
+const CELL = 0.3;
+const DECALS = JSON.parse($('decal-data').textContent);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+function fail(reason) {
+  $('why').textContent = reason;
+  $('fallback').hidden = false;
+  document.querySelector('.bar').hidden = true;
+  document.querySelector('.top').hidden = true;
+  $('hint').hidden = true;
+}
+
+// ---------------- small math ----------------
+const V = {
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  mul: (a, s) => [a[0] * s, a[1] * s, a[2] * s], dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  norm: a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+};
+const M4 = {
+  mul(a, b) { const o = new Float32Array(16); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; } return o; },
+  persp(fy, asp, n, f) { const t = 1 / Math.tan(fy / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, f / (n - f), -1, 0, 0, n * f / (n - f), 0]); },
+  ortho(l, r, b, t, n, f) { return new Float32Array([2 / (r - l), 0, 0, 0, 0, 2 / (t - b), 0, 0, 0, 0, 1 / (n - f), 0, (l + r) / (l - r), (t + b) / (b - t), n / (n - f), 1]); },
+  look(eye, at, up) {
+    const z = V.norm(V.sub(eye, at)), x = V.norm(V.cross(up, z)), y = V.cross(z, x);
+    return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -V.dot(x, eye), -V.dot(y, eye), -V.dot(z, eye), 1]);
+  },
+};
+
+// signed distance (px) to the largest opaque region of a cut-out, sampled on an N×N grid
+const PAD = 0.15;   // the cut-outs touch their square's edges: pad so shapes are never clipped by the grid
+function silhouette(img, N, closeR, openR, widthR) {   // radii as a fraction of the padded grid
+  const cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const g = cv.getContext('2d', { willReadFrequently: true }), pp = Math.round(N * PAD / (1 + 2 * PAD));
+  g.drawImage(img, pp, pp, N - 2 * pp, N - 2 * pp);
+  const a = g.getImageData(0, 0, N, N).data, inside = new Uint8Array(N * N);
+  for (let i = 0; i < N * N; i++) inside[i] = a[i * 4 + 3] > 127 ? 1 : 0;
+  // keep the largest connected piece (drops stray dots such as the dotted tail outline)
+  const lab = new Int32Array(N * N).fill(-1); let bestL = -1, bestN = 0;
+  for (let s = 0; s < N * N; s++) {
+    if (!inside[s] || lab[s] >= 0) continue;
+    const st = [s]; lab[s] = s; let cnt = 0;
+    while (st.length) {
+      const p = st.pop(); cnt++;
+      const x = p % N, y = (p / N) | 0;
+      for (const q of [x > 0 ? p - 1 : -1, x < N - 1 ? p + 1 : -1, y > 0 ? p - N : -1, y < N - 1 ? p + N : -1]) if (q >= 0 && inside[q] && lab[q] < 0) { lab[q] = s; st.push(q); }
+    }
+    if (cnt > bestN) { bestN = cnt; bestL = s; }
+  }
+  for (let i = 0; i < N * N; i++) inside[i] = lab[i] === bestL ? 1 : 0;
+  // a toy is moulded simpler than the drawing: close the gap between the feet (a base it can stand on), round off tiny tips
+  const not = m => m.map(v => 1 - v), cl = closeR * N, op = openR * N;
+  let m = edt(inside, N).map(d => d <= cl ? 1 : 0);
+  m = edt(not(m), N).map(d => d > cl ? 1 : 0);
+  m = edt(not(m), N).map(d => d > op ? 1 : 0);
+  m = edt(m, N).map(d => d <= op ? 1 : 0);
+  // rows: where the drawing starts, where the head is full width (above it: the ears), where it ends, and its width
+  const rows = [];
+  for (let y = 0; y < N; y++) {
+    let runs = 0, lo = N, hi = -1;
+    for (let x = 0; x < N; x++) { const v = m[y * N + x]; if (v && !(x && m[y * N + x - 1])) runs++; if (v) { lo = Math.min(lo, x); hi = x; } }
+    rows.push({ runs, w: hi >= lo ? hi - lo + 1 : 0, lo, hi });
+  }
+  const top = rows.findIndex(r => r.w), bottom = N - 1 - [...rows].reverse().findIndex(r => r.w), maxW = Math.max(...rows.map(r => r.w));
+  let head = rows.findIndex((r, y) => y >= top && r.runs === 1 && r.w >= 0.6 * maxW);
+  if (head < 0) head = top;
+  let left = N, right = 0;
+  for (let y = head; y <= bottom; y++) if (rows[y].w) { left = Math.min(left, rows[y].lo); right = Math.max(right, rows[y].hi); }
+  // the ears alone: everything above the head line (plus a little overlap so they root into the pudding)
+  const ears = m.map((v, i) => ((i / N) | 0) < head + 8 ? v : 0);
+  return { N, top, head, bottom, left, right, ears: fieldsOf(ears, N, widthR) };
+}
+// signed distance (px, negative inside) and local part width (px) of a mask
+function fieldsOf(m, N, widthR) {
+  const not = a => a.map(v => 1 - v), dOut = edt(m, N), dIn = edt(not(m), N);
+  let f = new Float32Array(N * N);
+  for (let i = 0; i < N * N; i++) f[i] = m[i] ? -(dIn[i] - 0.5) : dOut[i] - 0.5;
+  for (let k = 0; k < 2; k++) f = filter2(f, N, 2, (a, b) => a + b, 1 / 5);   // soften pixel steps (normals would ripple)
+  // how wide the part here is: the largest inner distance within reach (thin ears get thin, wide ones thick)
+  let w = f.map(v => Math.max(-v, 0));
+  w = filter2(w, N, Math.round(widthR * N), (a, b) => Math.max(a, b));
+  for (let k = 0; k < 3; k++) w = filter2(w, N, 6, (a, b) => a + b, 1 / 13);
+  return { f, w };
+}
+// separable square filter: fold with op over a window of radius r, then scale
+function filter2(src, N, r, op, scale = 1) {
+  const a = Float32Array.from(src), b = new Float32Array(N * N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { let acc = 0, first = true; for (let k = -r; k <= r; k++) { const v = a[y * N + Math.min(N - 1, Math.max(0, x + k))]; acc = first ? v : op(acc, v); first = false; } b[y * N + x] = acc * scale; }
+  for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) { let acc = 0, first = true; for (let k = -r; k <= r; k++) { const v = b[Math.min(N - 1, Math.max(0, y + k)) * N + x]; acc = first ? v : op(acc, v); first = false; } a[y * N + x] = acc * scale; }
+  return a;
+}
+// the toy's body colour without the ink: grow the light colours over the outline and beyond, then soften
+function fillColours(img, N) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0, N, N);
+  const im = g.getImageData(0, 0, N, N), d = im.data, known = new Uint8Array(N * N), c = new Float32Array(N * N * 3);
+  for (let i = 0; i < N * N; i++) {
+    const a = d[i * 4 + 3] / 255, r = d[i * 4] / 255 / Math.max(a, 1e-3), gg = d[i * 4 + 1] / 255 / Math.max(a, 1e-3), b = d[i * 4 + 2] / 255 / Math.max(a, 1e-3);
+    if (a > 0.6 && 0.3 * r + 0.59 * gg + 0.11 * b > 0.55) { known[i] = 1; c[i * 3] = r; c[i * 3 + 1] = gg; c[i * 3 + 2] = b; }
+  }
+  for (let ring = 0, todo = true; todo && ring < 2 * N; ring++) {
+    todo = false;
+    const add = [];
+    for (let i = 0; i < N * N; i++) {
+      if (known[i]) continue;
+      const x = i % N, y = (i / N) | 0; let n = 0, r = 0, gg = 0, b = 0;
+      for (const q of [x > 0 ? i - 1 : -1, x < N - 1 ? i + 1 : -1, y > 0 ? i - N : -1, y < N - 1 ? i + N : -1]) if (q >= 0 && known[q]) { n++; r += c[q * 3]; gg += c[q * 3 + 1]; b += c[q * 3 + 2]; }
+      if (n) add.push(i, r / n, gg / n, b / n); else todo = true;
+    }
+    for (let k = 0; k < add.length; k += 4) { const i = add[k]; known[i] = 1; c[i * 3] = add[k + 1]; c[i * 3 + 1] = add[k + 2]; c[i * 3 + 2] = add[k + 3]; }
+  }
+  for (let ch = 0; ch < 3; ch++) {
+    let one = new Float32Array(N * N); for (let i = 0; i < N * N; i++) one[i] = c[i * 3 + ch];
+    for (let k = 0; k < 2; k++) one = filter2(one, N, 2, (a, b) => a + b, 1 / 5);
+    for (let i = 0; i < N * N; i++) d[i * 4 + ch] = Math.round(Math.min(1, one[i]) * 255);
+  }
+  for (let i = 0; i < N * N; i++) d[i * 4 + 3] = 255;
+  return im;
+}
+// exact Euclidean distance (px) to the nearest set pixel (Felzenszwalb & Huttenlocher, separable)
+function edt(mask, N) {
+  const INF = 1e20, g = new Float64Array(N * N), f = new Float64Array(N), d = new Float64Array(N), v = new Int32Array(N), z = new Float64Array(N + 1);
+  for (let i = 0; i < N * N; i++) g[i] = mask[i] ? 0 : INF;
+  const pass = (get, put) => {
+    for (let q = 0; q < N; q++) f[q] = get(q);
+    let k = 0; v[0] = 0; z[0] = -INF; z[1] = INF;
+    for (let q = 1; q < N; q++) {
+      let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+      while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
+      k++; v[k] = q; z[k] = s; z[k + 1] = INF;
+    }
+    k = 0;
+    for (let q = 0; q < N; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
+    for (let q = 0; q < N; q++) put(q, d[q]);
+  };
+  for (let x = 0; x < N; x++) pass(q => g[q * N + x], (q, val) => { g[q * N + x] = val; });
+  for (let y = 0; y < N; y++) pass(q => g[y * N + q], (q, val) => { g[y * N + q] = val; });
+  return g.map(Math.sqrt);
+}
+// A character pudding: a pudding mould with the character's ears (from the drawing, above its head line) on top and the
+// drawing printed round the front. Everything is mapped from the padded silhouette grid to the cut-out's own uv (0..1).
+const PUD = { rb: 0.95, rt: 0.76, h: 1.2, r: 0.24 };
+function puddingShape(sil) {
+  const { N } = sil, g2i = px => ((px + 0.5) / N) * (1 + 2 * PAD) - PAD, i2g = u => (u + PAD) / (1 + 2 * PAD) * N - 0.5;
+  const uL = g2i(sil.left), uR = g2i(sil.right), uC = (uL + uR) / 2, vH = g2i(sil.head), vB = g2i(sil.bottom), vT = g2i(sil.top);
+  const sx = 2 * PUD.rt * 0.9 / (uR - uL), yHead = PUD.h - 0.04, pxW = (1 + 2 * PAD) / N * sx;   // world units per uv unit, per grid px
+  const EAR = 1.7, es = sx * EAR, epx = pxW * EAR;   // ears a bit bigger than drawn so they read on top of the mould
+  const sample = (g, u, v) => {
+    const cu = Math.min(Math.max(i2g(u), 0), N - 1.001), cv = Math.min(Math.max(i2g(v), 0), N - 1.001), out = Math.hypot(i2g(u) - cu, i2g(v) - cv);
+    const i = Math.floor(cu), j = Math.floor(cv), fu = cu - i, fv = cv - j, o = j * N + i;
+    const a = g[o] + (g[o + 1] - g[o]) * fu, b = g[o + N] + (g[o + N + 1] - g[o + N]) * fu;
+    return [a + (b - a) * fv, out];
+  };
+  const earUV = (x, y) => [uC + x / es, vH - (y - yHead) / es];
+  const ear = (x, y, z) => {
+    const [u, v] = earUV(x, y), [d, out] = sample(sil.ears.f, u, v), [wd] = sample(sil.ears.w, u, v);
+    const ht = Math.min(0.08 + 1.1 * wd * epx, 0.3);
+    return Math.max(SP.puffy((d + out) * epx, ht, Math.min(0.18, 0.9 * ht), z - 0.12), yHead - 0.3 - y);
+  };
+  const body = (x, y, z) => SP.pudding(x, y, z, PUD.rb, PUD.rt, PUD.h, PUD.r);
+  // the drawing wraps round the front of the side, keeping its proportions
+  const yT = PUD.h - 0.08, yB = 0.08, rMid = (PUD.rb + PUD.rt) / 2;
+  const span = Math.min(1.3, Math.max(0.5, (yT - yB) * (uR - uL) / (vB - vH) / (2 * rMid)));
+  const earTop = yHead + (vH - vT) * es, W = uR - uL, uIn = u => Math.min(Math.max(u, uL + 0.07 * W), uR - 0.07 * W);   // inside the outline, outside the cheeks
+  return {
+    sdf: (x, y, z) => SP.smin(body(x, y, z), ear(x, y, z), 0.1),
+    lo: [-PUD.rb - 0.12, -0.12, -PUD.rb - 0.12], hi: [PUD.rb + 0.12, Math.max(PUD.h, earTop) + 0.12, PUD.rb + 0.12],
+    // per vertex: texture uv and how much of the print shows there
+    uvw(x, y, z, nx, ny, nz) {
+      if (ear(x, y, z) < body(x, y, z)) { const [u, v] = earUV(x, y); return [u, v, Math.min(Math.max((nz - 0.1) / 0.35, 0), 1)]; }
+      if (ny > 0.7) return [uIn(uC + x / sx), vH + 0.06, 0];   // top: the colour just inside the top of the head
+      // round the back the colour stays that of the body just inside the drawing's edge (no outline streaks)
+      const phi = Math.atan2(x, z), u = uIn(uC + phi / span * W / 2), v = vH + 0.03 + (yT - Math.min(Math.max(y, yB), yT)) / (yT - yB) * (vB - vH - 0.03);
+      const side = 1 - Math.min(Math.max((Math.abs(phi) / span - 0.66) / 0.08, 0), 1), flat = 1 - Math.min(Math.max((Math.abs(ny) - 0.45) / 0.3, 0), 1);
+      return [u, v, side * flat];
+    },
+  };
+}
+function buildRevolve(profile, segs) {   // profile: [r, y, nr, ny, rim]
+  const v = [], idx = [], P = profile.length;
+  for (let s = 0; s <= segs; s++) {
+    const a = s / segs * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+    for (const [r, y, nr, ny, rim] of profile) v.push(r * ca, y, r * sa, nr * ca, ny, nr * sa, rim);
+  }
+  for (let s = 0; s < segs; s++) for (let i = 0; i < P - 1; i++) { const a = s * P + i, b = a + P; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  return { v: new Float32Array(v), idx: Uint32Array.from(idx) };
+}
+
+// ---------------- lights ----------------
+const KEY_C = [-0.9, 8.6, -2.8];
+function rectFrame(c, aim, hs) {
+  const n = V.norm(V.sub(aim, c)), up = [0, 1, 0];
+  const v = V.norm(V.sub(up, V.mul(n, V.dot(up, n)))), u = V.cross(v, n);
+  return { c, n, u, v, hs };
+}
+const STRIP = rectFrame([-6.6, 2.7, -5.4], [0, 0.6, 0], [0.42, 2.9]);
+const FILL = rectFrame([6.9, 1.9, 5.6], [0, 0.6, 0], [2.6, 1.7]);
+const f3 = a => `vec3f(${a.map(x => (+x).toFixed(5)).join(',')})`;
+const SHADOW_HS = 7, SHADOW_NEAR = 5, SHADOW_FAR = 35, HEIGHT_HS = 6.5;
+const LDIR = V.norm(KEY_C);
+
+async function main() {
+  if (!window.isSecureContext) return fail('This page is not in a secure context (it must be served over https or from localhost), so the browser hides WebGPU.');
+  if (!('gpu' in navigator)) return fail('This browser does not expose WebGPU: navigator.gpu is missing.');
+  let adapter;
+  try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch (e) { return fail('requestAdapter() threw: ' + e.message); }
+  if (!adapter) return fail('WebGPU is present but no compatible GPU adapter was found. It may be disabled, blocklisted for this GPU or driver, or unavailable in this virtual machine.');
+  let device;
+  try { device = await adapter.requestDevice(); } catch (e) { return fail('The GPU adapter refused to create a device: ' + e.message); }
+  device.lost.then(info => { console.warn('WebGPU device lost:', info.reason, info.message); if (info.reason !== 'destroyed') fail('The GPU device was lost: ' + (info.message || info.reason)); });
+  device.addEventListener('uncapturederror', e => console.error('WebGPU:', e.error.message));
+
+  const canvas = $('view');
+  const ctx = canvas.getContext('webgpu');
+  if (!ctx) return fail('Could not get a WebGPU canvas context.');
+  const FORMAT = navigator.gpu.getPreferredCanvasFormat();
+  ctx.configure({ device, format: FORMAT, alphaMode: 'opaque' });
+
+  // ---------- characters: cut-out -> silhouette -> pudding SDF -> mesh + lattice ----------
+  const T = GPUTextureUsage, U = GPUBufferUsage;
+  const DEC = 256, DEC_MIPS = 5;
+  const decalTex = device.createTexture({ size: [DEC, DEC, CHARS.length], format: 'rgba8unorm', usage: T.TEXTURE_BINDING | T.COPY_DST | T.RENDER_ATTACHMENT, mipLevelCount: DEC_MIPS });
+  const imgs = await Promise.all(CHARS.map(async ch => { const img = new Image(); img.src = DECALS[ch.key]; await img.decode(); return img; }));
+  await Promise.all(imgs.map(async (img, layer) => {
+    for (let m = 0; m < DEC_MIPS; m++) {
+      const s = DEC >> m;
+      const bmp = await createImageBitmap(img, { resizeWidth: s, resizeHeight: s, resizeQuality: 'high', premultiplyAlpha: 'premultiply' });
+      device.queue.copyExternalImageToTexture({ source: bmp }, { texture: decalTex, mipLevel: m, origin: [0, 0, layer], premultipliedAlpha: true }, [s, s]);
+    }
+  }));
+  const FILL_N = 128;
+  const fillTex = device.createTexture({ size: [FILL_N, FILL_N, CHARS.length], format: 'rgba8unorm', usage: T.TEXTURE_BINDING | T.COPY_DST });
+  imgs.forEach((img, layer) => device.queue.writeTexture({ texture: fillTex, origin: [0, 0, layer] }, fillColours(img, FILL_N).data, { bytesPerRow: FILL_N * 4 }, [FILL_N, FILL_N]));
+  const shapes = [], meshes = [];
+  CHARS.forEach((ch, i) => {
+    const SP2 = ch.size * (1 + 2 * PAD), pud = puddingShape(silhouette(imgs[i], 224, 0.13 / SP2, 0.05 / SP2, 0.18 / SP2));
+    const mesh = SP.surfaceNets(pud.sdf, pud.lo, pud.hi, 0.04), M = mesh.pos, Nn = mesh.nrm;
+    mesh.uvw = new Float32Array(M.length);
+    for (let v = 0; v < M.length; v += 3) mesh.uvw.set(pud.uvw(M[v], M[v + 1], M[v + 2], Nn[v], Nn[v + 1], Nn[v + 2]), v);
+    meshes.push(mesh); shapes.push(SP.buildShape(pud.sdf, pud.lo, pud.hi, CELL, mesh));
+  });
+
+  // ---------- packed GPU geometry: all bodies share one node / vertex / index space ----------
+  let NNT = 0, NVT = 0, NIT = 0, NET = 0;
+  const parts = shapes.map((S, i) => { const p = { nb: NNT, vb: NVT, ib: NIT, ic: meshes[i].idx.length, eb: NET, ec: S.NE }; NNT += S.NN; NVT += S.NV; NIT += p.ic; NET += S.NE; return p; });
+  const NCT = shapes.reduce((a, S) => a + S.NCL, 0), cellData = new Uint32Array(NCT * 8), nodeCells = new Uint32Array(NNT * 8).fill(0xffffffff);
+  const embedBuf = new ArrayBuffer(NVT * 80), eu = new Uint32Array(embedBuf), ef = new Float32Array(embedBuf);
+  const idxData = new Uint32Array(NIT), edgeData = new Uint32Array(NET * 2);
+  let cellBase = 0;
+  shapes.forEach((S, b) => {
+    const P = parts[b], M = meshes[b], cnt = new Uint8Array(S.NN);
+    for (let c = 0; c < S.NCL; c++) for (let k = 0; k < 8; k++) {
+      const n = S.cellN[c * 8 + k];
+      cellData[(cellBase + c) * 8 + k] = P.nb + n;
+      nodeCells[(P.nb + n) * 8 + cnt[n]++] = cellBase + c;
+    }
+    cellBase += S.NCL;
+    for (let v = 0; v < S.NV; v++) {
+      const o = (P.vb + v) * 20;
+      for (let k = 0; k < 8; k++) eu[o + k] = P.nb + S.vN[v * 8 + k];
+      ef.set([S.vF[v * 3], S.vF[v * 3 + 1], S.vF[v * 3 + 2], b], o + 8);
+      ef.set([M.nrm[v * 3], M.nrm[v * 3 + 1], M.nrm[v * 3 + 2], 0], o + 12);
+      ef.set([M.uvw[v * 3], M.uvw[v * 3 + 1], b, M.uvw[v * 3 + 2]], o + 16);
+    }
+    for (let i = 0; i < P.ic; i++) idxData[P.ib + i] = P.vb + M.idx[i];
+    for (let e = 0; e < S.NE * 2; e++) edgeData[P.eb * 2 + e] = P.nb + S.edges[e];
+  });
+  const RP = SP.RP, PT = SP.PT, RIM_R = SP.RIM_R, RIM_Y = SP.RIM_Y;
+  const room = (() => {
+    const pr = [];
+    for (const r of [0, 3, 5, 7, 9, 11, 13, 14]) pr.push([r, -PT, 0, 1, 0]);
+    for (let i = 1; i <= 12; i++) { const a = i / 12 * Math.PI / 2; pr.push([14 + 8 * Math.sin(a), -PT + 8 - 8 * Math.cos(a), -Math.sin(a), Math.cos(a), 0]); }
+    for (const y of [12, 20, 40]) pr.push([22, y, -1, 0, 0]);
+    return buildRevolve(pr, 96);
+  })();
+  const plate = (() => {
+    const pr = [], r0 = RP + RIM_R * Math.cos(Math.PI + Math.asin(RIM_Y / RIM_R));
+    for (const r of [0, 1, 2, 2.8, 3.4, 3.8, r0 - 0.08, r0]) pr.push([Math.min(r, r0), 0, 0, 1, 0]);
+    const a0 = Math.PI + Math.asin(RIM_Y / RIM_R), a1 = -Math.asin(Math.min(1, (PT + RIM_Y) / RIM_R));
+    for (let i = 0; i <= 32; i++) { const a = a0 + (a1 - a0) * i / 32; pr.push([RP + RIM_R * Math.cos(a), RIM_Y + RIM_R * Math.sin(a), Math.cos(a), Math.sin(a), 1]); }
+    const last = pr[pr.length - 1];
+    if (last[1] > -PT) pr.push([last[0], -PT, 1, 0, 1]);   // short skirt down to the table
+    return buildRevolve(pr, 160);
+  })();
+
+  // ---------- buffers & textures ----------
+  const buf = (data, usage) => { const b = device.createBuffer({ size: Math.max(16, data.byteLength + 3 & ~3), usage: usage | U.COPY_DST }); device.queue.writeBuffer(b, 0, data); return b; };
+  const frameBuf = device.createBuffer({ size: 256, usage: U.UNIFORM | U.COPY_DST });
+  const nodeBuf = device.createBuffer({ size: NNT * 16, usage: U.STORAGE | U.COPY_DST });
+  const nodeFBuf = device.createBuffer({ size: NNT * 48, usage: U.STORAGE });
+  const outVBuf = device.createBuffer({ size: NVT * 32, usage: U.STORAGE });
+  const cntBuf = buf(new Uint32Array([NNT, NVT, 0, 0]), U.UNIFORM);
+  const cellBuf = buf(cellData, U.STORAGE), nodeCellBuf = buf(nodeCells, U.STORAGE), embedGpu = buf(new Uint8Array(embedBuf), U.STORAGE), idxBuf = buf(idxData, U.INDEX), edgeBuf = buf(edgeData, U.STORAGE);
+  const roomVB = buf(room.v, U.VERTEX), roomIB = buf(room.idx, U.INDEX), plateVB = buf(plate.v, U.VERTEX), plateIB = buf(plate.idx, U.INDEX);
+  const tex = (w, h, format, usage, samples = 1) => device.createTexture({ size: [w, h], format, usage, sampleCount: samples });
+  const SHADOW_RES = 2048, HEIGHT_RES = 256;
+  const shadowDepth = tex(SHADOW_RES, SHADOW_RES, 'depth32float', T.RENDER_ATTACHMENT | T.TEXTURE_BINDING);
+  const shadowTint = tex(SHADOW_RES, SHADOW_RES, 'rgba8unorm', T.RENDER_ATTACHMENT | T.TEXTURE_BINDING);
+  const heightDepth = tex(HEIGHT_RES, HEIGHT_RES, 'depth32float', T.RENDER_ATTACHMENT | T.TEXTURE_BINDING);
+  const linSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
+  const cmpSamp = device.createSampler({ magFilter: 'linear', minFilter: 'linear', compare: 'less' });
+
+  // ---------- WGSL ----------
+  const COMMON = /* wgsl */`
+const RP: f32 = ${RP};
+const RIM_R: f32 = ${RIM_R};
+const PI: f32 = 3.14159265;
+struct Frame { viewProj: mat4x4f, shadowVP: mat4x4f, heightVP: mat4x4f, camPos: vec4f, camFwd: vec4f, screen: vec4f, misc: vec4f };
+struct Embed { n0: vec4u, n1: vec4u, f: vec4f, nrm: vec4f, uv: vec4f };
+`;
+  const LIGHT = /* wgsl */`
+const KEY_C = ${f3(KEY_C)};
+const KEY_N = vec3f(0.0, -1.0, 0.0);
+const KEY_U = vec3f(1.0, 0.0, 0.0);
+const KEY_V = vec3f(0.0, 0.0, 1.0);
+const KEY_HS = vec2f(3.4, 2.6);
+const KEY_RAD = vec3f(7.2, 6.9, 6.4);
+const KEY_E = vec3f(1.85, 1.77, 1.64);
+const STRIP_C = ${f3(STRIP.c)}; const STRIP_N = ${f3(STRIP.n)}; const STRIP_U = ${f3(STRIP.u)}; const STRIP_V = ${f3(STRIP.v)};
+const STRIP_HS = vec2f(${STRIP.hs[0]}, ${STRIP.hs[1]});
+const STRIP_RAD = vec3f(6.0, 5.8, 5.4);
+const STRIP_E = vec3f(0.34, 0.32, 0.29);
+const FILL_C = ${f3(FILL.c)}; const FILL_N = ${f3(FILL.n)}; const FILL_U = ${f3(FILL.u)}; const FILL_V = ${f3(FILL.v)};
+const FILL_HS = vec2f(${FILL.hs[0]}, ${FILL.hs[1]});
+const FILL_RAD = vec3f(1.0, 1.15, 1.35);
+const FILL_E = vec3f(0.15, 0.18, 0.23);
+const AMB = vec3f(0.17, 0.155, 0.14);
+const ENV_FLOOR = vec3f(0.62, 0.55, 0.47);
+const ENV_WALL = vec3f(0.34, 0.29, 0.245);
+const ENV_CEIL = vec3f(0.045, 0.042, 0.04);
+fn hash12(p: vec2f) -> f32 { var p3 = fract(vec3f(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+fn rectHit(P: vec3f, d: vec3f, c: vec3f, n: vec3f, u: vec3f, v: vec3f, hs: vec2f, soft: f32) -> f32 {
+  let den = dot(d, n);
+  if (den > -1e-4) { return 0.0; }
+  let t = dot(c - P, n) / den;
+  if (t <= 0.0) { return 0.0; }
+  let q = P + d * t - c;
+  let a = abs(dot(q, u)) / hs.x;
+  let b = abs(dot(q, v)) / hs.y;
+  return (1.0 - smoothstep(1.0 - soft, 1.0 + soft, a)) * (1.0 - smoothstep(1.0 - soft, 1.0 + soft, b));
+}
+fn envRad(P: vec3f, d: vec3f, soft: f32) -> vec3f {
+  var c = mix(ENV_FLOOR, ENV_WALL, smoothstep(-0.3, 0.02, d.y));
+  c = mix(c, ENV_CEIL, smoothstep(0.04, 0.55, d.y));
+  c += KEY_RAD * rectHit(P, d, KEY_C, KEY_N, KEY_U, KEY_V, KEY_HS, soft);
+  c += STRIP_RAD * rectHit(P, d, STRIP_C, STRIP_N, STRIP_U, STRIP_V, STRIP_HS, soft);
+  c += FILL_RAD * rectHit(P, d, FILL_C, FILL_N, FILL_U, FILL_V, FILL_HS, soft * 2.0 + 0.05);
+  return c;
+}
+fn diffuseLight(P: vec3f, N: vec3f, sh: vec3f, ao: f32, wrap: f32) -> vec3f {
+  let dk = KEY_C - P;
+  let lk = length(dk);
+  let key = KEY_E * saturate((dot(N, dk / lk) + wrap) / (1.0 + wrap)) * min(pow(81.0 / (lk * lk), 0.6), 1.2) * sh;
+  let Ls = normalize(STRIP_C - P);
+  let strip = STRIP_E * saturate((dot(N, Ls) + wrap) / (1.0 + wrap)) * saturate(dot(-Ls, STRIP_N) * 1.5);
+  let Lf = normalize(FILL_C - P);
+  let fill = FILL_E * saturate((dot(N, Lf) + wrap) / (1.0 + wrap)) * saturate(dot(-Lf, FILL_N) * 1.5);
+  let amb = AMB * (0.62 + 0.38 * N.y);
+  return (key + strip + fill) * mix(1.0, ao, 0.55) + amb * ao;
+}
+`;
+  const SKIN = COMMON + /* wgsl */`
+@group(0) @binding(0) var<storage, read> nodes: array<vec4f>;
+@group(0) @binding(1) var<storage, read> cells: array<u32>;       // 8 node indices per cell
+@group(0) @binding(2) var<storage, read_write> nodeF: array<vec4f>;
+@group(0) @binding(3) var<storage, read> embed: array<Embed>;
+@group(0) @binding(4) var<storage, read_write> outV: array<vec4f>;
+@group(0) @binding(5) var<uniform> cnt: vec4u;
+@group(0) @binding(6) var<storage, read> nodeCells: array<u32>;   // up to 8 incident cells per node
+const NONE: u32 = 0xffffffffu;
+const CELL: f32 = ${CELL};
+// per-node deformation gradient: the average over its incident cells of each cell's mean edge frame (smooth, no one-sided noise)
+@compute @workgroup_size(64) fn csNodeF(@builtin(global_invocation_id) g: vec3u) {
+  let i = g.x;
+  if (i >= cnt.x) { return; }
+  var F0 = vec3f(0.0); var F1 = vec3f(0.0); var F2 = vec3f(0.0); var w = 0.0;
+  for (var k = 0u; k < 8u; k++) {
+    let c = nodeCells[i * 8u + k];
+    if (c == NONE) { continue; }
+    var p: array<vec3f, 8>;
+    for (var b = 0u; b < 8u; b++) { p[b] = nodes[cells[c * 8u + b]].xyz; }
+    F0 += (p[1] - p[0]) + (p[3] - p[2]) + (p[5] - p[4]) + (p[7] - p[6]);
+    F1 += (p[2] - p[0]) + (p[3] - p[1]) + (p[6] - p[4]) + (p[7] - p[5]);
+    F2 += (p[4] - p[0]) + (p[5] - p[1]) + (p[6] - p[2]) + (p[7] - p[3]);
+    w += 4.0 * CELL;
+  }
+  nodeF[i * 3u] = vec4f(F0 / w, 0.0); nodeF[i * 3u + 1u] = vec4f(F1 / w, 0.0); nodeF[i * 3u + 2u] = vec4f(F2 / w, 0.0);
+}
+// surface vertices: trilinear position, smooth normal = cofactor(F) * rest normal
+@compute @workgroup_size(64) fn csVerts(@builtin(global_invocation_id) g: vec3u) {
+  let v = g.x;
+  if (v >= cnt.y) { return; }
+  let e = embed[v];
+  let f = e.f.xyz;
+  var p = vec3f(0.0); var F0 = vec3f(0.0); var F1 = vec3f(0.0); var F2 = vec3f(0.0);
+  for (var c = 0u; c < 8u; c++) {
+    let w = select(1.0 - f.x, f.x, (c & 1u) != 0u) * select(1.0 - f.y, f.y, (c & 2u) != 0u) * select(1.0 - f.z, f.z, (c & 4u) != 0u);
+    let n = select(e.n0[c & 3u], e.n1[c & 3u], c >= 4u);
+    p += nodes[n].xyz * w;
+    F0 += nodeF[n * 3u].xyz * w; F1 += nodeF[n * 3u + 1u].xyz * w; F2 += nodeF[n * 3u + 2u].xyz * w;
+  }
+  let nr = e.nrm.xyz;
+  let nrm = cross(F1, F2) * nr.x + cross(F2, F0) * nr.y + cross(F0, F1) * nr.z;
+  outV[v * 2u] = vec4f(p, 1.0);
+  outV[v * 2u + 1u] = vec4f(normalize(nrm), 0.0);
+}
+`;
+  const GEOM = COMMON + /* wgsl */`
+@group(0) @binding(0) var<uniform> F: Frame;
+@group(0) @binding(1) var<storage, read> outV: array<vec4f>;
+@vertex fn vsShadow(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f { return F.shadowVP * vec4f(outV[vi * 2u].xyz, 1.0); }
+@vertex fn vsHeight(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f { return F.heightVP * vec4f(outV[vi * 2u].xyz, 1.0); }
+@fragment fn fsShadow() -> @location(0) vec4f { return vec4f(0.30, 0.29, 0.28, 1.0); }
+`;
+  const SCENE = COMMON + LIGHT + /* wgsl */`
+@group(0) @binding(0) var<uniform> F: Frame;
+@group(0) @binding(1) var shadowMap: texture_depth_2d;
+@group(0) @binding(2) var shadowTint: texture_2d<f32>;
+@group(0) @binding(3) var heightMap: texture_depth_2d;
+@group(0) @binding(4) var cmp: sampler_comparison;
+@group(0) @binding(5) var lin: sampler;
+@group(1) @binding(0) var<storage, read> outV: array<vec4f>;
+@group(1) @binding(1) var<storage, read> embed: array<Embed>;
+@group(1) @binding(2) var decal: texture_2d_array<f32>;
+@group(1) @binding(3) var fillTex: texture_2d_array<f32>;
+const PAPER = vec3f(0.80, 0.72, 0.62);
+const SHADOW_HS: f32 = ${SHADOW_HS}.0;
+const DEPTH_RANGE: f32 = ${SHADOW_FAR - SHADOW_NEAR}.0;
+const LIGHT_ANG: f32 = 0.32;
+const HEIGHT_HS: f32 = ${HEIGHT_HS};
+var<private> POIS: array<vec2f, 16> = array<vec2f, 16>(
+  vec2f(-0.613, 0.617), vec2f(0.170, -0.040), vec2f(-0.299, 0.791), vec2f(0.645, 0.493),
+  vec2f(-0.651, 0.717), vec2f(0.421, 0.027), vec2f(-0.817, -0.271), vec2f(-0.705, -0.668),
+  vec2f(0.977, -0.108), vec2f(0.063, -0.721), vec2f(-0.159, 0.200), vec2f(0.330, -0.567),
+  vec2f(0.765, -0.606), vec2f(-0.437, -0.298), vec2f(0.214, 0.882), vec2f(-0.060, -0.268));
+
+struct SIn { @location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) rim: f32 };
+struct SOut { @builtin(position) pos: vec4f, @location(0) wpos: vec3f, @location(1) nrm: vec3f, @location(2) rim: f32 };
+@vertex fn vsScene(i: SIn) -> SOut {
+  var o: SOut;
+  o.pos = F.viewProj * vec4f(i.pos, 1.0);
+  o.wpos = i.pos; o.nrm = i.nrm; o.rim = i.rim;
+  return o;
+}
+fn rot2(v: vec2f, a: f32) -> vec2f { let c = cos(a); let s = sin(a); return vec2f(c * v.x - s * v.y, s * v.x + c * v.y); }
+// PCSS: the penumbra grows with the blocker-receiver distance
+fn shadowAt(P: vec3f, N: vec3f, fc: vec2f) -> vec3f {
+  let sp = F.shadowVP * vec4f(P + N * 0.03, 1.0);
+  let uv = sp.xy * vec2f(0.5, -0.5) + 0.5;
+  let z = sp.z - 0.0015;
+  if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0))) { return vec3f(1.0); }
+  let dim = vec2f(textureDimensions(shadowMap));
+  let ang = hash12(fc) * 6.2831;
+  var bs = 0.0; var bc = 0.0;
+  for (var i = 0; i < 16; i++) {
+    let q = clamp(uv + rot2(POIS[i], ang) * 0.04, vec2f(0.0), vec2f(0.9999));
+    let d = textureLoad(shadowMap, vec2i(q * dim), 0);
+    if (d < z) { bs += d; bc += 1.0; }
+  }
+  if (bc < 0.5) { return vec3f(1.0); }
+  let pen = clamp((z - bs / bc) * DEPTH_RANGE * LIGHT_ANG / (2.0 * SHADOW_HS), 0.0012, 0.045);
+  var vis = 0.0; var tint = vec4f(0.0);
+  for (var i = 0; i < 16; i++) {
+    let q = uv + rot2(POIS[i], ang) * pen;
+    vis += textureSampleCompareLevel(shadowMap, cmp, q, z);
+    tint += textureSampleLevel(shadowTint, lin, q, 0.0);
+  }
+  vis /= 16.0;
+  let tc = select(vec3f(0.3), tint.rgb / tint.a, tint.a > 0.02);
+  return mix(tc, vec3f(1.0), vis);
+}
+// contact occlusion from the top-down map of the toys' lowest surface
+fn contactAO(P: vec3f, fc: vec2f) -> f32 {
+  let dim = vec2f(textureDimensions(heightMap));
+  let ang = hash12(fc + 7.0) * 6.2831;
+  var occ = 0.0;
+  for (var i = 0; i < 12; i++) {
+    let off = rot2(POIS[i], ang) * 0.8;
+    let uv = (P.xz + off + HEIGHT_HS) / (2.0 * HEIGHT_HS);
+    let d = textureLoad(heightMap, vec2i(clamp(uv, vec2f(0.0), vec2f(0.9999)) * dim), 0);
+    if (d > 0.0) {
+      let dh = max(6.0 - 12.0 * d - P.y, 0.0);
+      occ += (1.0 - smoothstep(0.0, 0.6, dh)) * (1.0 - length(off) / 0.95);
+    }
+  }
+  return 1.0 - clamp(occ / 7.0, 0.0, 0.8);
+}
+fn plateCast(P: vec3f) -> vec3f {   // the frosted plate's own soft shadow on the table
+  let r = length(P.xz);
+  let Lk = normalize(KEY_C - P);
+  let t = (0.0 - P.y) / max(Lk.y, 0.1);
+  let q = P.xz + Lk.xz * t;
+  let pen = 0.06 + t * 0.7;
+  let s = smoothstep(RP + RIM_R - pen, RP + RIM_R + pen, length(q));
+  let broad = 1.0 - 0.32 * exp(-max(r - RP - RIM_R, 0.0) * 1.8);
+  return mix(vec3f(0.5, 0.56, 0.54), vec3f(1.0), s) * broad;
+}
+@fragment fn fsRoom(i: SOut) -> @location(0) vec4f {
+  let P = i.wpos;
+  let N = normalize(i.nrm);
+  let g = hash12(floor(P.xz * 90.0) + floor(P.y * 90.0) * 7.0);
+  let fib = hash12(floor(vec2f(P.x * 9.0 + P.z * 3.0, P.z * 140.0)));
+  let alb = PAPER * (0.985 + 0.025 * g + 0.012 * fib);
+  let sh = shadowAt(P, N, i.pos.xy) * plateCast(P);
+  let r = length(P.xz);
+  let ao = contactAO(P, i.pos.xy) * (1.0 - 0.45 * exp(-max(r - RP - RIM_R + 0.02, 0.0) * 14.0));
+  let wash = vec3f(0.30, 0.26, 0.21) * (1.0 - N.y) * exp(-max(P.y, 0.0) / 14.0);   // warm spill on the paper sweep
+  return vec4f(alb * (diffuseLight(P, N, sh, ao, 0.0) + wash), 1.0);
+}
+@fragment fn fsPlate(i: SOut) -> @location(0) vec4f {
+  let P = i.wpos;
+  let rim = i.rim;
+  let g1 = hash12(floor(P.xz * 260.0));
+  let g2 = hash12(floor(P.xz * 260.0) + 19.0);
+  let N = normalize(normalize(i.nrm) + vec3f(g1 - 0.5, 0.0, g2 - 0.5) * 0.05 * (1.0 - rim));
+  let V = normalize(F.camPos.xyz - P);
+  let sh = shadowAt(P, N, i.pos.xy);
+  let ao = contactAO(P, i.pos.xy);
+  let frost = vec3f(0.78, 0.785, 0.775) * (0.982 + 0.036 * g1);
+  let base = mix(frost, vec3f(0.80, 0.88, 0.85), rim * 0.55);
+  let Lk = normalize(KEY_C - P);
+  var col = base * diffuseLight(P, N, sh, ao, 0.0) * (1.0 - 0.4 * rim);
+  col += KEY_E * vec3f(0.92, 1.0, 0.97) * rim * (0.05 + 0.6 * pow(saturate(dot(N, Lk)), 6.0));
+  let Fr = 0.04 + 0.96 * pow(1.0 - saturate(dot(N, V)), 5.0);
+  col = col * (1.0 - Fr) + envRad(P, reflect(-V, N), mix(0.5, 0.05, rim)) * Fr * mix(0.75, 2.2, rim);
+  let Hk = normalize(Lk + V);
+  let a2 = 0.16;
+  let nh = saturate(dot(N, Hk));
+  let dd = nh * nh * (a2 - 1.0) + 1.0;
+  col += KEY_E * sh * (a2 / (PI * dd * dd)) * saturate(dot(N, Lk)) * (0.04 + 0.96 * pow(1.0 - saturate(dot(Hk, V)), 5.0)) * 0.55 * (1.0 - rim);
+  return vec4f(col, 1.0);
+}
+
+struct BOut { @builtin(position) pos: vec4f, @location(0) wpos: vec3f, @location(1) nrm: vec3f, @location(2) uv: vec2f, @location(3) rz: f32, @location(4) @interpolate(flat) ch: u32 };
+@vertex fn vsBody(@builtin(vertex_index) vi: u32) -> BOut {
+  var o: BOut;
+  let p = outV[vi * 2u].xyz;
+  o.pos = F.viewProj * vec4f(p, 1.0);
+  o.wpos = p; o.nrm = outV[vi * 2u + 1u].xyz;
+  let e = embed[vi];
+  o.uv = e.uv.xy; o.rz = e.uv.w; o.ch = u32(e.uv.z);   // rz carries the print weight
+  return o;
+}
+@fragment fn fsBody(i: BOut) -> @location(0) vec4f {
+  let P = i.wpos;
+  let N = normalize(i.nrm);
+  let V = normalize(F.camPos.xyz - P);
+  let ch = i32(i.ch);
+  let art = textureSample(decal, lin, i.uv, ch);
+  let fill = textureSampleLevel(fillTex, lin, i.uv, ch, 0.0).rgb * vec3f(0.99, 0.965, 0.9);   // a little custard warmth
+  let alb = mix(fill, art.rgb + fill * (1.0 - art.a), i.rz);
+  let sh = shadowAt(P, N, i.pos.xy);
+  let ground = mix(1.0, mix(0.6, 1.0, smoothstep(0.0, 0.35, P.y)), saturate(0.6 - N.y));
+  let Lk = normalize(KEY_C - P);
+  // pudding: soft wrapped light, warm light scattered through the body, a wet glossy skin with crisp highlights
+  var col = alb * diffuseLight(P, N, sh, ground, 0.7) * 0.9;
+  let through = pow(saturate(dot(V, -Lk) * 0.5 + 0.5), 3.0);
+  col += alb * alb * vec3f(0.30, 0.24, 0.15) * (0.35 + 0.65 * through) * (0.55 + 0.45 * sh.r) * ground;
+  col += alb * vec3f(0.06, 0.055, 0.05) * saturate(-N.y * 0.5 + 0.5);   // bounce off the frosted plate
+  let NdV = max(dot(N, V), 1e-3);
+  let Fr = 0.04 + 0.96 * pow(1.0 - NdV, 5.0);
+  col = col * (1.0 - Fr) + envRad(P, reflect(-V, N), 0.03) * Fr;
+  let Hk = normalize(Lk + V);
+  let a2 = 0.004;
+  let nh = saturate(dot(N, Hk));
+  let dd = nh * nh * (a2 - 1.0) + 1.0;
+  col += KEY_E * sh * (a2 / (PI * dd * dd)) * saturate(dot(N, Lk)) * 0.04;
+  return vec4f(col, 1.0);
+}
+`;
+  const POST = COMMON + /* wgsl */`
+@group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> F: Frame;
+@vertex fn vsFull(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
+  return vec4f(p * 2.0 - 1.0, 0.0, 1.0);
+}
+fn neutral(c0: vec3f) -> vec3f {   // Khronos PBR Neutral
+  let x = min(c0.r, min(c0.g, c0.b));
+  let off = select(0.04, x - 6.25 * x * x, x < 0.08);
+  var c = c0 - off;
+  let peak = max(c.r, max(c.g, c.b));
+  let sc = 0.76;
+  if (peak < sc) { return c; }
+  let d = 1.0 - sc;
+  let np = 1.0 - d * d / (peak + d - sc);
+  c *= np / peak;
+  let g = 1.0 - 1.0 / (0.15 * (peak - np) + 1.0);
+  return mix(c, vec3f(np), g);
+}
+fn srgb(c: vec3f) -> vec3f { return select(1.055 * pow(c, vec3f(1.0 / 2.4)) - 0.055, c * 12.92, c <= vec3f(0.0031308)); }
+fn h2(p: vec2f) -> f32 { var q = fract(vec3f(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+@fragment fn fsPost(@builtin(position) fc: vec4f) -> @location(0) vec4f {
+  let v = fc.xy * F.screen.zw - 0.5;
+  let vig = 1.0 - 0.32 * pow(dot(v, v) * 1.6, 1.4);
+  let c = textureLoad(src, vec2i(fc.xy), 0).rgb * F.camFwd.w * vig;
+  let m = srgb(clamp(neutral(c), vec3f(0.0), vec3f(1.0)));
+  let n = h2(fc.xy + F.misc.y) + h2(fc.xy + F.misc.y + 37.0) - 1.0;   // triangular dither
+  return vec4f(m + n / 255.0, 1.0);
+}
+`;
+  const LINES = COMMON + /* wgsl */`
+@group(0) @binding(0) var<uniform> F: Frame;
+@group(0) @binding(1) var<storage, read> nodes: array<vec4f>;
+@group(0) @binding(2) var<storage, read> edges: array<u32>;
+@vertex fn vsLine(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f { return F.viewProj * vec4f(nodes[edges[vi]].xyz, 1.0); }
+@fragment fn fsLine() -> @location(0) vec4f { return vec4f(0.15, 0.12, 0.10, 0.35); }
+`;
+
+  device.pushErrorScope('validation');
+  const shaderErrors = [];
+  const mod = (code, label) => {
+    const m = device.createShaderModule({ code, label });
+    m.getCompilationInfo().then(info => info.messages.forEach(msg => {
+      if (msg.type === 'error') { shaderErrors.push(`${label}:${msg.lineNum}:${msg.linePos} ${msg.message}`); console.error(label, msg.lineNum, msg.message); }
+    }));
+    return m;
+  };
+  const mSkin = mod(SKIN, 'skin'), mGeom = mod(GEOM, 'geom'), mScene = mod(SCENE, 'scene'), mPost = mod(POST, 'post'), mLines = mod(LINES, 'lines');
+  const VIS_V = GPUShaderStage.VERTEX, VIS_F = GPUShaderStage.FRAGMENT, VIS_C = GPUShaderStage.COMPUTE;
+  const K = {
+    u: { buffer: { type: 'uniform' } }, sr: { buffer: { type: 'read-only-storage' } }, sw: { buffer: { type: 'storage' } },
+    t: { texture: { sampleType: 'float' } }, ta: { texture: { sampleType: 'float', viewDimension: '2d-array' } },
+    d: { texture: { sampleType: 'depth' } }, s: { sampler: { type: 'filtering' } }, c: { sampler: { type: 'comparison' } },
+  };
+  const bgl = list => device.createBindGroupLayout({ entries: list.map(([b, vis, k]) => ({ binding: b, visibility: vis, ...K[k] })) });
+  const bglComp = bgl([[0, VIS_C, 'sr'], [1, VIS_C, 'sr'], [2, VIS_C, 'sw'], [3, VIS_C, 'sr'], [4, VIS_C, 'sw'], [5, VIS_C, 'u'], [6, VIS_C, 'sr']]);
+  const bglGeom = bgl([[0, VIS_V, 'u'], [1, VIS_V, 'sr']]);
+  const bglScene = bgl([[0, VIS_V | VIS_F, 'u'], [1, VIS_F, 'd'], [2, VIS_F, 't'], [3, VIS_F, 'd'], [4, VIS_F, 'c'], [5, VIS_F, 's']]);
+  const bglBody = bgl([[0, VIS_V, 'sr'], [1, VIS_V, 'sr'], [2, VIS_F, 'ta'], [3, VIS_F, 'ta']]);
+  const bglPost = bgl([[0, VIS_F, 't'], [1, VIS_F, 'u']]);
+  const bglLines = bgl([[0, VIS_V, 'u'], [1, VIS_V, 'sr'], [2, VIS_V, 'sr']]);
+  const layout = (...g) => device.createPipelineLayout({ bindGroupLayouts: g });
+  const SAMPLES = 4, HDR = 'rgba16float';
+  const depthState = (cmp = 'less') => ({ format: 'depth32float', depthCompare: cmp, depthWriteEnabled: true });
+  const pCsNodeF = device.createComputePipeline({ layout: layout(bglComp), compute: { module: mSkin, entryPoint: 'csNodeF' } });
+  const pCsVerts = device.createComputePipeline({ layout: layout(bglComp), compute: { module: mSkin, entryPoint: 'csVerts' } });
+  const pShadow = device.createRenderPipeline({ layout: layout(bglGeom), vertex: { module: mGeom, entryPoint: 'vsShadow' },
+    fragment: { module: mGeom, entryPoint: 'fsShadow', targets: [{ format: 'rgba8unorm' }] }, primitive: { cullMode: 'none' }, depthStencil: depthState() });
+  const pHeight = device.createRenderPipeline({ layout: layout(bglGeom), vertex: { module: mGeom, entryPoint: 'vsHeight' }, primitive: { cullMode: 'none' }, depthStencil: depthState('greater') });
+  const sceneVB = [{ arrayStride: 28, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' }, { shaderLocation: 2, offset: 24, format: 'float32' }] }];
+  const scenePipe = fs => device.createRenderPipeline({ layout: layout(bglScene), vertex: { module: mScene, entryPoint: 'vsScene', buffers: sceneVB },
+    fragment: { module: mScene, entryPoint: fs, targets: [{ format: HDR }] }, primitive: { cullMode: 'none' }, depthStencil: depthState(), multisample: { count: SAMPLES } });
+  const pRoom = scenePipe('fsRoom'), pPlate = scenePipe('fsPlate');
+  const pBody = device.createRenderPipeline({ layout: layout(bglScene, bglBody), vertex: { module: mScene, entryPoint: 'vsBody' },
+    fragment: { module: mScene, entryPoint: 'fsBody', targets: [{ format: HDR }] }, primitive: { cullMode: 'back' }, depthStencil: depthState(), multisample: { count: SAMPLES } });
+  const pPost = device.createRenderPipeline({ layout: layout(bglPost), vertex: { module: mPost, entryPoint: 'vsFull' }, fragment: { module: mPost, entryPoint: 'fsPost', targets: [{ format: FORMAT }] } });
+  const pLines = device.createRenderPipeline({ layout: layout(bglLines), vertex: { module: mLines, entryPoint: 'vsLine' },
+    fragment: { module: mLines, entryPoint: 'fsLine', targets: [{ format: FORMAT, blend: { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one' } } }] },
+    primitive: { topology: 'line-list' } });
+  const setupErr = await device.popErrorScope();
+  await new Promise(r => setTimeout(r, 0));
+  if (setupErr || shaderErrors.length) return fail('Shader or pipeline setup failed: ' + (shaderErrors[0] || setupErr.message));
+
+  const bg = (lay, list) => device.createBindGroup({ layout: lay, entries: list.map((r, i) => ({ binding: i, resource: r })) });
+  const B = b => ({ buffer: b });
+  const bgComp = bg(bglComp, [B(nodeBuf), B(cellBuf), B(nodeFBuf), B(embedGpu), B(outVBuf), B(cntBuf), B(nodeCellBuf)]);
+  const bgGeom = bg(bglGeom, [B(frameBuf), B(outVBuf)]);
+  const bgScene = bg(bglScene, [B(frameBuf), shadowDepth.createView(), shadowTint.createView(), heightDepth.createView(), cmpSamp, linSamp]);
+  const bgBody = bg(bglBody, [B(outVBuf), B(embedGpu), decalTex.createView({ dimension: '2d-array' }), fillTex.createView({ dimension: '2d-array' })]);
+  const bgLines = bg(bglLines, [B(frameBuf), B(nodeBuf), B(edgeBuf)]);
+
+  // ---------- size-dependent targets ----------
+  let W = 0, Hh = 0, RT = null, renderScale = 1;
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * renderScale;
+    const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (w === W && h === Hh && RT) return;
+    W = canvas.width = w; Hh = canvas.height = h;
+    if (RT) for (const k of ['msC', 'msD', 'res']) RT[k].destroy();
+    RT = { msC: tex(w, h, HDR, T.RENDER_ATTACHMENT, SAMPLES), msD: tex(w, h, 'depth32float', T.RENDER_ATTACHMENT, SAMPLES), res: tex(w, h, HDR, T.RENDER_ATTACHMENT | T.TEXTURE_BINDING) };
+    RT.msCV = RT.msC.createView(); RT.msDV = RT.msD.createView(); RT.resV = RT.res.createView();
+    RT.post = bg(bglPost, [RT.resV, B(frameBuf)]);
+  }
+
+  // ---------- world + state ----------
+  const world = new SP.World(shapes);
+  const state = { on: [true, true, true], paused: false, slow: false, mesh: false, sound: false, interacted: false };
+  const cam = { yaw: -0.3, pitch: 0.42, dist: 11.5, tx: 0, ty: 0.75, tz: 0 };
+  const CAM0 = { ...cam };
+  let eye = [0, 0, 0], fwd = [0, 0, -1], right = [1, 0, 0], up = [0, 1, 0], fovY = 0.5, aspect = 1, lensY = 0, viewProj = null;
+  function updateCamera() {
+    aspect = W / Hh;
+    fovY = aspect >= 1.25 ? 30 * Math.PI / 180 : Math.min(2 * Math.atan(Math.tan(15 * Math.PI / 180) * 1.25 / aspect), 55 * Math.PI / 180);
+    const need = Math.tan(15 * Math.PI / 180) * (aspect >= 1 ? 1.25 : 1.08), have = Math.tan(fovY / 2) * aspect;
+    const dist = cam.dist * Math.max(1, need / have), cp = Math.cos(cam.pitch);
+    eye = [cam.tx + dist * cp * Math.sin(cam.yaw), cam.ty + dist * Math.sin(cam.pitch), cam.tz + dist * cp * Math.cos(cam.yaw)];
+    const at = [cam.tx, cam.ty, cam.tz];
+    fwd = V.norm(V.sub(at, eye)); right = V.norm(V.cross(fwd, [0, 1, 0])); up = V.cross(right, fwd);
+    lensY = aspect < 1 ? 0.12 : 0.06;   // shift the image up so the plate sits above the control bar
+    const proj = M4.persp(fovY, aspect, 0.1, 90); proj[9] = -lensY;
+    viewProj = M4.mul(proj, M4.look(eye, at, [0, 1, 0]));
+  }
+  function rayAt(cx, cy) {
+    const r = canvas.getBoundingClientRect();
+    const nx = (cx - r.left) / r.width * 2 - 1, ny = 1 - (cy - r.top) / r.height * 2 - lensY, th = Math.tan(fovY / 2);
+    return V.norm(V.add(fwd, V.add(V.mul(right, nx * th * aspect), V.mul(up, ny * th))));
+  }
+  const shadowVP = M4.mul(M4.ortho(-SHADOW_HS, SHADOW_HS, -SHADOW_HS, SHADOW_HS, SHADOW_NEAR, SHADOW_FAR), M4.look(V.mul(LDIR, 20), [0, 0, 0], [0, 0, -1]));
+  const heightVP = M4.mul(M4.ortho(-HEIGHT_HS, HEIGHT_HS, -HEIGHT_HS, HEIGHT_HS, 0, 12), M4.look([0, 6, 0], [0, 0, 0], [0, 0, -1]));
+
+  // ---------- frame ----------
+  const frameData = new Float32Array(64), nodeData = new Float32Array(NNT * 4);
+  let frameNo = 0;
+  function render() {
+    resize(); updateCamera();
+    frameData.set(viewProj, 0); frameData.set(shadowVP, 16); frameData.set(heightVP, 32);
+    frameData.set([...eye, performance.now() / 1000], 48); frameData.set([...fwd, 0.6], 52);
+    frameData.set([W, Hh, 1 / W, 1 / Hh], 56); frameData.set([0, (frameNo++ % 64) * 7.13, 0, 0], 60);
+    device.queue.writeBuffer(frameBuf, 0, frameData);
+    for (const d of world.act) {
+      const x = d.x, base = parts[d.i].nb * 4;
+      for (let k = 0, o = base; k < d.S.NN; k++, o += 4) { nodeData[o] = x[k * 3]; nodeData[o + 1] = x[k * 3 + 1]; nodeData[o + 2] = x[k * 3 + 2]; nodeData[o + 3] = 1; }
+    }
+    device.queue.writeBuffer(nodeBuf, 0, nodeData);
+    const act = world.act.map(d => parts[d.i]);
+    const enc = device.createCommandEncoder();
+    const cp = enc.beginComputePass();
+    cp.setBindGroup(0, bgComp);
+    cp.setPipeline(pCsNodeF); cp.dispatchWorkgroups(Math.ceil(NNT / 64));
+    cp.setPipeline(pCsVerts); cp.dispatchWorkgroups(Math.ceil(NVT / 64));
+    cp.end();
+    let p = enc.beginRenderPass({ colorAttachments: [{ view: shadowTint.createView(), clearValue: [0, 0, 0, 0], loadOp: 'clear', storeOp: 'store' }],
+      depthStencilAttachment: { view: shadowDepth.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
+    p.setPipeline(pShadow); p.setBindGroup(0, bgGeom); p.setIndexBuffer(idxBuf, 'uint32');
+    for (const a of act) p.drawIndexed(a.ic, 1, a.ib);
+    p.end();
+    p = enc.beginRenderPass({ colorAttachments: [], depthStencilAttachment: { view: heightDepth.createView(), depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'store' } });
+    p.setPipeline(pHeight); p.setBindGroup(0, bgGeom); p.setIndexBuffer(idxBuf, 'uint32');
+    for (const a of act) p.drawIndexed(a.ic, 1, a.ib);
+    p.end();
+    p = enc.beginRenderPass({ colorAttachments: [{ view: RT.msCV, resolveTarget: RT.resV, clearValue: [0.3, 0.27, 0.24, 1], loadOp: 'clear', storeOp: 'discard' }],
+      depthStencilAttachment: { view: RT.msDV, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'discard' } });
+    p.setBindGroup(0, bgScene);
+    p.setPipeline(pRoom); p.setVertexBuffer(0, roomVB); p.setIndexBuffer(roomIB, 'uint32'); p.drawIndexed(room.idx.length);
+    p.setPipeline(pPlate); p.setVertexBuffer(0, plateVB); p.setIndexBuffer(plateIB, 'uint32'); p.drawIndexed(plate.idx.length);
+    p.setPipeline(pBody); p.setBindGroup(1, bgBody); p.setIndexBuffer(idxBuf, 'uint32');
+    for (const a of act) p.drawIndexed(a.ic, 1, a.ib);
+    p.end();
+    p = enc.beginRenderPass({ colorAttachments: [{ view: ctx.getCurrentTexture().createView(), clearValue: [0, 0, 0, 1], loadOp: 'clear', storeOp: 'store' }] });
+    p.setPipeline(pPost); p.setBindGroup(0, RT.post); p.draw(3);
+    if (state.mesh) { p.setPipeline(pLines); p.setBindGroup(0, bgLines); for (const a of act) p.draw(a.ec * 2, 1, a.eb * 2); }
+    p.end();
+    device.queue.submit([enc.finish()]);
+  }
+
+  // ---------- sound: soft synthesised squelchy "tup" ----------
+  let actx = null, master = null, noiseBuf = null;
+  const lastTup = new Float64Array(CHARS.length);
+  function audio() {
+    if (!actx) {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      master = actx.createGain(); master.gain.value = 0.55; master.connect(actx.destination);
+      noiseBuf = actx.createBuffer(1, actx.sampleRate * 0.25, actx.sampleRate);
+      const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+    }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function tup(strength, body) {
+    if (!state.sound || !actx || strength < 0.06) return;
+    const now = actx.currentTime;
+    if (now - lastTup[body.i] < 0.07) return;
+    lastTup[body.i] = now;
+    const s = Math.min(1, strength), t = now + 0.005;
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(130 + 100 * s + Math.random() * 25, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.15);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05 + 0.4 * s, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    o.connect(g).connect(master); o.start(t); o.stop(t + 0.26);
+    const ns = actx.createBufferSource(), f = actx.createBiquadFilter(), g2 = actx.createGain();
+    ns.buffer = noiseBuf; f.type = 'lowpass'; f.Q.value = 7;
+    f.frequency.setValueAtTime(1100 + 600 * s, t); f.frequency.exponentialRampToValueAtTime(220, t + 0.13);
+    g2.gain.setValueAtTime(0.12 * s + 0.02, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    ns.connect(f).connect(g2).connect(master); ns.start(t); ns.stop(t + 0.18);
+  }
+  world.onImpact = (d, s) => tup(s, d);
+
+  // ---------- interaction ----------
+  const ptrs = new Map();
+  let mode = null, down = null, grabInfo = null, pinch0 = 0, dist0 = 0;
+  const hint = $('hint');
+  const interacted = () => { if (!state.interacted) { state.interacted = true; setTimeout(() => hint.classList.add('gone'), 1200); } };
+  function grabTarget(cx, cy) {
+    const d = rayAt(cx, cy), g = grabInfo;
+    const t = d[1] < -0.02 ? Math.min((g.y0 - eye[1]) / d[1], 60) : 60;   // above the horizon: aim far along the ray, then clamp
+    let px = eye[0] + d[0] * t, pz = eye[2] + d[2] * t;
+    const r = Math.hypot(px, pz), rmax = RP - 1.0;
+    if (r > rmax) { px *= rmax / r; pz *= rmax / r; }
+    g.px = px; g.pz = pz;
+  }
+  function updateGrab(dt) {
+    const g = grabInfo; if (!g || !world.grab) return;
+    const die = world.grab.die, R = die.R, l = V.sub(g.local, die.S.com);
+    const hx = die.c[0] + R[0] * l[0] + R[3] * l[1] + R[6] * l[2], hz = die.c[2] + R[2] * l[0] + R[5] * l[1] + R[8] * l[2];
+    const pull = Math.hypot(g.px - hx, g.pz - hz);
+    // progressive: a gentle pull stretches with the base clinging; a firm pull lifts and carries it
+    const want = Math.min(1.4, Math.max(0, (pull - 0.22) * 2.0));
+    g.lift += (want - g.lift) * Math.min(1, dt * (want > g.lift ? 9 : 1.6));
+    // press and hold without moving: squeeze down into the toy
+    const holding = !g.moved && performance.now() - down.t > 260;
+    g.press = holding ? Math.min(1, g.press + dt * 1.6) : Math.max(0, g.press - dt * 4);
+    const pd = V.norm([-g.hit.n[0] * 0.4, -1, -g.hit.n[2] * 0.4]), depth = 1.1 * g.press;   // deep target = firm, capped press
+    world.grab.t[0] = g.px + pd[0] * depth; world.grab.t[1] = g.y0 + g.lift + pd[1] * depth; world.grab.t[2] = g.pz + pd[2] * depth;
+  }
+  canvas.addEventListener('pointerdown', e => {
+    canvas.focus({ preventScroll: true });
+    canvas.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    interacted();
+    if (state.sound) audio();
+    if (ptrs.size === 2) {
+      if (mode === 'grab') { world.endGrab(); grabInfo = null; canvas.classList.remove('hold'); }
+      const [a, b] = [...ptrs.values()];
+      mode = 'pinch'; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = cam.dist; return;
+    }
+    if (ptrs.size > 2) return;
+    down = { x: e.clientX, y: e.clientY, t: performance.now() };
+    const hit = world.pick(eye, rayAt(e.clientX, e.clientY));
+    if (hit) {
+      mode = 'grab';
+      const wg = world.startGrab(hit.die, hit.p);
+      grabInfo = { hit, y0: hit.p[1], lift: 0, press: 0, moved: false, px: hit.p[0], pz: hit.p[2], local: world.local(hit.die, hit.p) };
+      wg.t.set(hit.p);
+      canvas.classList.add('hold');
+    } else mode = 'orbit';
+  });
+  canvas.addEventListener('pointermove', e => {
+    const pt = ptrs.get(e.pointerId);
+    if (!pt) {
+      if (e.pointerType === 'mouse' && W) canvas.classList.toggle('over', !!world.pick(eye, rayAt(e.clientX, e.clientY)));
+      return;
+    }
+    const dx = e.clientX - pt.x, dy = e.clientY - pt.y;
+    pt.x = e.clientX; pt.y = e.clientY;
+    if (mode === 'grab') { if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) grabInfo.moved = true; if (grabInfo.moved) grabTarget(e.clientX, e.clientY); }
+    else if (mode === 'orbit') { cam.yaw -= dx * 0.006; cam.pitch = Math.min(1.35, Math.max(0.12, cam.pitch + dy * 0.005)); }
+    else if (mode === 'pinch' && ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      cam.dist = Math.min(20, Math.max(5.5, dist0 * pinch0 / Math.max(10, Math.hypot(a.x - b.x, a.y - b.y))));
+    }
+  });
+  const up_ = e => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (mode === 'grab') {
+      const quick = down && performance.now() - down.t < 230 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8;
+      const squeezed = grabInfo.press > 0.3;
+      world.endGrab();
+      if (quick) world.poke(grabInfo.hit.die, grabInfo.hit.p, grabInfo.hit.n, reduceMotion.matches ? 0.7 : 1.3);
+      if (state.sound) tup(quick ? 0.35 : squeezed ? 0.3 : 0.2, grabInfo.hit.die);
+      grabInfo = null;
+      canvas.classList.remove('hold');
+    }
+    if (ptrs.size === 0) mode = null;
+    else if (mode === 'pinch') mode = 'orbit';
+  };
+  canvas.addEventListener('pointerup', up_);
+  canvas.addEventListener('pointercancel', up_);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.min(20, Math.max(5.5, cam.dist * Math.exp(e.deltaY * 0.0012))); interacted(); }, { passive: false });
+  canvas.addEventListener('keydown', e => {   // keyboard orbit / zoom when the scene has focus
+    const k = { ArrowLeft: [0.08, 0, 1], ArrowRight: [-0.08, 0, 1], ArrowUp: [0, 0.06, 1], ArrowDown: [0, -0.06, 1], '+': [0, 0, 0.92], '=': [0, 0, 0.92], '-': [0, 0, 1.08] }[e.key];
+    if (!k) return;
+    e.preventDefault();
+    cam.yaw += k[0]; cam.pitch = Math.min(1.35, Math.max(0.12, cam.pitch + k[1])); cam.dist = Math.min(20, Math.max(5.5, cam.dist * k[2]));
+  });
+  function drop() { world.drop(cam.yaw); interacted(); }
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input,textarea,select')) return;
+    if ((e.code === 'Space' && !(e.target.closest && e.target.closest('button'))) || (e.key === 'r' || e.key === 'R') && !e.metaKey && !e.ctrlKey) { e.preventDefault(); drop(); }
+    else if (e.key === 'Escape' && !$('panel').hidden) togglePanel(false);
+  });
+
+  // ---------- controls ----------
+  const chars = $('chars');
+  CHARS.forEach((ch, i) => {
+    const b = document.createElement('button'), img = new Image();
+    b.type = 'button'; b.className = 'chip'; b.setAttribute('aria-pressed', 'true');
+    img.src = DECALS[ch.key]; img.alt = ''; img.style.setProperty('--c', ch.tint);
+    b.append(img, ch.name);
+    b.addEventListener('click', () => {
+      if (state.on[i] && state.on.filter(Boolean).length === 1) return;   // keep at least one on the plate
+      state.on[i] = !state.on[i];
+      b.setAttribute('aria-pressed', state.on[i]);
+      world.setActive(state.on.flatMap((v, k) => v ? [k] : []));
+      if (state.on[i]) {   // a newly added toy drops into its slot
+        const k = world.act.indexOf(world.bodies[i]), [x, z] = world.slots(cam.yaw)[k], d = world.bodies[i];
+        world.place(d, [x, -d.S.minYc + 1.6, z], [0, Math.sin(cam.yaw / 2), 0, Math.cos(cam.yaw / 2)], [0, -0.5, 0]);
+      }
+      interacted();
+    });
+    chars.append(b);
+  });
+  $('drop').addEventListener('click', () => { if (state.sound) audio(); drop(); });
+  function togglePanel(open = $('panel').hidden) {
+    $('panel').hidden = !open; $('setBtn').setAttribute('aria-expanded', open);
+    if (open) $('soft').focus(); else $('setBtn').focus();
+  }
+  $('setBtn').addEventListener('click', () => togglePanel());
+  const bindRange = (id, fn) => { const el = $(id); const f = () => fn(el.value / 100); el.addEventListener('input', f); f(); };
+  bindRange('soft', v => { world.softness = v; });
+  bindRange('decay', v => { world.decay = v; });
+  const bindCheck = (id, fn) => { const el = $(id); el.addEventListener('change', () => fn(el.checked)); fn(el.checked); };
+  bindCheck('slow', v => { state.slow = v; });
+  bindCheck('mesh', v => { state.mesh = v; });
+  bindCheck('snd', v => { state.sound = v; if (v) audio(); });
+  bindCheck('pause', v => { state.paused = v; });
+  $('resetToys').addEventListener('click', () => world.arrange(cam.yaw));
+  $('resetView').addEventListener('click', () => Object.assign(cam, CAM0));
+
+  // ---------- loop ----------
+  let last = performance.now(), fpsN = 0, fpsT = 0, fpsGood = 0;
+  const fpsEl = $('fps');
+  function tick(now) {
+    const rdt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
+    if (!state.paused) { updateGrab(rdt); world.update(Math.min(rdt, 1 / 30) * (state.slow ? 0.25 : 1)); }
+    // the camera drifts gently toward the toys, never while one is held
+    if (!world.grab && mode !== 'orbit' && mode !== 'pinch' && !reduceMotion.matches) {
+      let sx = 0, sz = 0;
+      for (const d of world.act) { sx += d.c[0]; sz += d.c[2]; }
+      sx /= world.act.length; sz /= world.act.length;
+      const r = Math.hypot(sx, sz), lim = 1.8;
+      if (r > lim) { sx *= lim / r; sz *= lim / r; }
+      const k = 1 - Math.exp(-rdt * 0.6);
+      cam.tx += (sx * 0.7 - cam.tx) * k; cam.tz += (sz * 0.7 - cam.tz) * k;
+    }
+    render();
+    fpsN++; fpsT += rdt;
+    if (fpsT > 0.5) {
+      const fps = fpsN / fpsT;
+      // adaptive resolution: trade pixels for a steady frame rate on slower GPUs
+      if (fps < 48 && renderScale > 0.55) renderScale = Math.max(0.55, renderScale * 0.88);
+      else if (fps > 58 && renderScale < 1 && ++fpsGood > 6) { renderScale = Math.min(1, renderScale / 0.92); fpsGood = 0; }
+      fpsEl.textContent = `${Math.round(fps)} fps · ${W}×${Hh} · physics ${world.stepMs.toFixed(1)} ms`;
+      fpsN = 0; fpsT = 0;
+    }
+    requestAnimationFrame(tick);
+  }
+  world.arrange(cam.yaw);
+  resize(); updateCamera();
+  requestAnimationFrame(tick);
+  window.__pudding = { world, cam, state, drop, pick: (x, y) => world.pick(eye, rayAt(x, y)), get eye() { return eye; } };   // used by the headless test
+}
+main().catch(e => { console.error(e); fail('Startup failed: ' + (e && e.message || e)); });
+</script>
+<script id="decal-data" type="application/json">{"chiikawa": "data:image/webp;base64,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", "hachiware": "data:image/webp;base64,UklGRvw0AABXRUJQVlA4WAoAAAAQAAAA/wAA/wAAQUxQSHUOAAABsIb/nyFJ0u8f/8jBqm9mlqO1bdvG2bbv1t4927Zt39q2vTsza46nMyL+vxetyqyoyLcRMQEodaeq6tDVVQWjOpVyEO8B+Eole84DwKz9Dz70wM0AuEIQDwAOI9VJzpwD3AHn3fQsSS696l1ToEXggKlvPfvOeXededLxqwGi2VIH7HL+AySZYowk798bVQEoVv3oQxzz+W9tAYhmSR2w39+MtJCMJC3VXLo3/MBT7PIAGUNKKdSJ5OXHAs5lRxxw4P9IhmQcZ+TS/aADTvH+yGAc0wLJK44CNC/igT3/RVo0TjBx2a5wA83jPUyJ44+R/OEmEJcRBWb+kUyRPQy8bpKXAabYldE44RS59CQHzUaF6swXaJG9DfwFdHA5t+HDKbGXgbxuC6hkwQn2v5KM7HngntBBJc7dxcTeWuTSdwEuAx5y3jCDsffRrpmqMqA8vsTAnkfyx6tB+008truSjGw08ET4weTxKtZs0CKvXxvaXw543ULWxmZTfGLIySByus5TMTVBBj79CkySPnLQr5KRjUeeBx1EHt9jYMORfCOc9I1ig5sZjC1MaQu4weOw97JoTTElflHh+qTClgsY2MrIn6sOHq1uZ2LzlvhnL64vPLZ6moHtNNZrwg0axZsY2cqa/5wsrkdugjIBxfsWMbKtgafADxgn6yxJ1g7WvHCKuPE5Ve+9d5ioeq+qMoriI2RiaxOfWlVksHh8hYFtrXnBJLjRxKs6jDlz7vobjb7+urNnrYXRVRUeH2BMbHHgB8UPFCezliRrDWv+fzIE4lUwcoPddj3zh7/4wwULVySOnoaXLnrun7/97Wt23WUVAIodmIxtjrwDg1XxbQa2uOYFkyoFgNlHv/2CKxaz0Qcvft/B2PRJS2x3HN5LdICo7MNkbWLgb4Bprz7/juc4MqUYQohm4zAziyHElEjy7udobHngXzBQ8HcGtjvxs799liRDjNHYaIoxkca2mz29lsjAcLLeC8laxkQyhmRsZzK2P/Lj0IGh+AojWx+iMevRrpo8MJzMWWzWvvybbQ43ILx8kpHlGXkG/GAQWeU5piK5frKTgeDl5YwsUCM3gRsITq4vE9Z2KqpB4LDRCmORRl6jIgNA8V2GMjEuHMIgwOQFTGXCkF4Lnz8vR6TIUuFvxOVP8VOGUkl8FPkXmTafqVSYlu0BzZ3KYYws1sA3wOfO42dWMJF/E5c5cS97hKlkrkXuFPvSWK7GFzYWlzePr1soGEYeAM3dz1k2ljvBmi/SioZfU581h1mpdH4EaM7Uz6zLxtL8T64NzZcK1gxlM/KRwyEuT+Lg336TsXAtkGcBLkcOeO3dLOEUedla0PwoVjqfDKmAyMB71oHPjcfMmxkTC7nm3evAZ0U8Xv8kA8s58MkT4DMiig+QkSUdaa9FlQ0n8iHGxLJOll4JnwmHKX9lNJZ2SvUJ0Cw4rHQhAws82UtrQzPgsOqlDCzyyDvXgOs7wSpXMLDQI2+cotJn4le6kIHFHvgp+P4Sjz+zZsEHfhy+rzzez5olbzFuAe0jj/cyWNEx2cPTxfWNx3GMxsIP/AF8vzjMnGeJxR94NHx/iE67hYnln9JTM5zriwrfYc0uGPkDaD8oPsDAbhi5L7R9IhsuTNYV7OopXlrncTEju2Lgx+Db5nESAzujpSdXE9cu57ZemKw7MPAMaLs8/svIDmnpqRkibVIcxshOGXgefItEpsy31C3MnlvDSXs8Ps7Ajhl4OnxrxK26wKxrJHt6hkhbPE5mYOeMfD+qlogMPZFSB7ErnLZE3fmM7KCJ+0FbIVjHjF002L/gWuHxEcZOYvbSTLgWiKy2gKmTsOY7xbegwusZ2E0jL4BrgcM/LXYU48J14RpzmL7Q2FUj3yLamMdZFrqL/RXNidzJ1FkS75vhpCHFDiFZZ2HittCm5JMM7K7RPgrfFC5j7DCBf2zKydwXzTqMcf6a4hrxeDMju+3GaOpXFjpNsDPhmxA3dBtTt+GXUTXhMJcdN/HaKU4aULzLYrcxLpuGJip8maHrLJnRhLhJ/2XsNkz2OvgGsOoyWsepeTqq3jlstMy6z4lNeHyEgR038KvwvatwCuuuk3gXGqxwThd6RCE9A65i6j6P+94J3EOdqGrCP9GF5qOJ6vHuY3xpPbjeyYLuQ+OR0N4NPd2JDuqd4ggmdqBDO98hTRzZjQ7vdokL14fr3eGdaD4gvTuM1oGeqHonmPYMU/d52DUhC7rQzei9wM/vPjXPRtUzAHd3oVOb8PgqQ9cJPBm+dxVOZN11LOwPbeK0zmNcvCqkdx6vSqnzvDDUhGD6Ulq3ify9UzQx9ELXCfw8qgbg3U8Yuo1xJ7gmKnyl65BzmlEcTus0kVev5KQJh5nGThv4E3g0KTr5IsYuk3gMtBF4fNNCl7HhTeGaUezP1GEir/WKZsVNe5SpuwSegqag+AFjd0nLt4NrTA7pMIm3QNC0yCrzaF2l5mniG4PiOwxdJS3fCq4NBzJ2lGg3Q9BCcTczdpPAN4lvg8crrZsk3j3FSRsEU59l6iKBZ6NCK718gaGDmC1ZX1w7nMxZYtY9Ir8Fj5Z6fImhc5gt31BcW5zMXmzWNQK/Bo/WepzD0DGSPTDJSXvg5DZL3SLwzfBoseJ4xk4Reatz0iZ4/IKhQ1i07eDQaof1VkTrDpGfhKLlig8zdIbEeyaptE3UXcPYESxxByha79ya8yx1g5ofhqIPFSekYF2g5h+h6EuPU1l3gMgbhrzrD/HVfxiLL/K2NeDQpyIr38xYeInL5kLRtx67LLVUdMnseHj0sccRMaWCM7NXQtHXHsfGlIotWnwlPPrc45jaYqFFrjgOHn1f4fAljEVW8/b94JFBj73vZywvi7xpDXhkUbHaJaytsCL56yF4ZFIx9Y+0VFYc/jDgkE0neGdiXVAWb9kRKsioCPa/leWc7DJgEjLrMXT6klRKtOG/7AiVvChw3EKzUiJZnwhITjy2+SeLOpC/Xw2SjwoHLWewkqIFXjldJReKA5dbYGkP81eoMuGwxzImlnfNN8JnQXTKnYws8GSPz3UuBx6fYWCRB34HmgEncxeblZnZU1Mg/edxJgMLPdlR0Azo763Yar4bvu8Eayyjldt7srD2ipJ7dwYUJ1hiub0vA4K5w7RSS+kIaAbWWF5sxqcmQTKwVl1sgV+Fov/c1JsslpnZ8By4/kOFTzEUmQ3zPVBk0Mn6S6IVWAr8Pjyy6PFFDhdXiuQ5q3jJg+hKF7DugZWIhTqkWNeR5CNvRT4d5l7PYRufJWPRxvtOnA4v2YBD9V8ypDEsRZJLy8P45Dlf/Oa9F3/hSx+buzKgyKmDP+1Z0uKoJJdefex+w2aFEfkPAJMwqhfkVYA1T7+Foy+58YubAbiJqTj+7ad6oKq8E2RXFMAer/jZz37x5YM3ASCKWwrkbChEMKaI+qpyInkARAVjOnUAriyQPaEY03mPsSvNAwAd3QFAhdNZF8eBo4hTLwBWGjr6/SeeuOHQVMBJJsZf4f0MZWG2bButVBUj1/vQt+ctIskVix7+8p6A5sdho2BlEXk7Rp203T4/+H8iSQt1zZF/XBeaHRG9nrEoyHTJ7376vT9eeAdHxmBGkmapTpy/L1xuUOFzVhfG2JZC5AQDeSA0N4rjmEojjprYy5jmbSIuM4LVnqEVRqOBl4pmBl5+xlBOjDwMmhnFobSCCvZb+MzA6Q2Wysn4xFoimVGczFhOJOfCZUZk+tNm5ZTsWGhm4HEOQzlFngWfG5Fpz5oVU7LXQnMDj/NYFxO5Hlx2nJv+fLJCMr44C5IdeJzGUEjBfg+P/IoMPWGpjCKPg2YIikMZiyjy9kmKLKv8j7GALCzfAy5PDhu/kKx8an4eikwrPsC6eGr+AZXkChW+y7pwAh+Y6Ryy7XSNe5kGmDWXEu/aEA4Zd5gzL6WBZQzWjAXyu6vBIeseJzDagEpcSMbUuxTIBw4AHDLv8UEGG0g1z13nc8+RMaZepBjJZSeuDCfIvscHGWwA1fw6gNnnPkLSYgg2zhgiST500paAYhBW+BCDDZya34I6BaYd+bt57OFjf3rnaoAXDMYKH2ZMA6bmN6ACiAKYtsW53/nd84uWj7p40RXfOXXTaQDUYWBW+AiZBonV/DpUMFLUY+S0GWuMuvoMjPQqGKQV3v48w+BI5FehgrHF+Uox3so7waD1mHMPgw2IwEVnQAUTlfFiIHus+VsyDgJLfHJXeJSnA06vGSx3FshfrA6PEhXFtteQwbIWjY8dASgKVYG3PEtGy5YZ+fuXQQTF6gTrfWUxGVKejPzTboCiaD2w4dcWkSlafpLdtivgBIXrFFjvk7eTtOwEfh5TFAXsPDD5lT99ihn6olYoY+cBrHIBY+tSCCGaNfA5+EICRCfjcxZ6ZyRTmGBMbDzyrdBiAlR2p/WOxt4+9rvf/Ph1O36NsUfkXLiCErfSfZZ6FPmv9Tfe4NVnfPmrX/7q10Z+9TOfPfuk4zbYaAgjd4mpN8YXZxYVPN7D2KPAb6DX3nvV6iGmngT+DR4l7WT2ErPeRDvNTXLqq3F67706JwCg+DJDTyI/X1hQfIuxN8YdoOi9Yk9LPTFuCy0rJ+u/GK0XxidmijQAh8st9iDatVMcClvxdoZeRPsjFE0qDmLoQeCroKUl6n7F0AseK81A8WeGCaX0wOoipQXB5AWME0p8cppIM87NeJFxAlbzUCjKW91OLzFMwGq+HoqGFfstZxiX1TwLHiWu2OlJhjQeG+bv4dC44oCXGJKNZtF4DjzK3GPTf5Eh2igpkP+e6qU5eOx4MckQY4yBDGfAo9QVeN9DJGOMMZEvnDMZgjYq8KE7OPrii7eBotydw8ofuGaYI+d/YjYgaKcDsNeb//Dv/37zjZsCDkXvAWxz6Mt/8Kr9ZwAqaKsoxhaHwhd1GF0FrVbvnFPv0AWdjhQUJgBWUDggYCYAAHCCAJ0BKgABAAE+MRiJQyIhoRO5xcwgAwSxt34+TFNvNupGMUj93/a/R8tP+c+mfiyTYdwXNH8zP9F6lv1J/xvz/+gT9VP1+9cP1VeY39kf2194r0bf2n1AP7l/o///2Hv93/3///9wv9qvTh/df4NP7D/x/3Q+BT9mf///xv//8AH/g9QD/u9Zv19/r/4q+D/94/Ifz3/G/oP77/a/2p/rf/n+BLPP1raqfx/7f/mP8H+2/+A/af5y/4nhD8W9QX8V/lf+J/K38v/o0+m/XXvddN/0voC+xP1P/T/3r9zfP31XPDf/S9wH+hf2D/Wfmh61//A8VP8B/ufYA/kf9l/6/+K/KH6Vv6L/vf57/Q/uZ7U/zD/C/9v/Nf6v5Bv5R/Vv+P/ff8x/7f9h////Z93nsp/Z3/8+6L+yX/nOCwrCZ7jK42fV4ZPzjVvmP4mFpXkxbTIFIPK1P3ccikFPIKzDsCBURA/4nT+2iluSS89+fU/qgw4DTfuM00sLgvW3BLOJyl4vxJggzzvxlqORf/C3GsVGV7dFQJX7xqkVQ2isUDRQNuxx/f18ar86XRsugKAiJxGh3nyDLtkOM1xW9ob/LfaxMzJ1LtfY5FFAvb64FYb42VlJVLJhENbNg08TlwMwqDb7lPwv6ee3y7rj6FQyF+E6k+KIUU86YFRlg8OQOi1GIXboNhn+Wqfy2xdTMCAJ5Uc6j5K0WD2r3WRVTLqI+u/Z2d5NfCZt46jSmz1k/cMJFVMIQz45qVorD3crmcBusYqedRcC3JoAkJdJaNz3WBiblSAovFHI4cyfVQSK2yEUolETE4NXzjHc6crXSuMAZuoxu9EIHuT9hQn+/rNwCvTJneUXNqRVvb5u3dmNaPM40rpjhKeWYwJyZ016CzO8QMS4pWLn+cJOJzAJsm8chDUtCbfrY9OBvgzphexsWME0F4qATKH2D3uJGq24/Jffeaz57xMx57ceFKk1e+8sXBI8L+XAvE6OxW1hIQRZxuF1quk0cQs9O6zarLWrf9B/nWnJ//JB6+OgNdXAGI4gms44BZpUovwoJEocZIzraIPxxC4dvp5eYfu0v1X8lsUK/yPoqVClUt6jUmtQjYtL2LZ9zdsfWWllpSjbOSTZhc5YCBN+iDNdeDG+IkvDghlE6yh6Goco8GTkepC+u3U5834+Dg7ldZJmBzmlMobPn3OejrS04UBEMqEQ7cz/S/z/Z7d57rKJe3YGLDXAIQuyPkBGBEPac8ROR6c9IRa99+q3fFIeNSlwGhP8IpSnslKEomsDPGgvDullio+1NIL2wM9eEqJl/Ov2+tQ0rn95zoo2X5kfLEx7bCVIMvw1+/OeTcYLfV2nVlI2HQSpD8pomxhUX77E3uzDIdbve+EYwp0/4KBgNEiqYZAAAP7/wCNrvm0A6CdHLwtkpYtOGMUfVHiaxiTJQ2uo7ImyCKLjU+zv9gH/zV575RQOj6ZjlcBxAcrV2fPZsMcXzEEgaRwmVlBwdsk3SGAtEeOgyxOqOReNIAb5wBxSEI8FKZgK2F7ZLQBHKMO4giIIPmCmctaLxaYeuNyw0dUJ+vWsfsY4YaNymNifurOYfFJrzG1qJy0NdIt50J3xLNA8oeIlM/g8Oed/EnvsKibdv5N78Xk014u7qbsngilDCsZSzYcUPBjufW2qM0R91HyGODpnRD5N3Wsj0XelbSaaDaW1tVzlZfZrNGl9b0FnjbHd2N+eD1C5DeriDUkvlwsOTgGP30V8Fa5591Iv5fqqkH2rcwljiULTK6lRNiWvEh14XQ3wERn/H1vDSCFE8nFlR2pGp/G1lcwqHmetdFcl6/hyyrLo7N6QBOebmwLQU/oEQfZZTojnKxOSvVKuYQgEsK/su6PhxoAB0zeP3uFIcMclap3nmYgV8+Sl/M2qXOMyP+dh63CgLgDHpwpQG5q1qnW3bgFQJgywD1p55tSrh5PcieTVCQjP/GB6xLll2aEw1KXvcrV0UsgSipKvCHcSXaUqyt/oGxdgkOrc+g3F+FvXIzVW7BEYGKYBrWvXSkKFaQMa4QSCgSnPppLloi1PWKCwAAwiSFqn3itFVDEz6Zhf8AerRyRnzsiOjbPPoM5pawxCVJAkdTrFKnBjOxzducsimtzoznoCALUfzXhurxPHYHjmj214N/8DzmHAgNHAuvI8SAcW8rA2Unpq0wCRLQihprCQ5Sg+kgzx/dkhryA9WhdnyOZxVk7zo3zu2BltSdysS+5fKNY78Gq3Om9E96igcY3FsuJg4gPhycMxNPeWpBbrkObS39uZcpNMqEVNYliQ8uGNpkJJRgRcOnBqZkrwgukkdYz2B4uLXchB+Uu7WQxTmlr/HGo15J0VjqQc53fmQQ7MX+BriYoR9vwgoFXNc1AOCRWuLpmPMl6AC2BwnSAo/kVo4X8TPzSXAWd+rnTUXQhAiz1mSlEkXOabr1AomPmuriPnoKftTSHxcMonS7dnN5v7oQOhziMQbtLl//Feu/kAAn848hqU33Z2bUh3I/Qr8oFE1QLRFfQZRrrbqRGDpHfjqK5HwYP+8hn6f+0diAKkSIopmbbdOE0TJX6tumc7HVjHdPPmmRjXHS18HVWtRyOYP7h8/AVmksga0X7WPJacaIGjPKuh1KVjlC/8cIyD1ZfFxb+j+9t4WhXec09W3hoPxHUg/zWz6fV0ocqB47XPOurx4c/Jg0QL26zf8wK784efPsE3onrZca5rWhX2HxaZK4uavLVeZ+dBxAMImlQA3Momxd6xqy/a2ePoDfjsdcpgBY0sGuun6rg2gK5H9+nsImo7cu59BWAUtWpf3Msc6+6MiMyKh4Lvpm7ygdupFAIRie594ORvAJDJvOvat2Kv7cKtvdaH99k95qwxUw+Pn158ku7zJBqGTgwMq3N9i+By3t4qqc8uWmrHud6dw3p8uxo/GXC2kCUnQ0NLDeDhPUKuckgEN67IwOFg/M7GKb/uzvOHCy3b7J7SH/v+LI242RHTQfPePXkSekiYsktFqPeNLOyd8OE6AAIMzsrwN1TVWO5dPX668swCP6rtYgKrrP0BXNrpWVwTwABfjwvxr0aSB06NB4u50ZGk+0mTzSdpXh4dwiCNXHTRrjYwYEE6QUg/J/vaByTiWqJx0Ka9SqG/dlzbwYNK0KS2KTIisJ08NmoBLsmC8p3X97p2JVx41ECub5HM5gNiuFpvl6HGSy+ivDUArcGNMDU+XTurGMSyS5R/K7a5EPiNLSQTSgkTiwABW70eaAMScZRZXxFKjAl4KKUcXTk9XDzWCIxA6SHdVy8a8xYfCXyGdvOtXE9N3ykp3J54LoAiT68uMuZDdwavPSuRvEpxR3nuMGkO9C28f0g/bV33WVjohm2Anp2z7gS0jUMcbxb9PcldAQhRTnG5c0b17X3+WqZFWcPkWCurXe/f2Wz341OujDcrRpewwTEz47pri/soSvqiRLjTHK93+lioMcIs+B4ChD84tgO/pEQfge7MLou2XrBa2aFgSsLWLXYZEq976W29b1aSBzGSVylfrKdN+O/VxrC8Gx0HQl1Z7lPjPPota2HREcQ+AjYdsidvQks0/B4be8s10j8flG/L6ICyFSHg65Z85Om/Dg3ICsQB3xaPJJwsofRpcuw5cBNDQ5umnbOI8LABXlGAxvjjBEVcrSbRechKUe6/xBuDcVO760L+VqVzwz0P38hUCZvLVtUluQ80JZOz7B/5ibjQ/OPaFLi9Px+zb8Vphe9PZdkv8Mm9Se1DIa3LYrqp5iCW08dTKHquysVb76uQ9kmKVUgY37DOpUdUSaKlYJiTjNRxkrts2DD4ue97wJYIb+0jl0BxFhXzGGfa7L8iuIgWHebckQScrP01J+ZnJ+3c+HGgVw5A09is8cbQGDzJFUYuAuLIvrp6eQiMj6tBeqCpBw3FtqrZFymCfex08DtNzYhIdl65zK4+cPFDsEGWNv/KH7bUkTPW3uReTE6FWZ2+8JlFyC4zV+vbtjC5WVl8R5gFTXh7vOF5bxwLiTQkcLf6+a8WATkE4zPcWoju4SxfL0BmEsk9fp8TOc4cdJHk7PCUFb1LT6vAEicXfW16rGQydyma0SWKUoyKh8MwnF78NczuA7LuUKDLxsxz7SN5DGU3fevHC4agEX+z6xn/JNXghIzJJUzgvwE+tqbwYBQQwHt9MICxJT0aqJ2g4KPEeumbC69L8vdRiHhonr5Y3iEHTZrzzIIFk6Tgc03MNOIwVUeZGhEV6JSy7tQAlv0FdhtCaA2Vcs/cDVNRUcIR9GbfGhkWkp30/3JCN1LLRRCkpu1tvD1NcUYrIqZVExHEQHo3GR600zn0pAvE/oqfmoHoq4PyMRumb/oLvJphugKSRTLhQo4Aa+UugLF5NHPOiHa9HnjJ1qDIZujn2J7NAufHS7j2ToJs1YnhNDS/qrvJOJ51sXI7dZXLUWK9M9eUoZ49/ZEnm6SaX4rqw5j3RGhPNWjkxs/pu2E3+j3ot19Yx1iNpqUI+wRRt2glMJLybHG9f+K/X81Bo8S4lsZT4NQ7leoLEQVEsIvZEVB4xHOP+nYceqs7Ci2oshUNMr6YDtEMXgpBwXuBcsN5x6a2dCSiLqZ+aMgQUhMB23GCM5HHieeZMILaK0zQVM35A+dHQHudwX7FIK9GkMMIYrZxG4GVv+2knFQwVPIQJ4JhcFUnm1ThvgBwnNGTx/lrCOFKaVnN08zx1VazwWqqzd9LAyp8mN1tv0NMSXLEajJ4g0DaECvOPVnceULunus58zhquBElFNmOGNrPj0rYb8ouzh1f3fT+3ROLeB+yanZCvi4BJVLnxFX1nR9zd5pf28qmHAMJiven4/4enxakhQ4kNYYH1r/Pmf2M5+U9HUzTTBHM71R8XksJWeUeNnIZvU1cyw6C7OVR9iFyzoOTFeMkc5lEevFQkAQLZMoAO7pWYAhDkzkWa6YA44cI0UkxYPhILaqJiGFLnp+77Skk46oadyGA9UsJGuLkVtMv+1+cUkb+bKAxR048sQ68G7zRr7R46RO/X4kq2Cpjlf8TcxBpc/OmuJar/JrmlpV4sACjl6vvqZ8k8CbxYTj7PpdPm/nLmoy4aep8FHWOGbVc5OxP6kqvM90mRTqZcvGtWNJmYGOi8M0bAb8O5BKzRQllYIghxb8+HttSlnnvK0V8oOG6z6dkUg7ugC9SeWbjjaEUPcCKNpsG/WPztLJQzpGoQpUY62pjF/i/FgLIz16cTzj/AwDDc0a0IJJ10zj6BMvpMBUaCoEqKqBq1TjMIYyoOE9Ku7RR3pt9HnK2w6XnZ1bSbyXTaU0NSo6HFcbCTtUEhSnSAZ7OH+qj1N/9zqO5OafFUjspe9cX7pCGwhvk0xAw/Le0hzw2112WxqMEDbuwG9cXDDmqVRhYM3/Cpor1oJ/uuviEVC0Mo50UyeGYHjrJ9G4L/NILescbZ/4z/dtycp8uKbYlFSrg9tA8hacmUi5Sw5/nNXI5EKxBQn7zupE08BXvs5a1RlhnbiFpc4F7T3hYHc58CiZHPiqr5GUNct9Mz/2l//8SZNhqmAWF81LRJnYRPDnf7dfc+oo6HdlNFuOUNrGzghkmY/hx+0tpqpTQbd26wl3IZHpsiNW34k55otzfvP8GPrJV8q/I+Xh5Jl/X03PfyoaB5VrzLKlQAhEiKAUS2cIXezxmO3fn84+kZj/53dkukCSqFH0XxZUhVnYySRDqvZGLWZ8tu2GfLsus+cL81Px+cWwXqw7tK/t3sqfE9rSWVYOpYCzDNPc7v0uOo2RaPZcrGItlv9CTMFurESkoCAA84INx+pGAAdWiK3zMwY8NJxerE1lU7LVs2u27dWg/wYO+jm6AtcYmjhAo9MH0jUwOWlmQqEZ3rYivGMz/ruHtmwvWkB6igGOe8sXqEHxQH2wrHgiSAirgdG94GXUTqPeB2JMPFWOwxeQiYVjgwrxKXPkjVr9M2/dRDqQp/rFUsKBw84EVmekQustXslMeLFCnxgvyxiH7igOmKjxXz+j0qh/kNVRuk3uhPS1mYDS4h4HvJXEZeVD2jmUgP3pvtt0CQ8RU5IWk5t8G+DUo4vI6Asf2HRw5PnZCBP/3nmAxHXpuxFVhsaPnL0Ef1Aay7EUzy4bbqrMN7aVfiyF0utN1j6kRbQ9ym7eZ4ojx9xbBtPh0+Vdp99gfmfHBNPHhJ0hG8x+FC6HNJc+yBZ50xiiURmfim/Wwg4oywAmG5cXwTNxowjl4qZ+/5iM13jdG6H11ap9JWni6cdHZDVAqeDtUurBu2ZIojLsPgtWXpfXQGsZMNc+v7RJFN6GDXLcMBkaopDjAAYJZxK18pgylkKT/A1x1+C1N2lfkICH8Hs+uHpjb/3CAL0eQh+lFtm7oBVV2WY0lanyV1d90BIoQIv3oW4axIcouj89bCv8rQHrU8sNFIhZH6xXY98uj07vRFBJBPslbu+tw681XExbU77o0x2Fra7MDH2jjfZaturUinUjZU56YPGv8IyVhD711Qg0fl44cZGlwM2kqJsMn+vyfuCijuhd4yiTz2wfA282dQIZca70xM6gF2Y6fCnJasrqmZ7mzBQbFdyA0SYVrLJWRKgxLUTa+PvmXPvSSyoYoplhOpnJsDQ3VnyxGCB14TQB7UaYt4txd1hm5h6r4pseUMVa7lWiOHc7K6xfiSHUU+DuMguLnHqOXM/Y2beN7YG9/YPIRVgnuIJ7zT8sCMxHZVl1oFAZvtKirFUHSjC6cUUVLlHGQvnhr2kQ0OxsEqsMxc4+nJ5npT9yMp/VxNtgVj6Qn6zEGFvw+U+mPiwq3vUT1fqkJnAqVqyHvEsKWFk1osdJiFuH0MepZF5WBkUjMUu6eQAh/yGjNyqkvw65XmFR4RfLfajG4ECKN11+/fLuHPpuNo6P39kVu6fSm1y5K1WZRefytWvC/EH/TeSv78eaNtCm7YdFqGkl0HAaOZsdLLxtBg9HYDIDAObS/o0aLylSFY6uN3qhIF7PM2TYVi21VEtP2dvWS9/SKOzDsoz38CJTZEu2y5Ng9jCXCfxaM/uZLTX8AwSdNzVlnCev99A7cjlmnVr7eNykLBeAvxgLd1bKWc3Hir5WS3hX5U+9NWDDNUmCiC+EamLYXg5bnPYtAunaJi6s037Wx5TyJkAaemvqY2Z7Qqgb2UBsP9b4i4kfPFjrqcnP/OipdkYa2XqbLTmHE7gk65aozzJf+frusELCNgJImxY3iENfM/6neFM3PTqH66OBidsPif5juPYtqnjjs7UHec/5y0mcgE5JFxy/6tOh4IO3JnuXZinH/qdgGDfgwOyeCiPD57wHJQkKKbLPo4zdAHYobybJU0NcRapSsPs1V0Pkob9f2vl+jE75RSQQfhcH6HUBP7nw4cQW1juNsK5kz0f91f+fKaMPoGISLXkUX7u5dPibE9/3VsOITdj4uHwrvIIfTpG1QwjRhuKIHKftV0oVMhil2bkArPdTqzsVWPsOmPwPPKDJ1t3q8x8NCGURHwOUstTE7y20E25r5OlCrE+97We7+nPjGVoYAO72M5+lDBXCW8XfLJWyjWdXvZE/B+0OrJg5h+FYbCStdy1IKM1eSh03Xic1yeamElJWDNtr/zPA0PNKsRr8Etz1OPlxDQEgShT4yffDNS6pKk1YyNvnR8m6DWs/3+8r4eKCZ3N4BgNE1NK7042tu/SnDinZOKW2uGM5F8LdIHOgp04Yg8T7XXfq0CtzLtkzVNmsbC3uTmBgT+RtIym2fBgxBH84BRUMOmvqQXA+oJhTp2Zsti/kUaC76wH6/lFdUVpfxf2BTicPFTnquqwQI4BnCzxKWPozwRNuA1zjViR2EznRfb8dAvFxG36lodEHT4DKhxyPw7d0YPFNUPpf0VMZ2bESoQbiru7wACUFZVYpUXZzbxfSXNTpRskQrWLpxsrmMwgW/dyxzKrPfkmgf9RfnOVWTB7vO35FX5ZG/zhZhCGCmeeVSCyWcwNRl/gYh7VKoOWY60CApPAyy4iS0bwnGJaE1hh03tPrsJsXRya1ki2jeKW3aD2mDYsy9pMEm184wahqd5YAiSFVR+8eTxLPgnQYnZByBg54hRoHT0XGI1UowrdoAyMKyEdEoO+QSKG7D2qr42aEXpnqJ+CprKLyRORZGodarEmRXkrzfLZBzQbJ1IZ8FJMpLgZvD1TqfxXrXtHY86wyW6ksV6y09Dv/6Q8cMcCiAv29U6lyDiippwJnx5gAdI8/Dqp9r7G+D7nlc1XjWD5m0+RC/0kHhIscV7iJlnguMHeXHi+io2M9cRAhGmInQ7FcsEcOXYDMwyz/91Un1INiddUN+1lfDqYCfJ1677qYUl8PcC/z9WTxi+ZiBDI3TiMbZOXkrPZJOPwmVL9pOhP646j7Ue97howuQ4BJBS58DqzDMdcouqtvfgE81uhhUKwOk6McoKl08n0v9geQBd9YBxkH1sddlI8zyPRe1jeSwY2z5VmIkEKnZkENOyE+sSgvUnin6gcx1M9/o37vDbLPdWt3bF4P2u7RllIRWOLgZnbOb4YNzkZ8Hlr0t1By/t12vcjp2K5zgb5iNzur2XdoGxq0AaQyAC0UG4ff+yhSMNjPTfjfjNBv0fF1sv4LBKTnruasKo2b2lq+dZbDp+PCAqDwYkFZAhYtWmrraOwXycT+NO2jMmGN7SqPns3AKOuPanE2aVd3kndRQ/iYFMNxJsQT6JOtIdhbwEaDVjo6e+SdlJX8hwAv2nYtbG/SVwl7YERsVPwx9GB4KWk/LKBj2qoj1w1DWg0LHyMKIWGxiEKRMqh64RsazhIBPH0FUn5jye/BZcuMa13NClFSC6OLq3/FdE5nO2c+a5sfFSEAQ1fEe+4qCh7zT4Z28I6L7XwF/Lzokhv88M/wE5aWqes5IYuG1VlX5V2VpEzTncc/9UFgi3TBcfBWYkH9yOR5jUG1VtznG5y4eZT1aHojihFsu2RXH/h9wfuezm/yyBWPWbQj0x+tlYdtGoqtWae9+UeGXzGi/0ZN9HNIZ97uWpeT9MP8Bi+8uLjZt7wKCrrALv3SMZufXn/brUnc6W0kNY15DYROPkpSofaMoYVgzPWWIC/tvMJ+H3EenHfDc1Kyxc9YQHCKTqV27t5tOkgoUVW4Qa//ghlL024pnetdu5nZdf9z7+rY+QZdobbBULFK8lM5nS/x5zXrsrfeR+VasWne0bWiemnWOHRI6pHZoxUR9FLhOPEl2OBPO7vuYTUNxx7wxil3dag1uKkXt1GLAu6bAxVrkeHxS1ixbLBzW2yWlenL26C0uKQ4xjFvank3y0ADz4YXfqnbfShM23xl3HpQDU5KyZR/onTvyh1F0DAaebWjk8h8agPgpujbAD611Q/f7Be0wQmYJfny04yEJrV8RTczJBJt6wEwzkPxOZbOyWLVs0W9s6QVjH4Lt+f87i1ceZ39x4iupv7Md36Az/4FOQrFkW1dwc/CpG+fQHQ/PXLTL5MU9/afLcYtOHJnLIGhHk8rZOMcTTAe488mfPUbLvJGY/yeBVYdZO4iobiBQms46sgBweubcnqqK2qWOJ8iJtgTmvYE+P4tJJi8ZmW9NImXnrqb7cTEeJf0R2S35ndR8HzB2FbGdGC38FD43FO1HGeneystYbl0bhe9JEGIdCtpo1U8b0IfGsWRriO7GlwtAuQvL8k7WU1hNLRE0J/wXCklsf+KCdpr4/foOyqrG3Bp3uPFLoJsnmNPqwwFQPTQ4E6EFklZxdb/b/0etu08HbgngCucQc3fm2sjOcStRIF8HY+FxTJ2C9qLSVQmsBUcf247wCB9o+bdFWQRr+ta+vHyl33pCglW8JoD6+qctjn+4OnAx/AYIawipe9FSUUEFldBOszbuofRapGAVv6oadOnBWOMVOn/teVbhABREE+Kv6M5+1awOqdCP9yZGdJfqCr/1QyJ010yKtRN3+QONIvAAh+pN4Gbf+Yk/feKr98cVuV+r+Lu+lFR3/pyYU9SaDd+MsGsUclUd2BYx//d6GYQ9VDTxLTokG6ZCAzqxKSLTv1dxQ0t3ubAPJJZmdJUa8mJ+fO2YsCWSAx+AOPyD3yN53RW1PZV2g3Ljd4FycSmPf0X/Hpw1KF+H9XlephxT/MXxfOtL+LYIH5st2cYuWU2EWzlmdNzgwKBkd5AthrdFjMFzFOnMrQCsVxBxwbrYJxKV8yhuSZRkUd0BxubudFzANaOFFm+s/EsFkbEYjGuT+4vJHdS1G/kN2GcUtWOY4o5y8twJsF0Z/BFZdG1MBYxoMyhbdPbddQVJTMrQsfjs1DksW3IF2SMP6sqL6ntEjMfz4a3Wyjly22an9RPJ6qxKWrbwIbN3G1Rp6Blvbqx0hWuLxO9UxPyl6qJSTWNS9+nBJAqLnD0g3sviaNMAyAADFc+/L9rke7Pt2tf2NjuuLK9I/4eX0dH63AIIZdw0NHwrYAMhIAQ1LAuVtbitEkQv9tHEX66nnuiDbyFrpn0fdPs3pXOOmvacxO9n3AkAEx2yI+YzuwdzR6PIesGeBKESGFEQJenYJ1zLjJiC8fASoWO3BUsoQS5QtdhTJJRfb9/eEkw5CNsEOAAEvLJhUIVNHWSPEjrwVUfCWtokSZ2UknhYV753nMAXIsUgA8UwWtyKe9JE7TWDaCzI91vX0BUdDXfyjIbTprk22WlpmX9ddS5FXI3jV3yct6E/2+GrflAsW4Xho2EYfh+lAOm2fPho0E4QlW8546EvCukFFcTy3tukDXDVrs6q2xV/S9FCDijrNZInxaIQ03X/CNUAstyiXnPKeIjmgrkWMKWhMsdP547cbgzVBL2sM16w9aIEoIV08oL53pgAb0UHLska09yNgKaduTWlalwisum+VfR7D7wDTpJl5eYLvtv+J2UI7Tr6lffsJFAA6qyxKZPvRpCd7x8Ov0m2CESrAC6tcSltp2z5YyNLGv3w16adYPebQXfovXbk355lSXIYjogEMKq5O+drcrT9udsUPkBbhpV1mOS4tecyJkCv2njo9aSIMeGGuC8IsRNLsz6MbbGlG1VaU1KoQlkWXqEoIK76XXrSxijqTXejbbG/2+rDmA6fBqzkPtqBohTyjkM2BtIaUq2/djxcQYxJCLDFcZc28kkpRsIsCxboEfGmxn1DT/4D0KKb7w5nTnNSKNWFhsuJfn2LRZKLkg3ZDtNa9w6Y1A4Oa/G+wRMjAA2UWrePvG+P2upQO1uTh64MymF6+vqIaZENwvhV7wXgnn4ctpJFJrJQaRncRcbvBpcfgb3Bzhip+8wAZp+uQ4dVoiL6vOWCE0plSFb/ygbd7MuI40V43hIwP0dEtOwM2YGw8/UXNQDrXVGBLw9P0zPm7h8TmcevXbVIm0vBKIWOknLitbeDUSDHkcpt2PekYN4DPldpCI7cVQVvcIjmdT8YfYxFfyBN1KApETRv50IStaq7NS37ugoXDCgQJ7GFVT29JJQT3k4OHuLkrT5Reowu4SiJMy3egqD1PtnauUNn/0CjmeVe4eTxpJzUSb2bbvmkZvz670RGOZvm7ELDiq/cfFi/ATzHz9EHkM2NDajNfUojBrrDKKFb9ZoR07EHMcRUcz6nuxMoG687XroxnCb7HTTEmwQL+kH/4t5u7zyF5m4L92hR2brgSOw8ZpC9lGpVj1xJkcPWvVz15b6WeCCbXkZGYwXSz+RkGUOtexcON+FJgi+0ldyrC7u+3Yu+mqWz7OfcsxWzOdaVqxVWRfr7uCYedauNm6UX5/aLb4/uUw1LeoDSqN33YsV8U19fRbD6Gylnc8zYV62qPNi2fOQ9KsDGtJRlNCjcmddv9EZB0MRKZGO4Z6MgkMbdK/50i5afGT5TTqEaFATmnj8WZni78j7RuX958orAozlqPb4GbT4GzimERLgmeWEJ/Ga27bWmiVdJgWAwE8Ay/4qMzdzNXjJndJH/JMhrZk4O8mAvYTivWYrUVE8fUQto3sV8aDeRXmHBfmWyyWwnDyGPh1Uctx2pTIfSkGU2hG0p8J1lLhJtv6P/HuwSOoJx51uMlhTVjOfXnsyuplqf6d2iD7XhIPUznuYGSteegiB4amdloUKi/Swgl03ccW+DJBDdg4WBeErEVz6x0JnSUYGUGtDDO3Pv5V1VyoIe/Zu3o17GaLH6lCLuYzMtF73osiMicAFazQY7My1Mj9aw8eQvd0Zs8Lg9aRcPvv7EA2kXT9Cul9KFlGyG9czu+/+vOzI2+5GdixiMvAouB/rtNnT/h4LM6lb2B96fnuomLlIbPp6+gcdJDaf1/8Injbg0uRYDJaZvCNUsM25eAGJRRFJbTUeAOjEw80Z/h50Vufr9nq7zSvqQA9YRs5DLK2oldCyn6N6FQOVvevN6KosaPXL0nzXdM53vUs98xJ3TbDx8+VOE0rV4U28OqlsWWR/nvBMrg/7fnkRq8F4gmAYTbTWBjbuK7F/SOim915v9wtn3cAEuCS8+ikmjqjpX+brk4wlHkhH15XgUl3y4Fpem+1qAdKkx453yFKqa1NaNr8LIyXUlljotBfFEWZUmDp6xkiPAiBJU8ULWeLw/gsQW/nNFjMDKpJc/4hhkUAzWZDR0HuoV/zw8N/WJ2o/9IzmdA2xosaTrOOp4sOLM21ApEaQk/g5dc36VqnljG4c33+GAUX/Qdo8jyVPLKPZXPV+OLq9HXlDaGFKMNNOlqI+beSeWNr2bV+pkPRl/bl3rzKSLQvP+gFG8s5uSpEbVXZrKGNOC1/6aUx2iMV90ekX75pDQN+i2+pGrBHCylEvxE46AuB7fl+D5EgZWxgUoXNo/EUG9VDua9ZIdMjfnzyqF8sVd3hrVv/nIxkKsUGOfsSkK+3LfpREL6FrihDJA5W1pw5i0mOCa517zixa2q2UqUvcj/ttKKv25tG6i3G6MLMTcSnKxTV4DR2n+aj9rionnaqYIAQXN7FZ/RjmaVEh9gQIUbXaR9xFw52q/lIyKmweOV3lha5PcYYDtvvRHcNFRzmmcmXVVCaux5OKUoScmyBEsNX6MiNfW6F5FGyTwqznFM6z0ZlixoudAb3V8Wtxdm6dEprMqhmm+0uPZr372tCghzRf5sml9zugdw/U3vHygcgA9mUzy7suo6DMAAAAA", "usagi": "data:image/webp;base64,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"}</script>
+</body>
+</html>
