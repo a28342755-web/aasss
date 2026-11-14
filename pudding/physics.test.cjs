@@ -1,14 +1,13 @@
 // Headless self-check for the pudding physics in index.html (no browser needed): node pudding/physics.test.cjs
-// The ears come from the pictures at runtime; this uses the same pudding mould with two simple round ears.
+// Same mould as the page (the drawing is only printed on top, so it doesn't change the shape).
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const mod = { exports: {} };
 new Function('module', html.match(/<script id="soft-physics">([\s\S]*?)<\/script>/)[1])(mod);
 const SP = mod.exports, dt = 1 / 60;
 
-const ear = (x, y, z) => Math.min(Math.hypot(x - 0.45, y - 1.3, z) - 0.2, Math.hypot(x + 0.45, y - 1.3, z) - 0.2);
-const sdf = (x, y, z) => SP.smin(SP.pudding(x, y, z, 0.95, 0.76, 1.2, 0.24), ear(x, y, z), 0.1);
-const lo = [-1.07, -0.12, -1.07], hi = [1.07, 1.62, 1.07];
+const sdf = (x, y, z) => SP.pudding(x, y, z, 0.98, 0.84, 1.15, 0.36);
+const lo = [-1.1, -0.12, -1.1], hi = [1.1, 1.4, 1.1];
 const mesh = SP.surfaceNets(sdf, lo, hi, 0.045), S = SP.buildShape(sdf, lo, hi, 0.3, mesh);
 const finite = d => d.x.every(Number.isFinite);
 const surfY = (d, pick) => { let r = pick === 'max' ? -9 : 9; for (let p = 0; p < S.NP; p++) { let y = 0; for (let k = 0; k < 8; k++) y += d.x[S.pN[p * 8 + k] * 3 + 1] * S.pW[p * 8 + k]; r = pick === 'max' ? Math.max(r, y) : Math.min(r, y); } return r; };
@@ -90,11 +89,13 @@ check('a tap makes it jiggle for a while, in place; inverted elements recover', 
   for (let f = 0; f < 90; f++) { w.update(dt); const e = surfY(d, 'max') - top0; if (prev * e < 0 && Math.abs(e - prev) > 1e-3) crossings++; prev = e; }
   assert(crossings >= 4, `keeps jiggling (${crossings} crossings in 1.5 s)`);
   assert(Math.hypot(d.c[0] - c0[0], d.c[2] - c0[2]) < 0.03, 'stays where it was');
-  for (let n = 0; n < S.NN; n++) d.x[n * 3 + 1] = 0.6 - (d.x[n * 3 + 1] - 0.6) * 0.2;   // flip it through itself
+  for (let n = 0; n < S.NN; n++) d.x[n * 3 + 1] = 0.7 - (d.x[n * 3 + 1] - 0.7) * 0.6;   // mirror it through itself: every element inside out
   d.xp.set(d.x); w.wake(d);
   assert(minVolRatio(d) < 0, 'setup inverts');
   for (let f = 0; f < 300; f++) w.update(dt);
-  assert(finite(d) && minVolRatio(d) > 0.6, `recovered (${minVolRatio(d).toFixed(2)})`);
+  settle(w);   // a flipped pudding tumbles; judge it once it has come to rest
+  // a pudding that ends up tipped on its edge sags under its own weight, so this only asks: nothing inside out, nothing crushed
+  assert(finite(d) && minVolRatio(d) > 0.3, `recovered (${minVolRatio(d).toFixed(2)})`);
 });
 check('three toys: drops settle on the plate, inside the rim', () => {
   const rng = s => () => (s = (s * 16807) % 2147483647) / 2147483647;

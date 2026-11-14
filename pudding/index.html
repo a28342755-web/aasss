@@ -137,10 +137,9 @@ const SoftPhysics = (() => {
     const cax = q - Math.min(q, py < 0 ? r1 : r2), cay = Math.abs(py) - he;
     const t = Math.min(Math.max(((r2 - q) * k2x + (he - py) * k2y) / (k2x * k2x + k2y * k2y), 0), 1);
     const cbx = q - r2 + k2x * t, cby = py - he + k2y * t, s = cbx < 0 && cay < 0 ? -1 : 1;
-    const dome = 0.07 * Math.max(0, 1 - q / rt) * Math.min(Math.max((y - h + 0.45) / 0.45, 0), 1);
+    const dome = 0.12 * Math.max(0, 1 - (q / rt) * (q / rt)) * Math.min(Math.max((y - h + 0.5) / 0.5, 0), 1);
     return s * Math.sqrt(Math.min(cax * cax + cay * cay, cbx * cbx + cby * cby)) - r - dome;
   }
-  const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
 
   // watertight mesh of the zero level set (naive surface nets), vertices projected onto the surface
   function surfaceNets(sdf, lo, hi, h) {
@@ -820,7 +819,7 @@ const SoftPhysics = (() => {
       });
     }
   }
-  return { World, puffy, pudding, smin, surfaceNets, buildShape, sdfAt, G, RP, PT, RIM_R, RIM_Y };
+  return { World, puffy, pudding, surfaceNets, buildShape, sdfAt, G, RP, PT, RIM_R, RIM_Y };
 })();
 if (typeof module !== 'undefined') module.exports = SoftPhysics;
 </script>
@@ -866,61 +865,6 @@ const M4 = {
   },
 };
 
-// signed distance (px) to the largest opaque region of a cut-out, sampled on an N×N grid
-const PAD = 0.15;   // the cut-outs touch their square's edges: pad so shapes are never clipped by the grid
-function silhouette(img, N, closeR, openR, widthR) {   // radii as a fraction of the padded grid
-  const cv = document.createElement('canvas'); cv.width = cv.height = N;
-  const g = cv.getContext('2d', { willReadFrequently: true }), pp = Math.round(N * PAD / (1 + 2 * PAD));
-  g.drawImage(img, pp, pp, N - 2 * pp, N - 2 * pp);
-  const a = g.getImageData(0, 0, N, N).data, inside = new Uint8Array(N * N);
-  for (let i = 0; i < N * N; i++) inside[i] = a[i * 4 + 3] > 127 ? 1 : 0;
-  // keep the largest connected piece (drops stray dots such as the dotted tail outline)
-  const lab = new Int32Array(N * N).fill(-1); let bestL = -1, bestN = 0;
-  for (let s = 0; s < N * N; s++) {
-    if (!inside[s] || lab[s] >= 0) continue;
-    const st = [s]; lab[s] = s; let cnt = 0;
-    while (st.length) {
-      const p = st.pop(); cnt++;
-      const x = p % N, y = (p / N) | 0;
-      for (const q of [x > 0 ? p - 1 : -1, x < N - 1 ? p + 1 : -1, y > 0 ? p - N : -1, y < N - 1 ? p + N : -1]) if (q >= 0 && inside[q] && lab[q] < 0) { lab[q] = s; st.push(q); }
-    }
-    if (cnt > bestN) { bestN = cnt; bestL = s; }
-  }
-  for (let i = 0; i < N * N; i++) inside[i] = lab[i] === bestL ? 1 : 0;
-  // a toy is moulded simpler than the drawing: close the gap between the feet (a base it can stand on), round off tiny tips
-  const not = m => m.map(v => 1 - v), cl = closeR * N, op = openR * N;
-  let m = edt(inside, N).map(d => d <= cl ? 1 : 0);
-  m = edt(not(m), N).map(d => d > cl ? 1 : 0);
-  m = edt(not(m), N).map(d => d > op ? 1 : 0);
-  m = edt(m, N).map(d => d <= op ? 1 : 0);
-  // rows: where the drawing starts, where the head is full width (above it: the ears), where it ends, and its width
-  const rows = [];
-  for (let y = 0; y < N; y++) {
-    let runs = 0, lo = N, hi = -1;
-    for (let x = 0; x < N; x++) { const v = m[y * N + x]; if (v && !(x && m[y * N + x - 1])) runs++; if (v) { lo = Math.min(lo, x); hi = x; } }
-    rows.push({ runs, w: hi >= lo ? hi - lo + 1 : 0, lo, hi });
-  }
-  const top = rows.findIndex(r => r.w), bottom = N - 1 - [...rows].reverse().findIndex(r => r.w), maxW = Math.max(...rows.map(r => r.w));
-  let head = rows.findIndex((r, y) => y >= top && r.runs === 1 && r.w >= 0.6 * maxW);
-  if (head < 0) head = top;
-  let left = N, right = 0;
-  for (let y = head; y <= bottom; y++) if (rows[y].w) { left = Math.min(left, rows[y].lo); right = Math.max(right, rows[y].hi); }
-  // the ears alone: everything above the head line (plus a little overlap so they root into the pudding)
-  const ears = m.map((v, i) => ((i / N) | 0) < head + 8 ? v : 0);
-  return { N, top, head, bottom, left, right, ears: fieldsOf(ears, N, widthR) };
-}
-// signed distance (px, negative inside) and local part width (px) of a mask
-function fieldsOf(m, N, widthR) {
-  const not = a => a.map(v => 1 - v), dOut = edt(m, N), dIn = edt(not(m), N);
-  let f = new Float32Array(N * N);
-  for (let i = 0; i < N * N; i++) f[i] = m[i] ? -(dIn[i] - 0.5) : dOut[i] - 0.5;
-  for (let k = 0; k < 2; k++) f = filter2(f, N, 2, (a, b) => a + b, 1 / 5);   // soften pixel steps (normals would ripple)
-  // how wide the part here is: the largest inner distance within reach (thin ears get thin, wide ones thick)
-  let w = f.map(v => Math.max(-v, 0));
-  w = filter2(w, N, Math.round(widthR * N), (a, b) => Math.max(a, b));
-  for (let k = 0; k < 3; k++) w = filter2(w, N, 6, (a, b) => a + b, 1 / 13);
-  return { f, w };
-}
 // separable square filter: fold with op over a window of radius r, then scale
 function filter2(src, N, r, op, scale = 1) {
   const a = Float32Array.from(src), b = new Float32Array(N * N);
@@ -956,63 +900,15 @@ function fillColours(img, N) {
   for (let i = 0; i < N * N; i++) d[i * 4 + 3] = 255;
   return im;
 }
-// exact Euclidean distance (px) to the nearest set pixel (Felzenszwalb & Huttenlocher, separable)
-function edt(mask, N) {
-  const INF = 1e20, g = new Float64Array(N * N), f = new Float64Array(N), d = new Float64Array(N), v = new Int32Array(N), z = new Float64Array(N + 1);
-  for (let i = 0; i < N * N; i++) g[i] = mask[i] ? 0 : INF;
-  const pass = (get, put) => {
-    for (let q = 0; q < N; q++) f[q] = get(q);
-    let k = 0; v[0] = 0; z[0] = -INF; z[1] = INF;
-    for (let q = 1; q < N; q++) {
-      let s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
-      while (s <= z[k]) { k--; s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]); }
-      k++; v[k] = q; z[k] = s; z[k + 1] = INF;
-    }
-    k = 0;
-    for (let q = 0; q < N; q++) { while (z[k + 1] < q) k++; d[q] = (q - v[k]) * (q - v[k]) + f[v[k]]; }
-    for (let q = 0; q < N; q++) put(q, d[q]);
-  };
-  for (let x = 0; x < N; x++) pass(q => g[q * N + x], (q, val) => { g[q * N + x] = val; });
-  for (let y = 0; y < N; y++) pass(q => g[y * N + q], (q, val) => { g[y * N + q] = val; });
-  return g.map(Math.sqrt);
-}
-// A character pudding: a pudding mould with the character's ears (from the drawing, above its head line) on top and the
-// drawing printed round the front. Everything is mapped from the padded silhouette grid to the cut-out's own uv (0..1).
-const PUD = { rb: 0.95, rt: 0.76, h: 1.2, r: 0.24 };
-function puddingShape(sil) {
-  const { N } = sil, g2i = px => ((px + 0.5) / N) * (1 + 2 * PAD) - PAD, i2g = u => (u + PAD) / (1 + 2 * PAD) * N - 0.5;
-  const uL = g2i(sil.left), uR = g2i(sil.right), uC = (uL + uR) / 2, vH = g2i(sil.head), vB = g2i(sil.bottom), vT = g2i(sil.top);
-  const sx = 2 * PUD.rt * 0.9 / (uR - uL), yHead = PUD.h - 0.04, pxW = (1 + 2 * PAD) / N * sx;   // world units per uv unit, per grid px
-  const EAR = 1.7, es = sx * EAR, epx = pxW * EAR;   // ears a bit bigger than drawn so they read on top of the mould
-  const sample = (g, u, v) => {
-    const cu = Math.min(Math.max(i2g(u), 0), N - 1.001), cv = Math.min(Math.max(i2g(v), 0), N - 1.001), out = Math.hypot(i2g(u) - cu, i2g(v) - cv);
-    const i = Math.floor(cu), j = Math.floor(cv), fu = cu - i, fv = cv - j, o = j * N + i;
-    const a = g[o] + (g[o + 1] - g[o]) * fu, b = g[o + N] + (g[o + N + 1] - g[o + N]) * fu;
-    return [a + (b - a) * fv, out];
-  };
-  const earUV = (x, y) => [uC + x / es, vH - (y - yHead) / es];
-  const ear = (x, y, z) => {
-    const [u, v] = earUV(x, y), [d, out] = sample(sil.ears.f, u, v), [wd] = sample(sil.ears.w, u, v);
-    const ht = Math.min(0.08 + 1.1 * wd * epx, 0.3);
-    return Math.max(SP.puffy((d + out) * epx, ht, Math.min(0.18, 0.9 * ht), z - 0.12), yHead - 0.3 - y);
-  };
-  const body = (x, y, z) => SP.pudding(x, y, z, PUD.rb, PUD.rt, PUD.h, PUD.r);
-  // the drawing wraps round the front of the side, keeping its proportions
-  const yT = PUD.h - 0.08, yB = 0.08, rMid = (PUD.rb + PUD.rt) / 2;
-  const span = Math.min(1.3, Math.max(0.5, (yT - yB) * (uR - uL) / (vB - vH) / (2 * rMid)));
-  const earTop = yHead + (vH - vT) * es, W = uR - uL, uIn = u => Math.min(Math.max(u, uL + 0.07 * W), uR - 0.07 * W);   // inside the outline, outside the cheeks
+// A character pudding: a slightly rounded pudding mould with the drawing printed on top, seen from above
+// (the head toward the back, so it reads upright from the front).
+const PUD = { rb: 0.98, rt: 0.84, h: 1.15, r: 0.36 }, PRINT = 1.3;   // PRINT: world size of the cut-out's square on the top
+function puddingShape() {
   return {
-    sdf: (x, y, z) => SP.smin(body(x, y, z), ear(x, y, z), 0.1),
-    lo: [-PUD.rb - 0.12, -0.12, -PUD.rb - 0.12], hi: [PUD.rb + 0.12, Math.max(PUD.h, earTop) + 0.12, PUD.rb + 0.12],
-    // per vertex: texture uv and how much of the print shows there
-    uvw(x, y, z, nx, ny, nz) {
-      if (ear(x, y, z) < body(x, y, z)) { const [u, v] = earUV(x, y); return [u, v, Math.min(Math.max((nz - 0.1) / 0.35, 0), 1)]; }
-      if (ny > 0.7) return [uIn(uC + x / sx), vH + 0.06, 0];   // top: the colour just inside the top of the head
-      // round the back the colour stays that of the body just inside the drawing's edge (no outline streaks)
-      const phi = Math.atan2(x, z), u = uIn(uC + phi / span * W / 2), v = vH + 0.03 + (yT - Math.min(Math.max(y, yB), yT)) / (yT - yB) * (vB - vH - 0.03);
-      const side = 1 - Math.min(Math.max((Math.abs(phi) / span - 0.66) / 0.08, 0), 1), flat = 1 - Math.min(Math.max((Math.abs(ny) - 0.45) / 0.3, 0), 1);
-      return [u, v, side * flat];
-    },
+    sdf: (x, y, z) => SP.pudding(x, y, z, PUD.rb, PUD.rt, PUD.h, PUD.r),
+    lo: [-PUD.rb - 0.12, -0.12, -PUD.rb - 0.12], hi: [PUD.rb + 0.12, PUD.h + 0.25, PUD.rb + 0.12],
+    // per vertex: texture uv (straight down onto the top) and how much of the print shows there (the parts facing up)
+    uvw: (x, y, z, nx, ny) => [0.5 + x / PRINT, 0.5 + z / PRINT, Math.min(Math.max((ny - 0.35) / 0.3, 0), 1)],
   };
 }
 function buildRevolve(profile, segs) {   // profile: [r, y, nr, ny, rim]
@@ -1055,7 +951,7 @@ async function main() {
   const FORMAT = navigator.gpu.getPreferredCanvasFormat();
   ctx.configure({ device, format: FORMAT, alphaMode: 'opaque' });
 
-  // ---------- characters: cut-out -> silhouette -> pudding SDF -> mesh + lattice ----------
+  // ---------- characters: pudding mould -> mesh + lattice; the cut-out is printed on top ----------
   const T = GPUTextureUsage, U = GPUBufferUsage;
   const DEC = 256, DEC_MIPS = 5;
   const decalTex = device.createTexture({ size: [DEC, DEC, CHARS.length], format: 'rgba8unorm', usage: T.TEXTURE_BINDING | T.COPY_DST | T.RENDER_ATTACHMENT, mipLevelCount: DEC_MIPS });
@@ -1072,7 +968,7 @@ async function main() {
   imgs.forEach((img, layer) => device.queue.writeTexture({ texture: fillTex, origin: [0, 0, layer] }, fillColours(img, FILL_N).data, { bytesPerRow: FILL_N * 4 }, [FILL_N, FILL_N]));
   const shapes = [], meshes = [];
   CHARS.forEach((ch, i) => {
-    const SP2 = ch.size * (1 + 2 * PAD), pud = puddingShape(silhouette(imgs[i], 224, 0.13 / SP2, 0.05 / SP2, 0.18 / SP2));
+    const pud = puddingShape();
     const mesh = SP.surfaceNets(pud.sdf, pud.lo, pud.hi, 0.04), M = mesh.pos, Nn = mesh.nrm;
     mesh.uvw = new Float32Array(M.length);
     for (let v = 0; v < M.length; v += 3) mesh.uvw.set(pud.uvw(M[v], M[v + 1], M[v + 2], Nn[v], Nn[v + 1], Nn[v + 2]), v);
@@ -1386,8 +1282,9 @@ struct BOut { @builtin(position) pos: vec4f, @location(0) wpos: vec3f, @location
   let V = normalize(F.camPos.xyz - P);
   let ch = i32(i.ch);
   let art = textureSample(decal, lin, i.uv, ch);
-  let fill = textureSampleLevel(fillTex, lin, i.uv, ch, 0.0).rgb * vec3f(0.99, 0.965, 0.9);   // a little custard warmth
-  let alb = mix(fill, art.rgb + fill * (1.0 - art.a), i.rz);
+  let custard = vec3f(0.99, 0.965, 0.9);   // the print sits in the pudding, so it takes the same warmth
+  let body = textureSampleLevel(fillTex, lin, vec2f(0.5, 0.8), ch, 0.0).rgb * custard;   // the drawing's belly colour
+  let alb = mix(body, art.rgb * custard + body * (1.0 - art.a), i.rz);
   let sh = shadowAt(P, N, i.pos.xy);
   let ground = mix(1.0, mix(0.6, 1.0, smoothstep(0.0, 0.35, P.y)), saturate(0.6 - N.y));
   let Lk = normalize(KEY_C - P);
@@ -1515,13 +1412,13 @@ fn h2(p: vec2f) -> f32 { var q = fract(vec3f(p.xyx) * 0.1031); q += dot(q, q.yzx
   // ---------- world + state ----------
   const world = new SP.World(shapes);
   const state = { on: [true, true, true], paused: false, slow: false, mesh: false, sound: false, interacted: false };
-  const cam = { yaw: -0.3, pitch: 0.42, dist: 11.5, tx: 0, ty: 0.75, tz: 0 };
+  const cam = { yaw: -0.3, pitch: 0.78, dist: 10.5, tx: 0, ty: 0.6, tz: 0 };   // looking down a little: the drawings are on top
   const CAM0 = { ...cam };
   let eye = [0, 0, 0], fwd = [0, 0, -1], right = [1, 0, 0], up = [0, 1, 0], fovY = 0.5, aspect = 1, lensY = 0, viewProj = null;
   function updateCamera() {
     aspect = W / Hh;
     fovY = aspect >= 1.25 ? 30 * Math.PI / 180 : Math.min(2 * Math.atan(Math.tan(15 * Math.PI / 180) * 1.25 / aspect), 55 * Math.PI / 180);
-    const need = Math.tan(15 * Math.PI / 180) * (aspect >= 1 ? 1.25 : 1.08), have = Math.tan(fovY / 2) * aspect;
+    const need = Math.tan(15 * Math.PI / 180) * (aspect >= 1 ? 1.25 : 1.3), have = Math.tan(fovY / 2) * aspect;
     const dist = cam.dist * Math.max(1, need / have), cp = Math.cos(cam.pitch);
     eye = [cam.tx + dist * cp * Math.sin(cam.yaw), cam.ty + dist * Math.sin(cam.pitch), cam.tz + dist * cp * Math.cos(cam.yaw)];
     const at = [cam.tx, cam.ty, cam.tz];
