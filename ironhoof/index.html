@@ -1,0 +1,1189 @@
+<title>Ironhoof</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+/* layout: one full-bleed glyph canvas; every pixel of game and UI is an ASCII cell drawn inside it */
+:root{--bg:#05060d;--fg:#c9d2e3;--accent:#e2ba50;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);overflow:hidden;overscroll-behavior:none}
+#c{position:fixed;top:env(safe-area-inset-top,0px);left:env(safe-area-inset-left,0px);
+  width:calc(100% - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px));
+  height:calc(100% - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
+  display:block;touch-action:none;outline:none;cursor:crosshair;background:var(--bg)}
+#err{position:fixed;inset:0;margin:auto;height:3em;text-align:center;font:14px ui-monospace,Menlo,Consolas,monospace;color:var(--accent);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+</style>
+<canvas id="c" tabindex="0" aria-label="Ironhoof, an ASCII open-world game. WASD to move, F to mount, Space to strike, Escape for the menu."></canvas>
+<p id="err" hidden>This game needs WebGL2. Open it in a current Chrome, Edge, Firefox or Safari.</p>
+<script>
+(() => {
+'use strict';
+const {floor, ceil, round, min, max, abs, sin, cos, sqrt, atan2, hypot, PI, imul, random} = Math, TAU = PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;
+const sstep = (a, b, x) => { x = clamp((x - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+const angd = (a, b) => { let d = (a - b) % TAU; if (d > PI) d -= TAU; if (d < -PI) d += TAU; return d; };
+const SINT = Float32Array.from({length: 256}, (_, i) => sin(i / 256 * TAU));
+
+// ===== noise =====
+function hash(x, y, s) {
+  let h = imul(x | 0, 0x27d4eb2d) ^ imul(y | 0, 0x165667b1) ^ imul(s | 0, 0x9e3779b1);
+  h = imul(h ^ (h >>> 15), 0x85ebca6b); h = imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+const rnd = (x, y, s) => hash(x, y, s) / 4294967296;
+function vnoise(x, y, s) {
+  const xi = floor(x), yi = floor(y); let fx = x - xi, fy = y - yi;
+  fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+  const a = rnd(xi, yi, s), b = rnd(xi + 1, yi, s), c = rnd(xi, yi + 1, s), d = rnd(xi + 1, yi + 1, s);
+  return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+function fbm(x, y, o, s) { let v = 0, a = 0.5, t = 0; for (let i = 0; i < o; i++) { v += a * vnoise(x, y, s + i * 101); t += a; x *= 2.03; y *= 2.03; a *= 0.5; } return v / t; }
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = imul(a ^ a >>> 15, 1 | a); t = t + imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// ===== tile types: glyph sets (top surface / vertical face), colours, physics =====
+const TT = [], T = {};
+function def(n, top, face, cols, o) { T[n] = TT.length; TT.push(Object.assign({n, top, face: face || top, cols, fcols: null, solid: 0, water: 0, spd: 1, kind: 0}, o)); }
+const GREY = [[150, 152, 162], [134, 137, 148], [166, 168, 178], [142, 147, 160]], STONE = '#%&@$MNWQ8B0';
+const LEAF = [[48, 140, 76], [38, 118, 66], [62, 160, 88], [44, 128, 96]], RAMP_LEAF = '.:;|]oad08Q@', RAMP_ROCK = '.:;-=+^A#M%@', NEEDLE = [[32, 100, 76], [26, 88, 68], [38, 108, 74], [196, 214, 220]];
+def('GRASS', "/|\\'", 0, [[52, 144, 76], [40, 122, 64], [66, 164, 86], [46, 134, 92]], {kind: 1});
+def('FLOWER', '*o*.', 0, [[236, 236, 226], [228, 232, 240], [240, 212, 96], [190, 200, 244]]);
+def('FOREST', '",;\'.:', 0, [[30, 94, 58], [26, 82, 52], [40, 104, 54], [30, 90, 68]], {spd: .85});
+def('SAND', '.:,. .', 0, [[200, 186, 134], [184, 170, 122], [210, 196, 146], [190, 178, 128]], {spd: .8});
+def('DESERT', '.,.:', 0, [[208, 164, 96], [194, 150, 86], [218, 176, 108], [202, 154, 84]], {spd: .75, kind: 5});
+def('SWAMP', '";,~%\'', 0, [[74, 98, 60], [62, 86, 54], [86, 106, 62], [68, 92, 72]], {spd: .5});
+def('SNOW', ".*'_ .", 0, [[216, 226, 238], [198, 210, 226], [232, 238, 246], [206, 216, 234]], {spd: .65});
+def('ROCK', RAMP_ROCK, '|!I[]#%', [[138, 138, 146], [122, 122, 132], [152, 150, 156], [130, 134, 144]], {spd: .7, kind: 8});
+def('SNOWROCK', ".:'*^A#M", '|!#%I', [[226, 232, 242], [202, 210, 224], [238, 242, 250], [192, 200, 216]], {spd: .5, kind: 8});
+def('WATER_S', '~', 0, [[72, 106, 142], [64, 98, 134], [80, 114, 150], [68, 102, 138]], {water: 1, spd: .45, kind: 2});
+def('WATER_D', '~', 0, [[52, 76, 116], [48, 70, 110], [58, 82, 122], [52, 74, 114]], {water: 2, solid: 1, kind: 2});
+def('OCEAN', '~', 0, [[42, 58, 100], [38, 54, 94], [46, 62, 106], [40, 56, 98]], {water: 3, solid: 1, kind: 2});
+def('SWAMPW', '~', 0, [[54, 90, 84], [48, 82, 76], [60, 96, 88], [52, 86, 80]], {water: 1, spd: .4, kind: 2});
+def('ROAD', '.:,;o.', 0, [[154, 130, 100], [140, 118, 92], [164, 140, 108], [146, 124, 96]], {spd: 1.2});
+def('BRIDGE', '=#=H', '|H|I', [[146, 110, 74], [132, 98, 66], [156, 118, 80], [140, 104, 70]], {spd: 1.2});
+def('FARM', '"=', 0, [[160, 156, 74], [124, 146, 64], [170, 164, 84], [130, 150, 70]], {spd: .9, kind: 6});
+def('FLOOR', '.:+#_.', 0, [[124, 122, 118], [112, 110, 106], [134, 132, 126], [118, 116, 112]], {spd: 1.1});
+def('CANOPY', RAMP_LEAF, ':.|;', LEAF, {spd: .8, kind: 8});
+def('TRUNK', RAMP_LEAF, ':.|;', LEAF, {solid: 1, kind: 8});
+def('PINE', ".:;'^/\\A*", ':.|', NEEDLE, {spd: .8, kind: 8});
+def('PINET', ".:;'^/\\A*", ':.|', NEEDLE, {solid: 1, kind: 8});
+def('BOULDER', '.:;oO0@#', ':;o', [[206, 208, 218], [188, 192, 204], [220, 222, 230], [196, 200, 212]], {solid: 1, kind: 8});
+def('CACTUS', 'Y', '|#', [[76, 146, 86]], {solid: 1});
+def('DEAD', 'Y', '|', [[116, 100, 84]], {solid: 1});
+def('REED', "!|i'", '|', [[128, 146, 76], [110, 130, 66]], {spd: .6});
+def('WALL', 'nM#=H', STONE, GREY, {solid: 1});
+def('TOWER', 'M#nH', STONE, [[172, 174, 184], [156, 158, 170]], {solid: 1});
+def('KEEP', '#=%H', STONE, [[150, 156, 176], [136, 142, 164]], {solid: 1, kind: 3});
+def('HOUSE', '="%=~"', '#|H]I[', [[180, 140, 76], [164, 124, 66], [190, 150, 86], [170, 132, 72]], {solid: 1, kind: 3, fcols: [[150, 140, 124], [136, 126, 112]]});
+def('HOUSE2', '#=%=', '#|H]I[', [[156, 74, 60], [140, 66, 54], [166, 82, 66], [110, 112, 130]], {solid: 1, kind: 3, fcols: [[160, 156, 150], [146, 142, 136]]});
+def('RUIN', '#%;:,', '#%&;:!', [[124, 128, 118], [106, 116, 102], [134, 136, 126], [100, 112, 96]], {solid: 1});
+def('STALL', '=~=~', '|#', [[196, 64, 54], [64, 96, 176], [206, 176, 66], [206, 206, 196]], {solid: 1, fcols: [[130, 96, 60]]});
+def('TENT', '/\\^', '/\\|', [[176, 160, 128], [160, 146, 116]], {solid: 1});
+def('WELL', 'O', '#H', GREY, {solid: 1});
+def('STAIRS', '>', 0, [[236, 214, 124]], {kind: 7});
+def('STAIRU', '<', 0, [[236, 214, 124]], {kind: 7});
+def('MENHIR', 'A^n', '|H#!', [[156, 162, 178], [140, 148, 166]], {solid: 1});
+def('DFLOOR', '.,:.:;', 0, [[124, 116, 106], [112, 104, 96], [132, 124, 112], [118, 110, 102]]);
+def('DROCK', '         #', '#%&@MW', [[70, 66, 74], [62, 60, 68]], {solid: 1, fcols: [[120, 114, 122], [104, 100, 110]]});
+def('TORCH', "*'^", '|i', [[255, 204, 96]], {solid: 1, kind: 4});
+def('FLAG', '~>}P', '|', [[206, 54, 54]], {solid: 1, kind: 4});
+
+const NT = TT.length, PAL = new Uint32Array(NT * 64), PALF = new Uint32Array(NT * 64), TOPG = [], FACEG = [];
+const KIND = new Uint8Array(256), SOLIDT = new Uint8Array(256), WATERT = new Uint8Array(256), SPD = new Float32Array(256).fill(1);
+const pack = (r, g, b) => (min(255, b) << 16 | min(255, g) << 8 | min(255, r)) >>> 0;
+const codes = s => Uint8Array.from(s, c => c.charCodeAt(0) - 32);
+TT.forEach((d, t) => {
+  TOPG[t] = codes(d.top); FACEG[t] = codes(d.face); KIND[t] = d.kind; SOLIDT[t] = d.solid; WATERT[t] = d.water; SPD[t] = d.spd;
+  for (let v = 0; v < 4; v++) for (let s = 0; s < 16; s++) {
+    const j = d.cols.length < 4 ? [1, .9, 1.08, .96][v] : 1, f = (0.28 + s / 15 * 0.98) * j;
+    const c = d.cols[v % d.cols.length], fc = d.fcols ? d.fcols[v % d.fcols.length] : c;
+    PAL[(t * 4 + v) * 16 + s] = pack(c[0] * f | 0, c[1] * f | 0, c[2] * f | 0);
+    PALF[(t * 4 + v) * 16 + s] = pack(fc[0] * f | 0, fc[1] * f | 0, fc[2] * f | 0);
+  }
+});
+
+// ===== world fields: 8 low-frequency noise fields -> biome + ground height =====
+let SEED = 1;
+const NF = 8, SEA = 0.43, RAW = new Float64Array(NF);
+function rawAt(x, y, o, k) {
+  const S = SEED;
+  o[k] = fbm(x / 7000, y / 7000, 5, S + 11);                       // continent
+  o[k + 1] = 1 - abs(2 * fbm(x / 7000, y / 7000, 4, S + 23) - 1);  // ridged: mountain ranges
+  o[k + 2] = fbm(x / 9000, y / 9000, 3, S + 37);                   // temperature
+  o[k + 3] = fbm(x / 6000, y / 6000, 3, S + 41);                   // moisture
+  o[k + 4] = fbm(x / 3200, y / 3200, 3, S + 53);                   // rivers follow the 0.5 contour
+  o[k + 5] = fbm(x / 800, y / 800, 2, S + 67);                     // lakes / fords
+  o[k + 6] = fbm(x / 1000, y / 1000, 2, S + 71);                   // sea cliffs vs beaches
+  o[k + 7] = fbm(x / 280, y / 280, 3, S + 83);                     // hills
+}
+let cT = 0, cG = 0;
+function classify(x, y, e, mt, t, m, rv, lk, cf, hl, j) {
+  const land = e - SEA;
+  if (land < 0) { cG = 0; cT = land > -0.006 ? T.WATER_S : T.OCEAN; return; }
+  const mtn = sstep(0.95, 0.992, mt) * sstep(0.02, 0.07, land);
+  let g = land * 45 + hl * 9 * sstep(0, 0.03, land) + mtn * (35 + 75 * hl);
+  if (cf > 0.56) g += 13 * sstep(0.004, 0.0056, land);
+  const dry = t > 0.56 && m < 0.48, rw = abs(rv - 0.5);
+  if (mtn < 0.25 && !dry) {
+    g *= 0.35 + 0.65 * sstep(0.0035, 0.012, rw);
+    if (rw < 0.0035) { cG = g; cT = rw < 0.002 && lk < 0.6 ? T.WATER_D : T.WATER_S; return; }
+    if (lk > 0.80 && land > 0.015 && mtn < 0.1) { cG = g - 0.6; cT = lk > 0.83 ? T.WATER_D : T.WATER_S; return; }
+  }
+  const tt = t - max(0, g - 18) * 0.004 + j * 0.02, mm = m + j * 0.02;
+  cG = g;
+  if (mtn > 0.3 || g > 30 + j * 4) cT = tt < 0.42 || g > 60 ? T.SNOWROCK : T.ROCK;
+  else if (tt < 0.365) cT = T.SNOW;
+  else if (dry) cT = T.DESERT;
+  else if (land < 0.007 && cf <= 0.56) cT = T.SAND;
+  else if (mm > 0.585 && g < 9 && tt > 0.46) cT = vnoise(x / 46, y / 46, SEED + 97) > 0.63 ? T.SWAMPW : T.SWAMP;
+  else cT = mm > 0.53 ? T.FOREST : T.GRASS;
+}
+function biomeAt(x, y) { rawAt(x, y, RAW, 0); classify(x, y, RAW[0], RAW[1], RAW[2], RAW[3], RAW[4], RAW[5], RAW[6], RAW[7], 0); return cT; }
+
+// ===== points of interest: one candidate per region, laid out from rectangles =====
+const RS = 720, POIS = new Map(), SETTLED = {village: 1, city: 1, castle: 1};
+const PR = {village: 125, city: 215, castle: 110, ruins: 60, dungeon: 36, stones: 30, camp: 40};
+const LET = {village: 'V', city: 'C', castle: 'K', ruins: 'R', dungeon: 'D', stones: 'O', camp: 'B'};
+const PW = {
+  [T.GRASS]: [['village', 30], ['city', 10], ['castle', 9], ['ruins', 10], ['stones', 7], ['dungeon', 8], ['camp', 8]],
+  [T.FOREST]: [['village', 10], ['ruins', 14], ['dungeon', 12], ['stones', 10], ['camp', 12], ['castle', 6]],
+  [T.DESERT]: [['ruins', 18], ['dungeon', 14], ['village', 8], ['camp', 10], ['city', 4]],
+  [T.SNOW]: [['castle', 12], ['ruins', 12], ['village', 8], ['dungeon', 10], ['stones', 8]],
+  [T.SWAMP]: [['ruins', 16], ['dungeon', 12], ['stones', 8], ['camp', 6]],
+};
+const NA = 'ALD BRAN CAER DUN ELM FEN GRIM HAR IRON KIL LOR MOR NOR OAK RAVEN STONE THORN ULF VAL WYN ASH BLACK COLD DEEP'.split(' ');
+const NB = 'BURY DALE FORD GARD HOLM MOOR STEAD TON WICK WATCH FELL MERE HAVEN CROSS'.split(' ');
+const NK = {village: 'VILLAGE OF @', city: 'CITY OF @', castle: 'CASTLE @', ruins: 'RUINS OF @', dungeon: '@ BARROW', stones: '@ STONES', camp: 'BANDIT CAMP'};
+let HOME = {rx: 0, ry: 0};
+function spot(rx, ry) { const h = hash(rx, ry, SEED + 900); return [rx * RS + 220 + h % (RS - 440), ry * RS + 220 + (h >>> 10) % (RS - 440), h]; }
+function roomy(x, y, r) { for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const b = biomeAt(x + dx * r, y + dy * r); if (WATERT[b] || b === T.ROCK || b === T.SNOWROCK) return false; } return true; }
+function poiOf(rx, ry) {
+  const key = rx + ',' + ry; let p = POIS.get(key); if (p !== undefined) return p;
+  const [x, y, h] = spot(rx, ry), b = biomeAt(x, y), g = cG; let kind = null;
+  if (rx === HOME.rx && ry === HOME.ry) kind = 'village';
+  else if (PW[b]) {
+    let r = (h >>> 20) / 4096 * 100;
+    for (const [k, w] of PW[b]) { if (r < w) { kind = k; break; } r -= w; }
+    if (kind && PR[kind] > 100 && !roomy(x, y, PR[kind] * 0.7)) kind = 'ruins';
+  }
+  p = kind ? {key, rx, ry, x, y, g, kind, r: PR[kind], name: NK[kind].replace('@', NA[h % NA.length] + NB[(h >>> 7) % NB.length]), L: null} : null;
+  POIS.set(key, p); return p;
+}
+function poisNear(x, y, rad) {
+  const out = [], x0 = floor((x - rad) / RS), x1 = floor((x + rad) / RS), y0 = floor((y - rad) / RS), y1 = floor((y + rad) / RS);
+  for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) { const p = poiOf(i, j); if (p) out.push(p); }
+  return out;
+}
+const BUILD = {
+  village(L, P, R, ri) {
+    P(-125, -4, 125, 4, T.ROAD); P(-4, -110, 4, 110, T.ROAD);
+    for (let i = 0; i < 3; i++) { const a = R() * TAU, x = round(cos(a) * 118 - 20), y = round(sin(a) * 100 - 13); if (abs(x + 20) > 34 && abs(y + 13) > 24) P(x, y, x + 40, y + 26, T.FARM); }
+    P(-18, -13, 18, 13, T.FLOOR); P(-2, -2, 2, 2, T.WELL, 4);
+    const bx = [];
+    for (let n = ri(6, 9), tries = 0; bx.length < n && tries < 80; tries++) {
+      const w = ri(26, 38), d = ri(16, 22), a = R() * TAU, q = ri(36, 96), x = round(cos(a) * q - w / 2), y = round(sin(a) * q * 0.85 - d / 2);
+      if ((x < 9 && x + w > -9) || (y < 9 && y + d > -9) || (x < 22 && x + w > -22 && y < 17 && y + d > -17)) continue;
+      if (bx.some(b => x < b[2] + 7 && x + w + 7 > b[0] && y < b[3] + 7 && y + d + 7 > b[1])) continue;
+      bx.push([x, y, x + w, y + d]); P(x, y, x + w, y + d, T.HOUSE, 8, 1);
+      L.npcs.push([x + w / 2, y + d + 5, bx.length === 1 ? 'inn' : bx.length === 2 ? 'stable' : 'folk']);
+      if (bx.length < 3) L.torch(round(x + w / 2 + 6), y + d + 2);
+    }
+    for (const [x, y] of [[-21, -16], [20, -16], [-21, 15], [20, 15]]) L.torch(x, y);
+    L.npcs.push([8, 9, 'folk'], [-10, -8, 'folk']);
+  },
+  city(L, P, R, ri) {
+    const W = 170, H = 132, t = 6, seg = (a, b, c, d) => P(a, b, c, d, T.WALL, 20);
+    P(-W - 60, -5, W + 60, 5, T.ROAD); P(-5, -H - 60, 5, H + 60, T.ROAD); P(-56, 16, 56, 76, T.FLOOR);
+    seg(-W, -H, -9, -H + t); seg(9, -H, W, -H + t); seg(-W, H - t, -9, H); seg(9, H - t, W, H);
+    seg(-W, -H, -W + t, -9); seg(-W, 9, -W + t, H); seg(W - t, -H, W, -9); seg(W - t, 9, W, H);
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      P(sx * W - 8, sy * H - 8, sx * W + 8, sy * H + 8, T.TOWER, 30);
+      P(sx > 0 ? 9 : -18, sy * H - 7, sx > 0 ? 18 : -9, sy * H + 7, T.TOWER, 26);
+      P(sx * W - 7, sy > 0 ? 9 : -18, sx * W + 7, sy > 0 ? 18 : -9, T.TOWER, 26);
+      P(sx * 34 - 6, sy > 0 ? -42 : -90, sx * 34 + 6, sy > 0 ? -30 : -78, T.TOWER, 44);
+      L.npcs.push([sx * 13, sy * (H + 11), 'guard']);
+    }
+    P(-34, -84, 34, -36, T.KEEP, 36); P(-1, -61, 1, -59, T.FLAG, 46);
+    for (let i = 0; i < 6; i++) { const x = -46 + (i % 3) * 34, y = 26 + floor(i / 3) * 26; P(x, y, x + 14, y + 8, T.STALL, 5); L.npcs.push([x + 7, y + 12, i ? 'merchant' : 'smith']); }
+    for (let x = -W + 14; x + 34 < W - 8; x += 42) for (let y = -H + 14; y + 24 < H - 8; y += 34) {
+      if ((x < 12 && x + 36 > -12) || (y < 12 && y + 26 > -12)) continue;
+      if ((x < 46 && x + 36 > -46 && y < -24 && y + 26 > -96) || (x < 62 && x + 36 > -62 && y < 82 && y + 26 > 10)) continue;
+      if (R() < 0.12) continue;
+      const w = ri(26, 34), d = ri(16, 22), hx = x + ri(0, 4), hy = y + ri(0, 3); P(hx, hy, hx + w, hy + d, T.HOUSE2, ri(9, 13), 1);
+      if (R() < 0.3) L.npcs.push([hx + w / 2, hy + d + 4, 'folk']);
+    }
+    L.npcs.push([-50, 11, 'inn'], [50, 11, 'stable'], [0, 40, 'folk'], [20, 60, 'folk']);
+    for (const i of [-120, -60, 60, 120]) { L.torch(i, 8); L.torch(8, i); }
+  },
+  castle(L, P, R, ri) {
+    const W = 84, H = 66;
+    P(-30, -16, 30, 30, T.FLOOR);
+    const wall = (a, b, c, d) => { const r = R(); if (r > 0.2) P(a, b, c, d, r < 0.38 ? T.RUIN : T.WALL, r < 0.38 ? ri(4, 9) : 18); };
+    for (let x = -W; x < W; x += 14) { wall(x, -H, x + 14, -H + 6); if (x > 8 || x + 14 < -8) wall(x, H - 6, x + 14, H); }
+    for (let y = -H; y < H; y += 14) { wall(-W, y, -W + 6, y + 14); wall(W - 6, y, W, y + 14); }
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) P(sx * W - 8, sy * H - 8, sx * W + 8, sy * H + 8, R() < 0.3 ? T.RUIN : T.TOWER, ri(12, 30));
+    P(-22, -44, 22, -14, T.KEEP, 32); P(22, -44, 30, -30, T.RUIN, 14); P(-30, -24, -22, -14, T.RUIN, 9);
+    L.chests.push([0, -8, 1]);
+    for (let i = 0; i < 5; i++) L.foes.push([ri(-60, 60), ri(-4, 50), 'skel']);
+  },
+  ruins(L, P, R, ri) {
+    P(-10, -7, 10, 7, T.FLOOR);
+    for (let i = 0; i < 11; i++) { const a = R() * TAU, q = ri(14, 50), x = round(cos(a) * q), y = round(sin(a) * q * 0.8), s = ri(2, 3); P(x, y, x + s, y + s, T.RUIN, ri(6, 14)); }
+    for (let i = 0; i < 3; i++) { const x = ri(-44, 30), y = ri(-36, 30); if (abs(x + 7) > 20 || abs(y) > 12) P(x, y, x + ri(8, 18), y + 3, T.RUIN, ri(4, 9)); }
+    L.chests.push([0, 0, 0]);
+    for (let i = ri(2, 3); i--;) L.foes.push([ri(-30, 30), ri(12, 30), R() < 0.5 ? 'skel' : 'wolf']);
+  },
+  stones(L, P, R, ri) {
+    P(-3, -2, 3, 2, T.FLOOR);
+    for (let i = 0; i < 9; i++) { const a = i / 9 * TAU, x = round(cos(a) * 18), y = round(sin(a) * 15); P(x, y, x + 2, y + 2, T.MENHIR, ri(10, 15)); }
+  },
+  camp(L, P, R, ri) {
+    L.torch(0, 0);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU + R(), x = round(cos(a) * 16 - 5), y = round(sin(a) * 13 - 4); P(x, y, x + 10, y + 8, T.TENT, 2, 1); }
+    L.chests.push([4, 5, 0]);
+    for (let i = ri(3, 4); i--;) L.foes.push([ri(-12, 12), ri(8, 20), 'bandit']);
+  },
+  dungeon(L, P, R, ri) {
+    P(-9, -7, 9, 7, T.FLOOR); P(-2, -2, 2, 1, T.STAIRS);
+    for (let i = 0; i < 7; i++) { const a = i / 7 * TAU + 0.4, x = round(cos(a) * 16), y = round(sin(a) * 13); if (R() < 0.8) P(x, y, x + 3, y + 3, T.RUIN, ri(5, 14)); }
+    L.torch(-12, 8); L.torch(11, 8);
+    // underground: a disc of rooms on a grid, each linked to its east and south neighbour
+    const U = (a, b, c, d, t, h) => L.under.push([a, b, c, d, t, h || 0, 0]), rooms = {}, C = 46; let far = null;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) if (i * i + j * j <= 10) {
+      const o = i || j, big = !o || R() < 0.62;
+      rooms[i + ',' + j] = [i * C + (o ? ri(-5, 5) : 0), j * C + (o ? ri(-5, 5) : 0), big ? ri(10, 17) : 5, big ? ri(8, 13) : 5, big, i, j];
+    }
+    for (const k in rooms) {
+      const [x, y, w, h, , i, j] = rooms[k]; U(x - w, y - h, x + w, y + h, T.DFLOOR);
+      for (const [di, dj] of [[1, 0], [0, 1]]) { const o = rooms[(i + di) + ',' + (j + dj)]; if (!o) continue; U(min(x, o[0]) - 4, y - 4, max(x, o[0]) + 4, y + 4, T.DFLOOR); U(o[0] - 4, min(y, o[1]) - 4, o[0] + 4, max(y, o[1]) + 4, T.DFLOOR); }
+    }
+    for (const k in rooms) {
+      const [x, y, w, h, big, i, j] = rooms[k]; if (!big || !(i || j)) continue;
+      if (!far || i * i + j * j > far[5] * far[5] + far[6] * far[6]) far = rooms[k];
+      if (R() < 0.35) L.uchests.push([x + ri(-4, 4), y - 2, 0]);
+      if (R() < 0.65) for (let n = ri(1, 3); n--;) L.ufoes.push([x + ri(-6, 6), y + ri(-4, 4), 'skel']);
+      if (R() < 0.5) { U(x - w + 1, y - h + 1, x - w + 2, y - h + 2, T.TORCH, 5); L.ulights.push([x - w + 1, y - h + 1]); }
+    }
+    L.uchests.push([far[0], far[1], 2]);
+    U(-2, -2, 2, 1, T.STAIRU); U(-6, -6, -5, -5, T.TORCH, 5); L.ulights.push([-6, -6]);
+  },
+};
+function layoutOf(p) {
+  if (p.L) return p.L;
+  const R = rng(hash(p.rx, p.ry, SEED + 77)), ri = (a, b) => a + floor(R() * (b - a + 1));
+  const L = p.L = {parts: [], under: [], npcs: [], foes: [], lights: [], chests: [], ufoes: [], ulights: [], uchests: []};
+  const P = (a, b, c, d, t, h, roof) => L.parts.push([a, b, c, d, t, h || 0, roof || 0]);
+  L.torch = (x, y) => { P(x, y, x + 1, y + 1, T.TORCH, 6); L.lights.push([x, y]); };
+  BUILD[p.kind](L, P, R, ri);
+  return L;
+}
+
+// ===== chunks: 64x64 tiles generated on demand, cached, evicted when stale =====
+const CS = 64, CHUNKS = new Map(), LAT = new Float64Array(121 * NF), PN = 66, gG = new Float32Array(PN * PN), gT = new Uint8Array(PN * PN), FI = new Float64Array(NF);
+let frameNo = 0;
+function getChunk(l, cx, cy) {
+  const k = l * 4294967296 + (cx + 32768) * 65536 + (cy + 32768); let c = CHUNKS.get(k);
+  if (!c) { c = l ? genUnder(cx, cy) : genSurface(cx, cy); let m = 0; for (let i = 0; i < 4096; i++) if (c.H[i] > m) m = c.H[i]; c.maxH = m; c.key = k; CHUNKS.set(k, c); }
+  c.used = frameNo; return c;
+}
+const newChunk = () => ({T: new Uint8Array(4096), H: new Float32Array(4096), G: new Float32Array(4096), S: new Uint8Array(4096), V: new Uint8Array(4096), maxH: 0, used: 0, key: 0});
+function stampParts(ch, x0, y0, p, parts, base) {
+  for (const q of parts) {
+    const ax = max(q[0] + p.x, x0), bx = min(q[2] + p.x, x0 + CS), ay = max(q[1] + p.y, y0), by = min(q[3] + p.y, y0 + CS);
+    if (ax >= bx || ay >= by) continue;
+    const t = q[4], hh = q[5], roof = q[6], mx = (q[0] + q[2]) / 2 + p.x, my = (q[1] + q[3]) / 2 + p.y, hw = roof === 1 ? (q[3] - q[1]) / 2 : (q[2] - q[0]) / 2;
+    for (let y = ay; y < by; y++) for (let x = ax; x < bx; x++) {
+      const k = (y - y0) * CS + (x - x0);
+      if (!hh) { if (WATERT[ch.T[k]] && t === T.ROAD) continue; ch.T[k] = t; ch.H[k] = ch.G[k]; if (t === T.DFLOOR || t === T.FLOOR) ch.S[k] = 8 + (ch.V[k] & 3); continue; }
+      let h = hh, s = 8 + (ch.V[k] & 3);
+      if (roof === 1) { const o = y + 0.5 - my; h += (hw - abs(o)) * 0.8; s = o > 0 ? 7 + round((1 - o / hw) * 6) : 5; }
+      ch.T[k] = t; ch.H[k] = base + h; ch.S[k] = s;
+    }
+  }
+}
+function genUnder(cx, cy) {
+  const ch = newChunk(), x0 = cx * CS, y0 = cy * CS;
+  for (let i = 0; i < 4096; i++) { const v = hash(x0 + (i & 63), y0 + (i >> 6), SEED + 9) & 255; ch.V[i] = v; ch.T[i] = T.DROCK; ch.H[i] = 6; ch.S[i] = 4 + (v & 3); }
+  for (const p of poisNear(x0 + 32, y0 + 32, 240)) if (p.kind === 'dungeon') stampParts(ch, x0, y0, p, layoutOf(p).under, 0);
+  return ch;
+}
+function genSurface(cx, cy) {
+  const ch = newChunk(), x0 = cx * CS, y0 = cy * CS;
+  for (let j = 0; j < 11; j++) for (let i = 0; i < 11; i++) rawAt(x0 + (i - 1) * 8, y0 + (j - 1) * 8, LAT, (j * 11 + i) * NF);
+  const pois = poisNear(x0 + 32, y0 + 32, 330), roads = [], rx = floor((x0 + 32) / RS), ry = floor((y0 + 32) / RS);
+  for (let j = ry - 1; j <= ry + 1; j++) for (let i = rx - 1; i <= rx + 1; i++) {
+    const a = poiOf(i, j); if (!a || !SETTLED[a.kind]) continue;
+    for (const [di, dj] of [[1, 0], [0, 1]]) {
+      const b = poiOf(i + di, j + dj); if (!b || !SETTLED[b.kind]) continue;
+      if (max(a.x, b.x) + 40 < x0 || min(a.x, b.x) - 40 > x0 + CS || max(a.y, b.y) + 40 < y0 || min(a.y, b.y) - 40 > y0 + CS) continue;
+      roads.push([a.x, a.y, b.x - a.x, b.y - a.y, hypot(b.x - a.x, b.y - a.y), hash(i, j, di + 7) & 255]);
+    }
+  }
+  for (let py = 0; py < PN; py++) for (let px = 0; px < PN; px++) {
+    const x = x0 + px - 1, y = y0 + py - 1, lx = (px + 7) / 8, ly = (py + 7) / 8, i = floor(lx), j = floor(ly), fx = lx - i, fy = ly - j;
+    const a = (j * 11 + i) * NF, b = a + NF, c = a + 11 * NF, d = c + NF;
+    for (let f = 0; f < NF; f++) FI[f] = lerp(lerp(LAT[a + f], LAT[b + f], fx), lerp(LAT[c + f], LAT[d + f], fx), fy);
+    classify(x, y, FI[0], FI[1], FI[2], FI[3], FI[4], FI[5], FI[6], FI[7], (hash(x, y, SEED + 5) & 255) / 255 - 0.5);
+    let g = cG, t = cT;
+    for (const p of pois) { const dx = x - p.x, dy = y - p.y, r2 = dx * dx + dy * dy, rr = p.r + 40; if (r2 < rr * rr) g = lerp(p.g, g, sstep(p.r, rr, sqrt(r2))); }
+    if (t !== T.OCEAN) for (const r of roads) {
+      const s = ((x - r[0]) * r[2] + (y - r[1]) * r[3]) / (r[4] * r[4]); if (s < 0 || s > 1) continue;
+      if (abs(((x - r[0]) * r[3] - (y - r[1]) * r[2]) / r[4] - sin(s * PI * 3 + r[5]) * 28 * sin(s * PI)) < 3.5) { t = WATERT[t] ? T.BRIDGE : T.ROAD; break; }
+    }
+    gG[py * PN + px] = g; gT[py * PN + px] = t;
+  }
+  for (let y = 0; y < CS; y++) for (let x = 0; x < CS; x++) {
+    const k = y * CS + x, pk = (y + 1) * PN + x + 1, v = hash(x0 + x, y0 + y, SEED + 9) & 255; let t = gT[pk];
+    if (t === T.GRASS && v > 242 && vnoise((x0 + x) / 70, (y0 + y) / 70, SEED + 3) > 0.52) t = T.FLOWER;
+    ch.T[k] = t; ch.V[k] = v; ch.G[k] = gG[pk]; ch.H[k] = gG[pk] + (t === T.BRIDGE ? 1.5 : 0);
+    ch.S[k] = clamp(round(8 + (gG[pk - PN + 1] - gG[pk + PN - 1]) * 3.5 + (t === T.ROCK || t === T.SNOWROCK ? (v & 7) / 2 - 1.75 : 0)), 1, 14);
+  }
+  // scattered objects on a jittered grid; biome is read at the object's centre so neighbouring chunks agree
+  const OC = 16, R0 = 9;
+  for (let gy = floor((y0 - R0) / OC); gy <= floor((y0 + CS + R0) / OC); gy++) for (let gx = floor((x0 - R0) / OC); gx <= floor((x0 + CS + R0) / OC); gx++) for (let q = 0; q < 2; q++) {
+    const h = hash(gx, gy, SEED + 31 + q * 17), ox = gx * OC + 2 + (h & 15) * 0.8, oy = gy * OC + 2 + (h >>> 4 & 15) * 0.8, r = (h >>> 8 & 1023) / 1024, sz = h >>> 18 & 3;
+    if (ox < x0 - R0 || ox > x0 + CS + R0 || oy < y0 - R0 || oy > y0 + CS + R0) continue;
+    const b = biomeAt(ox, oy); if (q && b !== T.FOREST) continue;
+    let R = 0, Hc = 0, tt = 0, tc = 0, cone = 0;
+    if (b === T.FOREST) { if (r < (q ? 0.3 : 0.72)) { R = 3.5 + sz; Hc = R * 1.5; tt = T.CANOPY; tc = T.TRUNK; } else if (r > 0.97) { R = 2 + sz * 0.6; Hc = R; tt = tc = T.BOULDER; } }
+    else if (b === T.GRASS) { if (r < 0.05) { R = 4 + sz; Hc = R * 1.5; tt = T.CANOPY; tc = T.TRUNK; } else if (r > 0.985) { R = 2 + sz * 0.5; Hc = R; tt = tc = T.BOULDER; } }
+    else if (b === T.SNOW) { if (r < 0.42) { R = 3 + sz * 0.5; Hc = 9 + sz * 2; tt = T.PINE; tc = T.PINET; cone = 1; } else if (r > 0.95) { R = 2 + sz * 0.6; Hc = R; tt = tc = T.BOULDER; } }
+    else if (b === T.SWAMP) { if (r < 0.25) { R = 1.3; Hc = 7 + sz; tt = tc = T.DEAD; } else if (r < 0.55) { R = 2 + sz; Hc = 2.5; tt = tc = T.REED; } }
+    else if (b === T.DESERT) { if (r < 0.07) { R = 1.1; Hc = 5 + sz; tt = tc = T.CACTUS; } else if (r > 0.95) { R = 2 + sz * 0.7; Hc = R; tt = tc = T.BOULDER; } }
+    else if (b === T.ROCK || b === T.SNOWROCK) { if (r < 0.3) { R = 2 + sz; Hc = R * 1.1; tt = tc = T.BOULDER; } }
+    if (!R || pois.some(p => hypot(ox - p.x, oy - p.y) < p.r * (SETTLED[p.kind] ? 1 : 0.55) + R)) continue;
+    for (let ty = max(y0, floor(oy - R)); ty < min(y0 + CS, oy + R + 1); ty++) for (let tx = max(x0, floor(ox - R)); tx < min(x0 + CS, ox + R + 1); tx++) {
+      const dx = tx + 0.5 - ox, dy = ty + 0.5 - oy, d2 = (dx * dx + dy * dy) / (R * R); if (d2 >= 1) continue;
+      const k = (ty - y0) * CS + tx - x0, t = ch.T[k]; if (WATERT[t] || t === T.ROAD || t === T.BRIDGE) continue;
+      const hh = ch.G[k] + (cone ? Hc * (1 - sqrt(d2)) : tt === T.REED ? Hc : 2 + Hc * sqrt(1 - d2)); if (hh <= ch.H[k]) continue;
+      ch.H[k] = hh; ch.T[k] = d2 < 2 / (R * R) ? tc : tt; ch.S[k] = clamp(round(7 + (dy - dx) / R * 4.5 + (1 - d2) * 2 + (ch.V[k] & 1)), 1, 14);
+    }
+  }
+  for (const p of pois) stampParts(ch, x0, y0, p, layoutOf(p).parts, p.g);
+  return ch;
+}
+// recently trodden tiles: expiry time per tile in a wrapping 256x256 window, TRK guards against wrap aliases
+const TR = new Float32Array(65536), TRK = new Int32Array(65536);
+function trample(x, y, r) { for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (i * i + j * j <= r * r) { const tx = floor(x) + i, ty = floor(y) + j, k = (tx & 255) | (ty & 255) << 8; TR[k] = time + 5; TRK[k] = (tx >> 8) * 31 + (ty >> 8); } }
+let qT = 0, qG = 0, qH = 0;
+function tile(l, x, y) { const tx = floor(x), ty = floor(y), c = getChunk(l, tx >> 6, ty >> 6), k = (tx & 63) | (ty & 63) << 6; qT = c.T[k]; qG = c.G[k]; qH = c.H[k]; return qT; }
+
+// ===== sprites: glyph rows + colour-key rows (one key letter per cell, or one letter for the whole row) =====
+const KC = {s: [190, 198, 214], S: [122, 130, 150], w: [252, 252, 252], r: [196, 44, 48], g: [228, 188, 84], h: [140, 96, 62], H: [100, 68, 46], m: [84, 68, 60], k: [228, 180, 142], b: [134, 96, 58], y: [242, 222, 112], e: [74, 152, 84], c: [84, 124, 194], n: [228, 224, 202], d: [96, 96, 108], f: [152, 152, 160], p: [154, 84, 172]};
+const KEYS = Object.keys(KC), KRGB = KEYS.map(k => KC[k]), K_STEEL = [1, 1, 1], K_TINT = KEYS.indexOf('c');
+function spr(g, c, ax) {
+  const gr = g.replace(/^\n/, '').split('\n'), cr = c.replace(/^\n/, '').split('\n'), h = gr.length, w = max(...gr.map(s => s.length));
+  const G = new Uint8Array(w * h), K = new Uint8Array(w * h).fill(255);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const ch = gr[j][i] || ' ', row = cr[j] || '', k = row.length === 1 ? (ch === ' ' ? ' ' : row) : row[i] || ' ';
+    if (k !== ' ') { K[j * w + i] = KEYS.indexOf(k); G[j * w + i] = ch.charCodeAt(0) - 32; }
+  }
+  return {w, h, ax: ax === undefined ? w >> 1 : ax, G, K};
+}
+const MIR = {'/': '\\', '\\': '/', '(': ')', ')': '(', '[': ']', ']': '[', '<': '>', '>': '<', '{': '}', '}': '{', d: 'b', b: 'd'};
+const VFL = {'/': '\\', '\\': '/', '^': 'v', v: '^', ',': "'", "'": ',', _: '-', '-': '_', d: 'q', b: 'p'};
+const mapc = (M, g) => { const c = String.fromCharCode(g + 32); return (M[c] || c).charCodeAt(0) - 32; };
+function flip(s) { const o = {w: s.w, h: s.h, ax: s.w - 1 - s.ax, G: new Uint8Array(s.w * s.h), K: new Uint8Array(s.w * s.h)}; for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) { const a = j * s.w + i, b = j * s.w + s.w - 1 - i; o.K[b] = s.K[a]; o.G[b] = mapc(MIR, s.G[a]); } return o; }
+function over(a, b, dx, dy) { // b drawn over a, offset (dx, dy); result grows upward when dy < 0
+  const top = min(0, dy), w = max(a.w, dx + b.w), h = max(a.h, dy + b.h) - top, o = {w, h, ax: a.ax, G: new Uint8Array(w * h), K: new Uint8Array(w * h).fill(255)};
+  for (const [s, ox, oy] of [[a, 0, -top], [b, dx, dy - top]]) for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) { const k = s.K[j * s.w + i]; if (k !== 255) { o.K[(j + oy) * w + i + ox] = k; o.G[(j + oy) * w + i + ox] = s.G[j * s.w + i]; } }
+  return o;
+}
+const frames = (g, c, legs, ax) => legs.map(l => spr(g + '\n' + l[0], c + '\n' + l[1], ax));
+const R = String.raw;
+const KN = {};
+KN.r = frames(R`
+  ,^  /
+  [#>/
+ (0H=+
+  /H\  `, `
+  rr  w
+  sSsw
+ rgssg
+  sSs  `, [[R`  / \  `, 's'], [R`   |\  `, 's'], [R`  / \  `, 's'], [R`  /|   `, 's']], 3);
+KN.l = KN.r.map(flip);
+KN.f = frames(R`
+ ,^, |
+ (#) |
+0[M]-+
+ /H\  `, `
+ rrr w
+ sSs w
+gssssg
+ sSs  `, [[' d b  ', 's'], [' | b  ', 's'], [' d b  ', 's'], [' d |  ', 's']], 2);
+KN.b = frames(R`
+| ,^,
+| (@)
++-[W]0
+  /W\ `, `
+w rrr
+w sss
+gssrsg
+  srs `, [['  d b ', 's'], ['  | b ', 's'], ['  d b ', 's'], ['  d | ', 's']], 3);
+const HB = R`
+             ,^
+            /@#\
+   ,_____,-/##/'o
+ ~/[##]HH[###]/
+~' \vvv\__/vvv/   `, HBC = `
+             ss
+            msSs
+   sssssssmsSShhh
+ mhsSSsbbsSSSsh
+mm rrrrhhhrrrrr   `;
+// side-view legs: 0-3 walk cycle, 4-6 gallop (stretch, land, gather)
+const HL = [[R`    |\      /|    ` + '\n' + R`    | \    / |    `, 'h\nS'], [R`    ||      ||    ` + '\n' + R`    ||      ||    `, 'h\nS'],
+  [R`   /|       |\    ` + '\n' + R`  / |       | \   `, 'h\nS'], [R`    |/      \|    ` + '\n' + R`    /        \    `, 'h\nS'],
+  [R`  ,//       \\,   ` + '\n' + R` '             '  `, 'h\nS'], [R`   //       ||    ` + '\n' + R`  '/        /|    `, 'h\nS'],
+  [R`     \\    //     ` + '\n' + R`      \>  </      `, 'h\nS']];
+const HFL = [[R`  |/ \|  ` + '\n' + '  d   b  ', 'h\nS'], [R`  |\ /|  ` + '\n' + '  b   d  ', 'h\nS']], seven = a => [a[0], a[1], a[0], a[1], a[0], a[1], a[0]];
+const HS = {r: frames(HB, HBC, HL, 8)};
+HS.l = HS.r.map(flip);
+HS.f = seven(frames(R`
+  ^   ^
+  /#=#\
+ [|o#o|]
+ [v\_/v] `, `
+  s   s
+  sSsSs
+ sshShss
+ srhhhrs `, HFL, 4));
+HS.b = seven(frames(R`
+  ^   ^
+  /###\
+ [##~##]
+ [vv}vv] `, `
+  s   s
+  sSSSs
+ sSSmSSs
+ srrmrrs `, HFL, 4));
+const RID = {r: [spr(R`
+  ,^   /
+  [#> /
+ (0M)=+
+  |H|
+  /L
+   L
+   J    `, `
+  rr   w
+  sSs w
+ rgssgg
+  sSs
+  ss
+   s
+   S    `), 5, -2], f: [spr(R`
+   ,^,  |
+   (#)  |
+ 0[/M\]-+`, `
+   rrr  w
+   sSs  w
+ gssssssg`), 0, -3], b: [spr(R`
+|  ,^,
+|  (@)
++-[WWW]0
+   \W/   `, `
+w  rrr
+w  sss
+ggsrrrsg
+   rrr   `), 0, -3]};
+const MT = {r: HS.r.map(f => over(f, ...RID.r)), f: HS.f.map(f => over(f, ...RID.f)), b: HS.b.map(f => over(f, ...RID.b))};
+MT.l = MT.r.map(flip);
+const two = (g, c, legs) => { const a = frames(g, c, legs); return {r: a, l: a.map(flip)}; };
+const SP = {
+  folk: two(R`
+ o
+/M\ `, `
+ k
+ccc`, [[R`/ \ `, 'b'], [' | ', 'b']]),
+  inn: two(R`
+ o
+(W)`, `
+ k
+cwc`, [['| |', 'b'], [R`/ \ `, 'b']]),
+  stable: two(R`
+ o
+/H\|`, `
+ k
+cbcb`, [[R`/ \|`, 'b'], [' | |', 'b']]),
+  merchant: two(R`
+_^_
+ o
+/$\ `, `
+ppp
+ k
+cyc`, [[R`/ \ `, 'b'], [' | ', 'b']]),
+  smith: two(R`
+ o
+/H\T`, `
+ k
+bdbs`, [[R`/ \ `, 'b'], [' |  ', 'b']]),
+  guard: two(R`
+ ^ |
+ o |
+[H]|`, `
+ s b
+ k b
+sssb`, [[R`/ \ `, 's'], [' |  ', 's']]),
+  wolf: two(R` ,___/^>`, ' fffffff', [[R`~ |\ |\ `, 'f'], [R`~ /| /| `, 'f']]),
+  bandit: two(R`
+ &
+/H\-`, `
+ d
+dbds`, [[R`/ \ `, 'd'], [' |  ', 'd']]),
+  skel: two(R`
+ 0
+/#\ `, 'n\nn', [['| |', 'n'], [R`/ \ `, 'n']]),
+};
+const CHEST = [spr('[$]', 'byb'), spr('[$]', 'yyy'), spr('{$}', 'ywy')];
+
+// ===== game state, save / load =====
+const KEY = 'ironhoof.save.v1', ENTS = [], ACTIVE = new Map(), keys = {};
+const G = {ui: 'title', p: null, h: null, t: 8, found: {}, chests: {}, bless: {}, home: null, w: {kind: 'clear', k: 1, to: null, next: 10}, msgs: [], dlg: null, ban: null, fx: [], parts: [], flash: [0, 0, 0, 0], spT: 6, saveT: 45, scanT: 0, birds: null, birdT: 8, map: null, dead: 0, confirm: 0, loaded: false};
+const CAM = {yaw: 0, tyaw: 0, pitch: 0.96, zoom: 14, lax: 0, lay: 0};
+const say = (s, col) => { G.msgs.push({s, t: 7, col}); if (G.msgs.length > 5) G.msgs.shift(); };
+function initWorld(seed) {
+  SEED = seed | 0; CHUNKS.clear(); POIS.clear(); ACTIVE.clear(); ENTS.length = 0; G.parts.length = G.fx.length = 0; G.map = null;
+  out: for (let r = 0; r < 40; r++) for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) {
+    if (max(abs(i), abs(j)) !== r) continue;
+    const [x, y] = spot(i, j); if (biomeAt(x, y) === T.GRASS && roomy(x, y, 90)) { HOME = {rx: i, ry: j}; break out; }
+  }
+}
+function newGame(seed) {
+  initWorld(seed); const v = poiOf(HOME.rx, HOME.ry);
+  G.p = {x: v.x + 6.5, y: v.y + 9.5, layer: 0, hp: 100, mhp: 100, gold: 20, sword: 0, dir: PI / 2, vx: 0, vy: 0, mounted: false, anim: null, ph: 0, atk: 0, slopeK: 1, moving: false};
+  G.h = {x: v.x - 9.5, y: v.y + 9.5, layer: 0, hd: 0, sp: 0, stam: 100, fat: 0, gait: 1, ph: 0, come: false, stuck: 0};
+  G.t = 8; G.found = {}; G.chests = {}; G.bless = {}; G.home = {x: G.p.x, y: G.p.y}; G.w = {kind: 'clear', k: 1, to: null, next: 11}; G.msgs = []; G.dlg = null; G.dead = 0;
+  CAM.yaw = CAM.tyaw = 0; CAM.lax = CAM.lay = 0;
+}
+const snapshot = () => ({v: 1, seed: SEED, t: G.t, p: G.p, h: G.h, found: G.found, chests: G.chests, bless: G.bless, home: G.home, w: G.w, cam: {yaw: CAM.tyaw, pitch: CAM.pitch, zoom: CAM.zoom}});
+function applySave(s) {
+  if (!s || s.v !== 1 || !s.p || !s.h) return false;
+  initWorld(s.seed);
+  G.p = Object.assign({}, s.p, {anim: null, vx: 0, vy: 0}); G.h = Object.assign({}, s.h, {come: false}); G.t = s.t; G.found = s.found || {}; G.chests = s.chests || {}; G.bless = s.bless || {};
+  G.home = s.home; G.w = s.w; G.msgs = []; G.dlg = null; G.dead = 0;
+  CAM.yaw = CAM.tyaw = s.cam.yaw; CAM.pitch = s.cam.pitch; setZoom(s.cam.zoom); return true;
+}
+// shortcut: saves live in localStorage (this browser only, can be cleared); upgrade to a server-side store if saves must roam.
+function save(quiet) { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); if (!quiet) say('GAME SAVED', HC.e); return true; } catch (e) { if (!quiet) say('SAVE FAILED - STORAGE IS UNAVAILABLE', HC.r); return false; } }
+function load() { let s = null; try { s = JSON.parse(localStorage.getItem(KEY)); } catch (e) {} return applySave(s); }
+
+// ===== physics =====
+const OFX = [1, -1, 0, 0, 0], OFY = [0, 0, 1, -1, 0];
+function blocked(l, x, y, r, g0, lim) { // 1 solid, 2 too steep
+  for (let i = 0; i < 5; i++) if (SOLIDT[tile(l, x + OFX[i] * r, y + OFY[i] * r)]) return 1;
+  return abs(qG - g0) > lim ? 2 : 0; // centre is sampled last, so qG is the ground under (x, y)
+}
+function moveEnt(e, dx, dy, r, slope) { // axis-separated sliding in sub-steps; returns 0 free, 1 hit, 2 too steep
+  const n = ceil(hypot(dx, dy) / 0.5) || 1; dx /= n; dy /= n; let res = 0; const lim = slope * hypot(dx, dy) + 0.25;
+  for (let i = 0; i < n; i++) {
+    tile(e.layer, e.x, e.y); const g0 = qG;
+    let b = blocked(e.layer, e.x + dx, e.y, r, g0, lim); if (b) res = max(res, b); else e.x += dx;
+    b = blocked(e.layer, e.x, e.y + dy, r, g0, lim); if (b) res = max(res, b); else e.y += dy;
+  }
+  return res;
+}
+function freeSpot(l, x, y, r) { for (let q = 0; q < 14; q++) for (let a = 0; a < (q ? 8 : 1); a++) { const px = x + cos(a * PI / 4) * q * 2.5, py = y + sin(a * PI / 4) * q * 2.5; tile(l, px, py); if (!blocked(l, px, py, r, qG, 9)) return [px, py]; } return [x, y]; }
+function burst(x, y, z, n, g, col) { for (let i = 0; i < n; i++) { const a = random() * TAU, s = 4 + random() * 10; G.parts.push({x, y, z: z + 2, vx: cos(a) * s, vy: sin(a) * s, vz: 4 + random() * 8, life: 0.5 + random() * 0.3, g, col}); } }
+
+// ===== entities =====
+const FOE = {wolf: {hp: 22, spd: 23, dmg: 6, sight: 120, gold: 3, r: 1.5, name: 'WOLF'}, bandit: {hp: 40, spd: 12, dmg: 9, sight: 95, gold: 14, r: 1.2, name: 'BANDIT'}, skel: {hp: 32, spd: 9.5, dmg: 8, sight: 75, gold: 9, r: 1.2, name: 'SKELETON'}};
+const ROLE = {folk: 'VILLAGER', inn: 'INNKEEPER', stable: 'STABLEMASTER', smith: 'SMITH', merchant: 'MERCHANT', guard: 'GUARD'};
+const TINTS = [[84, 124, 194], [170, 90, 70], [90, 150, 100], [170, 150, 80], [130, 100, 160], [150, 150, 150]];
+const addFoe = (kind, x, y, layer, poi, hx, hy) => ENTS.push({k: 'foe', kind, x, y, layer, hp: FOE[kind].hp, hx: hx === undefined ? x : hx, hy: hy === undefined ? y : hy, dir: 1, cd: 0, kx: 0, ky: 0, ph: 0, wt: 0, tx: x, ty: y, poi, side: random() - 0.5, hit: 0});
+function spawnPOI(q, layer) {
+  const L = layoutOf(q), key = q.key + ':' + layer;
+  if (!layer) L.npcs.forEach((n, i) => { const [x, y] = freeSpot(0, q.x + n[0], q.y + n[1], 1.2); ENTS.push({k: 'npc', role: n[2], x, y, layer: 0, hx: x, hy: y, dir: 1, wt: random() * 4, tx: x, ty: y, ph: 0, poi: key, tint: TINTS[hash(i, q.rx, q.ry) % TINTS.length], talk: 0}); });
+  for (const f of layer ? L.ufoes : L.foes) { const [x, y] = freeSpot(layer, q.x + f[0], q.y + f[1], 1.3); addFoe(f[2], x, y, layer, key); }
+  for (const c of layer ? L.uchests : L.chests) { const ck = layer + ':' + (q.x + c[0]) + ':' + (q.y + c[1]); if (!G.chests[ck]) { const [x, y] = freeSpot(layer, q.x + c[0], q.y + c[1], 0.6); ENTS.push({k: 'chest', x, y, layer, ck, big: c[2], poi: key, name: q.name}); } }
+}
+function manageWorld() {
+  const p = G.p;
+  for (const q of poisNear(p.x, p.y, 520)) { const key = q.key + ':' + p.layer; if (hypot(q.x - p.x, q.y - p.y) < 500 && !ACTIVE.has(key)) { ACTIVE.set(key, q); spawnPOI(q, p.layer); } }
+  for (const [key, q] of ACTIVE) if (+key.split(':')[1] !== p.layer || hypot(q.x - p.x, q.y - p.y) > 720) { ACTIVE.delete(key); for (let i = ENTS.length; i--;) if (ENTS[i].poi === key) ENTS.splice(i, 1); }
+  if (!p.layer) for (const q of poisNear(p.x, p.y, 260)) if (!G.found[q.key] && hypot(q.x - p.x, q.y - p.y) < q.r + 25) {
+    G.found[q.key] = {n: q.name, k: q.kind, x: q.x, y: q.y}; G.ban = {a: '~ DISCOVERED ~', b: q.name, t: 5}; G.map = null;
+  }
+  if (CHUNKS.size > 700) for (const [k, c] of CHUNKS) if (c.used < frameNo - 400) CHUNKS.delete(k);
+}
+const isNight = () => { const h = G.t % 24; return h < 5.5 || h > 20; };
+function ambient() { // roaming wolves and bandits, away from settlements
+  const p = G.p; if (p.layer) return; let n = 0;
+  for (let i = ENTS.length; i--;) { const e = ENTS[i]; if (e.k === 'foe' && !e.poi) { if (hypot(e.x - p.x, e.y - p.y) > 430) ENTS.splice(i, 1); else n++; } }
+  const night = isNight(); if (n >= (night ? 4 : 2) || random() > (night ? 0.5 : 0.22)) return;
+  if (poisNear(p.x, p.y, 380).some(q => q.kind in {village: 1, city: 1} && hypot(q.x - p.x, q.y - p.y) < q.r + 130)) return;
+  const a = random() * TAU, d = 150 + random() * 40, x = p.x + cos(a) * d, y = p.y + sin(a) * d, b = tile(0, x, y); if (SOLIDT[b] || WATERT[b]) return;
+  const wild = b === T.FOREST || b === T.CANOPY || b === T.SNOW || b === T.PINE || b === T.SWAMP, open = b === T.GRASS || b === T.FLOWER || b === T.DESERT || b === T.ROAD; if (!wild && !open) return;
+  const kind = wild || (!night && random() < 0.5) ? 'wolf' : 'bandit';
+  for (let i = kind === 'wolf' ? 2 + (random() * 2 | 0) : 1 + (random() * 2 | 0); i--;) addFoe(kind, x + i * 4, y + (i & 1) * 4, 0, null, p.x, p.y);
+}
+function hurt(dmg, nx, ny) {
+  const p = G.p; if (G.dead) return; p.hp -= dmg * 0.7; G.flash = [0.6, 0.05, 0.05, 0.4]; burst(p.x, p.y, camH, 4, '*', [220, 60, 60]);
+  if (!p.mounted) moveEnt(p, nx * 2, ny * 2, 1.2, 1.3);
+  if (p.hp <= 0) { p.hp = 0; G.dead = 3.5; G.dlg = null; say('YOU HAVE FALLEN', HC.r); }
+}
+function respawn() {
+  const p = G.p, h = G.h, lost = floor(p.gold * 0.25); p.gold -= lost; p.hp = p.mhp; p.layer = 0; p.mounted = false; p.anim = null;
+  [p.x, p.y] = freeSpot(0, G.home.x, G.home.y, 1.2); [h.x, h.y] = freeSpot(0, p.x + 10, p.y, 2); h.sp = 0; h.fat = 0; h.stam = 100; G.t += 6;
+  for (let i = ENTS.length; i--;) if (ENTS[i].k === 'foe' && !ENTS[i].poi) ENTS.splice(i, 1);
+  say('YOU WAKE WHERE YOU LAST RESTED' + (lost ? ' - ' + lost + ' GOLD LOST' : '')); save(true);
+}
+function attack() {
+  const p = G.p; if (p.atk > 0 || p.anim || G.dead) return; p.atk = 0.5;
+  const ang = p.mounted ? G.h.hd : p.dir, reach = p.mounted ? 11 : 8, dmg = (14 + 5 * p.sword) * (p.mounted ? 1 + G.h.sp / 40 : 1);
+  G.fx.push({k: 'slash', a: ang, t: 0});
+  for (let i = ENTS.length; i--;) { const e = ENTS[i]; if (e.k !== 'foe' || e.layer !== p.layer) continue;
+    const dx = e.x - p.x, dy = e.y - p.y, d = hypot(dx, dy) || 1; if (d > reach || (d > 3 && abs(angd(atan2(dy, dx), ang)) > (p.mounted ? 2 : 1.3))) continue;
+    e.hp -= dmg; e.kx = dx / d * 34; e.ky = dy / d * 34; e.hit = 0.15; tile(e.layer, e.x, e.y); burst(e.x, e.y, qG, 5, '*', [255, 240, 200]);
+    if (e.hp <= 0) { const g = 1 + floor(random() * FOE[e.kind].gold); p.gold += g; say(FOE[e.kind].name + ' SLAIN  +' + g + ' GOLD', HC.g); burst(e.x, e.y, qG, 10, '.', [200, 200, 200]); ENTS.splice(i, 1); }
+  }
+}
+function updateEnts(dt) {
+  const p = G.p;
+  for (const e of ENTS) {
+    if (e.layer !== p.layer || e.k === 'chest') continue;
+    const dx = p.x - e.x, dy = p.y - e.y, d = hypot(dx, dy) || 1; let mx = 0, my = 0, sp = 4;
+    if (e.k === 'foe') {
+      const f = FOE[e.kind]; e.cd -= dt; e.hit -= dt;
+      if (e.kx || e.ky) { moveEnt(e, e.kx * dt, e.ky * dt, f.r, 9); e.kx *= 0.86; e.ky *= 0.86; if (abs(e.kx) + abs(e.ky) < 1) e.kx = e.ky = 0; }
+      if (d < f.sight && !G.dead) {
+        sp = f.spd;
+        if (d > 4.5) { mx = dx / d - dy / d * e.side * 0.5; my = dy / d + dx / d * e.side * 0.5; }
+        else if (e.cd <= 0) { e.cd = 1.1; hurt(f.dmg, dx / d, dy / d); }
+      } else sp = e.poi ? 4 : 8;
+    } else if (d < 14) { e.dir = dx * Rx + dy * Ry > 0 ? 1 : -1; continue; }
+    if (!mx && !my) {
+      e.wt -= dt; if (e.wt <= 0) { e.wt = 2 + random() * 4; const a = random() * TAU, q = random() * 14; e.tx = e.hx + cos(a) * q; e.ty = e.hy + sin(a) * q; }
+      const wx = e.tx - e.x, wy = e.ty - e.y, wd = hypot(wx, wy); if (wd > 1.5) { mx = wx / wd; my = wy / wd; }
+    }
+    if (mx || my) { sp *= SPD[tile(e.layer, e.x, e.y)]; moveEnt(e, mx * sp * dt, my * sp * dt, 1.2, 1.3); e.ph += sp * dt / 3; e.dir = mx * Rx + my * Ry > 0 ? 1 : -1; }
+  }
+}
+
+// ===== interaction =====
+const DIRN = ['EAST', 'SOUTH-EAST', 'SOUTH', 'SOUTH-WEST', 'WEST', 'NORTH-WEST', 'NORTH', 'NORTH-EAST'];
+const CHAT = ['THE ROADS ARE NOT SAFE AFTER DARK.', 'A FINE HORSE YOU HAVE THERE, SER KNIGHT.', 'WOLVES HAVE BEEN BOLD IN THE WOODS OF LATE.', 'MY GRANDFATHER SWORE THE OLD STONES GRANT A BLESSING.', 'RAIN BY EVENING, MARK MY WORDS.'];
+const RUMOR = {village: 'A VILLAGE', city: 'A WALLED CITY', castle: 'AN ABANDONED CASTLE', ruins: 'OLD RUINS', dungeon: 'A BARROW THAT LEADS UNDERGROUND', stones: 'A RING OF STANDING STONES', camp: 'A BANDIT CAMP'};
+function rumor() {
+  const p = G.p; let best = null, bd = 1e9;
+  for (const q of poisNear(p.x, p.y, RS * 2)) { const d = hypot(q.x - p.x, q.y - p.y); if (!G.found[q.key] && d < bd) { bd = d; best = q; } }
+  return best ? 'THEY SPEAK OF ' + RUMOR[best.kind] + ' TO THE ' + DIRN[round(atan2(best.y - p.y, best.x - p.x) / (PI / 4)) & 7] + '.' : CHAT[floor(random() * CHAT.length)];
+}
+const pay = (cost, fn) => () => { const p = G.p; if (p.gold < cost) say('NOT ENOUGH GOLD', HC.r); else { p.gold -= cost; fn(); } };
+function rest(inn) {
+  const p = G.p, h = G.h; G.t = (floor(G.t / 24) + (G.t % 24 >= 6 ? 1 : 0)) * 24 + 6.5; p.hp = p.mhp; h.fat = 0; h.stam = 100; G.home = {x: p.x, y: p.y}; G.flash = [0, 0, 0, 1];
+  say(inn ? 'YOU SLEEP SOUNDLY UNTIL DAWN' : 'YOU MAKE CAMP AND REST UNTIL DAWN'); save(true);
+}
+function talk(e) {
+  const p = G.p, T_ = ROLE[e.role], D = (s, act) => { G.dlg = {who: T_, s, act}; };
+  if (e.role === 'inn') D('A BED AND A HOT MEAL FOR 5 GOLD? [E] ACCEPT', pay(5, () => rest(true)));
+  else if (e.role === 'stable') D('FEED AND GROOM YOUR HORSE FOR 3 GOLD? [E] ACCEPT', pay(3, () => { G.h.fat = 0; G.h.stam = 100; say('YOUR HORSE IS RESTED AND EAGER', HC.e); }));
+  else if (e.role === 'smith') { const c = 30 + p.sword * 25; D('I CAN PUT A FINER EDGE ON THAT BLADE FOR ' + c + ' GOLD. [E] ACCEPT', pay(c, () => { p.sword++; say('YOUR SWORD IS NOW +' + p.sword, HC.e); })); }
+  else if (e.role === 'guard') D(isNight() ? 'KEEP TO THE LIT STREETS, TRAVELLER.' : 'WELCOME. KEEP YOUR BLADE SHEATHED WITHIN THE WALLS.');
+  else D(e.talk++ % 2 ? CHAT[floor(random() * CHAT.length)] : rumor());
+}
+function target() { // what [E] would do right now
+  const p = G.p; if (G.dlg) return G.dlg.act ? null : {s: '[E] CLOSE', fn() { G.dlg = null; }};
+  let best = null, bd = 10;
+  for (const e of ENTS) if (e.layer === p.layer && e.k !== 'foe') { const d = hypot(e.x - p.x, e.y - p.y); if (d < bd) { bd = d; best = e; } }
+  if (best && best.k === 'npc') return {s: '[E] TALK TO ' + ROLE[best.role], fn: () => talk(best)};
+  if (best) return {s: '[E] OPEN CHEST', fn() {
+    const g = best.big === 2 ? 150 + floor(random() * 80) : best.big ? 50 + floor(random() * 40) : 12 + floor(random() * 22);
+    p.gold += g; G.chests[best.ck] = 1; ENTS.splice(ENTS.indexOf(best), 1); burst(best.x, best.y, 0, 8, '$', [240, 210, 90]);
+    say(best.big === 2 ? 'YOU CLAIM THE RELIC HOARD OF ' + best.name + '  +' + g + ' GOLD' : 'CHEST OPENED  +' + g + ' GOLD', HC.g);
+  }};
+  const t = tile(p.layer, p.x, p.y);
+  if (t === T.STAIRS || t === T.STAIRU) return {s: t === T.STAIRS ? '[E] DESCEND INTO THE DARK' : '[E] CLIMB TO THE SURFACE', fn() {
+    if (p.mounted) return say('DISMOUNT FIRST - YOUR HORSE WILL NOT TAKE THE STAIRS');
+    p.layer = 1 - p.layer; G.flash = [0, 0, 0, 1]; say(p.layer ? 'COLD AIR RISES FROM BELOW' : 'DAYLIGHT. YOUR HORSE WAITS NEARBY.');
+  }};
+  if (!p.layer) for (const q of poisNear(p.x, p.y, 60)) if (q.kind === 'stones' && hypot(q.x - p.x, q.y - p.y) < 8 && !G.bless[q.key]) return {s: '[E] KNEEL AT THE STONES', fn() { G.bless[q.key] = 1; p.mhp += 10; p.hp = p.mhp; G.flash = [0.8, 0.9, 1, 0.6]; say('THE STONES HUM. YOU FEEL STRONGER.  MAX HP +10', HC.b); }};
+  return null;
+}
+function interact() { const t = G.dlg && G.dlg.act ? {fn() { const a = G.dlg.act; G.dlg = null; a(); }} : target(); if (t) t.fn(); }
+function camp() {
+  const p = G.p; if (p.layer) return say('YOU CANNOT REST DOWN HERE');
+  if (ENTS.some(e => e.k === 'foe' && hypot(e.x - p.x, e.y - p.y) < 110)) return say('YOU CANNOT REST - ENEMIES ARE NEAR', HC.r);
+  rest(false);
+}
+
+// ===== horse & player =====
+const GAIT = [['WALK', 9], ['TROT', 17], ['CANTER', 27], ['GALLOP', 40]];
+function mountToggle() {
+  const p = G.p, h = G.h; if (p.anim || G.dead) return;
+  if (p.mounted) {
+    if (h.sp > 14) return say('REIN IN FIRST - TOO FAST TO DISMOUNT');
+    for (const s of [1, -1]) { const x = h.x - sin(h.hd) * 5 * s, y = h.y + cos(h.hd) * 5 * s; tile(0, h.x, h.y); if (!blocked(0, x, y, 1.2, qG, 3)) { p.mounted = false; h.sp = 0; p.anim = {t: 0, fx: h.x, fy: h.y, tx: x, ty: y, mount: false}; return; } }
+    say('NO ROOM TO DISMOUNT HERE');
+  } else if (p.layer || hypot(h.x - p.x, h.y - p.y) > 11) say(p.layer ? 'YOUR HORSE WAITS ON THE SURFACE' : 'YOUR HORSE IS TOO FAR - [H] TO WHISTLE');
+  else { h.come = false; h.sp = 0; p.anim = {t: 0, fx: p.x, fy: p.y, tx: h.x, ty: h.y, mount: true}; }
+}
+function callHorse() {
+  const p = G.p, h = G.h; if (p.mounted) return;
+  if (p.layer) return say('YOUR HORSE CANNOT HEAR YOU DOWN HERE');
+  say('YOU WHISTLE FOR YOUR HORSE'); h.come = true; h.stuck = 0;
+  if (hypot(h.x - p.x, h.y - p.y) > 260) { const a = random() * TAU; [h.x, h.y] = freeSpot(0, p.x + cos(a) * 170, p.y + sin(a) * 170, 2); }
+}
+const gaitShift = d => { const h = G.h; if (!G.p.mounted) return; const g = clamp(h.gait + d, 0, 3); if (g >= 2 && h.fat > 88) return say('YOUR HORSE IS TOO TIRED TO RUN', HC.r); h.gait = g; };
+let steepT = 0;
+function updatePlayer(dt) {
+  const p = G.p, h = G.h; p.atk -= dt;
+  if (p.anim) { const a = p.anim; a.t += dt / 0.45; const k = min(1, a.t); p.x = lerp(a.fx, a.tx, k); p.y = lerp(a.fy, a.ty, k); if (a.t >= 1) { p.anim = null; if (a.mount) { p.mounted = true; h.gait = min(h.gait, 1); } } return; }
+  let ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + stick.x, iy = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) - stick.y;
+  const il = hypot(ix, iy); if (il > 1) { ix /= il; iy /= il; }
+  const wx = ix * Rx + iy * Fx, wy = ix * Ry + iy * Fy, wl = min(1, il), wet = wetK();
+  if (G.dlg && wl > 0.3 && !G.dlg.act) G.dlg = null;
+  const t0 = tile(p.layer, p.x, p.y), g0 = qG, ox = p.x, oy = p.y;
+  if (p.mounted) {
+    let da = 0; if (wl > 0.1) { da = angd(atan2(wy, wx), h.hd); const tr = lerp(4.4, 1.7, h.sp / 40) * dt; h.hd += clamp(da, -tr, tr); }
+    if (h.gait === 3 && h.stam <= 0) { h.gait = 2; say('YOUR HORSE IS WINDED', HC.r); }
+    if (h.gait >= 2 && h.fat > 92) h.gait = 1;
+    const want = wl > 0.1 ? GAIT[h.gait][1] * SPD[t0] * p.slopeK * wet * (1 - 0.3 * h.fat / 100) * (abs(da) > 2 ? 0.35 : 1) : 0;
+    h.sp += clamp(want - h.sp, -28 * dt, 15 * dt);
+    const st = h.sp * dt, res = st > 0 ? moveEnt(h, cos(h.hd) * st, sin(h.hd) * st, 2, 0.6) : 0;
+    if (res) { h.sp = min(h.sp, 5); steepT -= dt; if (res === 2 && steepT <= 0) { steepT = 4; say('TOO STEEP FOR YOUR HORSE - DISMOUNT TO CLIMB'); } }
+    p.x = h.x; p.y = h.y; p.dir = h.hd;
+    const moved = hypot(h.x - ox, h.y - oy); h.ph += moved / (h.sp > 24 ? 5.5 : 3.4);
+    h.stam = clamp(h.stam + (h.sp > 33 ? -8 : h.sp > 22 ? -1.5 : h.sp > 12 ? 2 : 7) * dt, 0, 100 - h.fat * 0.5);
+    h.fat = min(100, h.fat + moved * (h.sp > 33 ? 0.013 : 0.007));
+    if (h.sp > 20 && random() < dt * 30) { const c = PAL[(t0 * 4) * 16 + 9]; G.parts.push({x: h.x - cos(h.hd) * 4 + random() * 2 - 1, y: h.y - sin(h.hd) * 4 + random() * 2 - 1, z: g0, vx: 0, vy: 0, vz: 3 + random() * 4, life: 0.45, g: ".,'o"[floor(random() * 4)], col: [c & 255, c >> 8 & 255, c >> 16 & 255]}); }
+    p.moving = h.sp > 0.5;
+  } else {
+    const sp = (keys.ShiftLeft || keys.ShiftRight || wl > 0.95 && stick.on ? 13 : 8) * SPD[t0] * p.slopeK * wet, k = 1 - Math.exp(-14 * dt);
+    p.vx += (wx * sp - p.vx) * k; p.vy += (wy * sp - p.vy) * k;
+    const v = hypot(p.vx, p.vy); p.moving = v > 0.6;
+    if (p.moving) { if (moveEnt(p, p.vx * dt, p.vy * dt, 1.2, 1.3)) { p.vx *= 0.7; p.vy *= 0.7; } if (wl > 0.1) p.dir = atan2(wy, wx); p.ph += v * dt / 2.6; }
+  }
+  const moved = hypot(p.x - ox, p.y - oy); tile(p.layer, p.x, p.y);
+  if (moved > 0.01) trample(p.x, p.y, p.mounted ? 3 : 2);
+  if (moved > 0.01) p.slopeK = lerp(p.slopeK, clamp(1 - max(0, (qG - g0) / moved) * 1.4, 0.25, 1), 0.2);
+  if (WATERT[qT] && moved > 0.05 && random() < dt * 5) G.fx.push({k: 'ring', x: p.x, y: p.y, t: 0});
+  if (p.hp < p.mhp && !ENTS.some(e => e.k === 'foe' && e.layer === p.layer && hypot(e.x - p.x, e.y - p.y) < 70)) p.hp = min(p.mhp, p.hp + dt);
+}
+function updateHorse(dt) {
+  const p = G.p, h = G.h; if (p.mounted || p.anim) return;
+  if (h.come && !p.layer) {
+    const dx = p.x - h.x, dy = p.y - h.y, d = hypot(dx, dy);
+    if (d < 9) { h.come = false; h.sp = 0; } else {
+      h.hd += clamp(angd(atan2(dy, dx), h.hd), -5 * dt, 5 * dt); h.sp = lerp(h.sp, min(34, d * 0.5 + 6), dt * 3);
+      const ox = h.x, oy = h.y; if (moveEnt(h, cos(h.hd) * h.sp * dt, sin(h.hd) * h.sp * dt, 2, 0.9)) h.stuck += dt; else h.stuck = 0;
+      h.ph += hypot(h.x - ox, h.y - oy) / (h.sp > 24 ? 5.5 : 3.4); trample(h.x, h.y, 3);
+      if (h.stuck > 1.2) { h.stuck = 0; const a = atan2(dy, dx) + PI + random() - 0.5; [h.x, h.y] = freeSpot(0, p.x + cos(a) * min(d * 0.6, 60), p.y + sin(a) * min(d * 0.6, 60), 2); }
+    }
+  } else h.sp = max(0, h.sp - 30 * dt);
+  h.stam = min(100 - h.fat * 0.5, h.stam + 10 * dt); if (h.sp < 1) h.fat = max(0, h.fat - 1.2 * dt);
+}
+
+// ===== time & weather =====
+const SKY = [[0, .13, .16, .32], [4.5, .13, .16, .32], [6, .8, .55, .5], [7.5, 1, .95, .88], [12, 1, 1, 1], [17, 1, .92, .8], [19, .85, .48, .4], [20.5, .2, .21, .4], [24, .13, .16, .32]];
+const WX = {clear: .25, cloud: .7, rain: .85, storm: 1, fog: .5, snow: .7};
+const wetK = () => { const w = G.w; return G.p.layer ? 1 : 1 - (w.kind === 'rain' || w.kind === 'storm' ? 0.1 : w.kind === 'snow' ? 0.12 : 0) * w.k; };
+function pickWeather(b) {
+  const r = random() * 100;
+  const tab = b === T.DESERT ? [['clear', 75], ['cloud', 10], ['fog', 15]] : b === T.SNOW || b === T.SNOWROCK || b === T.PINE ? [['snow', 45], ['clear', 30], ['cloud', 15], ['fog', 10]]
+    : b === T.SWAMP || b === T.SWAMPW ? [['fog', 40], ['rain', 25], ['cloud', 20], ['clear', 15]] : [['clear', 40], ['cloud', 20], ['rain', 20], ['storm', 8], ['fog', 12]];
+  let a = 0; for (const [k, w] of tab) { a += w; if (r < a) return k; } return 'clear';
+}
+function updateWeather(dt) {
+  const w = G.w;
+  if (G.t > w.next && !w.to) { w.to = pickWeather(biomeAt(G.p.x, G.p.y)); w.next = G.t + 2 + random() * 4; if (w.to === w.kind) w.to = null; }
+  if (w.to) { w.k -= dt / 8; if (w.k <= 0) { w.kind = w.to; w.to = null; w.k = 0; } } else w.k = min(1, w.k + dt / 8);
+  if (w.kind === 'storm' && !G.p.layer && random() < dt * 0.12 * w.k) G.flash = [0.85, 0.9, 1, 0.55];
+}
+function update(dt) {
+  if (G.dead) { G.dead -= dt; G.flash = [0, 0, 0, clamp(1.2 - G.dead / 3, 0, 1)]; if (G.dead <= 0) { G.dead = 0; respawn(); } return; }
+  G.t += dt / 30;
+  updatePlayer(dt); updateHorse(dt); updateEnts(dt); updateWeather(dt);
+  if ((G.scanT -= dt) < 0) { G.scanT = 0.5; manageWorld(); }
+  if ((G.spT -= dt) < 0) { G.spT = 5; ambient(); }
+  if ((G.saveT -= dt) < 0) { G.saveT = 45; save(true); }
+  for (let i = G.parts.length; i--;) { const q = G.parts[i]; q.life -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.vz -= 20 * dt; if (q.life <= 0) G.parts.splice(i, 1); }
+  for (let i = G.fx.length; i--;) { const f = G.fx[i]; f.t += dt; if (f.t > (f.k === 'ring' ? 1.2 : 0.22)) G.fx.splice(i, 1); }
+  for (const m of G.msgs) m.t -= dt; if (G.msgs.length && G.msgs[0].t <= 0) G.msgs.shift();
+  if (G.ban && (G.ban.t -= dt) <= 0) G.ban = null;
+  if (G.confirm > 0) G.confirm -= dt;
+}
+
+// ===== WebGL glyph renderer: two cell grids (scrolling terrain, static overlay) composited in one shader =====
+const cv = document.getElementById('c'), gl = cv.getContext('webgl2', {antialias: false, alpha: false});
+if (!gl) { document.getElementById('err').hidden = false; return; }
+const VS = `#version 300 es
+void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2. - 1., 0., 1.); }`;
+const FS = `#version 300 es
+precision highp float; precision highp int;
+uniform sampler2D uT, uO, uA, uH;
+uniform vec2 uCell, uOff, uRes, uPl, uW0;
+uniform vec3 uAmb, uFog, uLC[10];
+uniform vec4 uWm, uFlash, uL[10];
+uniform float uFogK, uTime, uCloud, uCloudVis, uYs, uHk, uGlow;
+out vec4 o;
+float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(h2(i), h2(i+vec2(1,0)), f.x), mix(h2(i+vec2(0,1)), h2(i+vec2(1,1)), f.x), f.y); }
+float fb(vec2 p){ return vn(p)*.55 + vn(p*2.13+7.3)*.3 + vn(p*4.7+1.7)*.15; }
+float gly(float gi, vec2 q){ return texelFetch(uA, ivec2(mod(gi,16.), floor(gi/16.)) * ivec2(uCell) + ivec2(q), 0).r; }
+void main(){
+  vec2 p = vec2(gl_FragCoord.x - .5, uRes.y - gl_FragCoord.y - .5);
+  vec2 q = p + uOff, ct = floor(q / uCell);
+  vec4 t = texelFetch(uT, ivec2(ct), 0);
+  float ta = floor(t.a * 255. + .5), a = gly(mod(ta, 128.), q - ct * uCell);
+  vec2 w = uW0 + vec2(dot(uWm.xy, p), dot(uWm.zw, p));
+  vec3 L = uAmb * (1. - smoothstep(.5, .72, fb(w * .0035 + uTime * vec2(.012, .005))) * uCloud * .45);
+  for (int i = 0; i < 10; i++){ vec2 d = (p - uL[i].xy) * vec2(1., uYs) / uL[i].z; float f = max(0., 1. - dot(d, d)); L += uLC[i] * f * f * uL[i].w; }
+  vec3 tc = t.rgb * (ta > 127.5 ? max(L, vec3(1.)) : L);
+  vec3 col = vec3(.014, .018, .04) * (.5 + L) + tc * (uGlow + a);
+  vec2 co = floor(p / uCell), cq = p - co * uCell;
+  if (uCloudVis > 0.) {
+    vec2 cp = (co + .5) * uCell, cw = uW0 + vec2(dot(uWm.xy, cp), dot(uWm.zw, cp));
+    float cl = fb(cw * .0022 + uTime * vec2(.016, .006) + 40.), k = uCloudVis * smoothstep(.6, .78, cl);
+    if (k > 0.) { float hh = h2(co), gi = cl > .76 ? (hh > .5 ? 5. : 29.) : hh > .6 ? 94. : hh > .3 ? 13. : 14.;
+      col = mix(col * (1. - k * .3), vec3(.86, .9, .96) * (.25 + L * .8), gly(gi, cq) * k); }
+  }
+  vec4 v = texelFetch(uO, ivec2(co), 0);
+  float oa = floor(v.a * 255. + .5);
+  if (oa > .5) col = mix(mod(floor(v.b * 255. + .5), 2.) > .5 ? col * .1 : col, v.rgb * max(L, vec3(.2)), gly(oa - 1., cq));
+  float fd = length((p - uPl) * vec2(1., uYs)) / uRes.y;
+  col = mix(col, uFog, uFogK * smoothstep(.05, .5, fd) * (.65 + .35 * fb(w * .01 + uTime * .04)));
+  col = mix(col, uFlash.rgb, uFlash.a);
+  col *= 1. - .3 * smoothstep(.35, .8, length(p / uRes - .5));
+  vec2 hs = uCell * uHk, hc = floor(p / hs); vec4 hv = texelFetch(uH, ivec2(hc), 0); float ha = floor(hv.a * 255. + .5);
+  if (ha > .5) col = mix(col * .16 + vec3(.008, .01, .022), hv.rgb, gly(ha - 1., floor((p - hc * hs) / uHk)));
+  o = vec4(col, 1.);
+}`;
+function shader(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram(); gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const U = {}; for (const n of ['uT', 'uO', 'uA', 'uCell', 'uOff', 'uRes', 'uPl', 'uW0', 'uAmb', 'uFog', 'uLC', 'uWm', 'uFlash', 'uL', 'uFogK', 'uTime', 'uCloud', 'uCloudVis', 'uYs', 'uH', 'uHk', 'uGlow']) U[n] = gl.getUniformLocation(prog, n);
+const texs = [0, 1, 2, 3].map(i => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t); for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); return t; });
+gl.uniform1i(U.uT, 0); gl.uniform1i(U.uO, 1); gl.uniform1i(U.uA, 2); gl.uniform1i(U.uH, 3);
+
+const COARSE = matchMedia('(pointer: coarse)').matches;
+const FONT = 'ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace';
+let cw = 8, ch = 16, OW = 0, OH = 0, TW = 0, TH = 0, HW = 0, HH = 0, hk = 1, tb, tb8, ob, ob8, hb, hb8, dep, typ, ADV = 0.6, dpr = 1;
+function setZoom(z) { CAM.zoom = clamp(z, 6, 36); resize(); }
+function resize() {
+  dpr = min(window.devicePixelRatio || 1, 2);
+  const W = max(64, round(cv.clientWidth * dpr)), H = max(64, round(cv.clientHeight * dpr));
+  let nch = max(7, round(CAM.zoom * dpr)), fs, ncw;
+  for (;; nch++) { fs = floor(nch * 0.84); ncw = max(3, round(ADV * fs)); if (ceil(W / ncw) * ceil(H / nch) <= 56000) break; } // cap the per-frame cell count
+  if (cv.width === W && cv.height === H && nch === ch && tb) return;
+  cv.width = W; cv.height = H; gl.viewport(0, 0, W, H);
+  const atlas = nch !== ch || ncw !== cw || !tb; ch = nch; cw = ncw;
+  OW = ceil(W / cw); OH = ceil(H / ch); TW = OW + 1; TH = OH + 1;
+  tb = new Uint32Array(TW * TH); tb8 = new Uint8Array(tb.buffer); ob = new Uint32Array(OW * OH); ob8 = new Uint8Array(ob.buffer); dep = new Float32Array(TW * TH); typ = new Uint8Array(TW * TH);
+  gl.activeTexture(gl.TEXTURE0); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, TW, TH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, OW, OH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  hk = max(1, round((COARSE ? 17 : 12) * dpr / ch)); HW = ceil(W / (cw * hk)); HH = ceil(H / (ch * hk)); hb = new Uint32Array(HW * HH); hb8 = new Uint8Array(hb.buffer); // HUD cells stay readable when the world is zoomed out
+  gl.activeTexture(gl.TEXTURE3); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, HW, HH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  if (atlas) { // glyphs are rasterised at the exact device-pixel cell size so text stays crisp at every zoom
+    const a = document.createElement('canvas'); a.width = cw * 16; a.height = ch * 6; const x = a.getContext('2d');
+    x.fillStyle = '#000'; x.fillRect(0, 0, a.width, a.height); x.fillStyle = '#fff'; x.font = 'bold ' + fs + 'px ' + FONT; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+    for (let i = 0; i < 95; i++) { const gx = (i % 16) * cw, gy = floor(i / 16) * ch; x.save(); x.beginPath(); x.rect(gx, gy, cw, ch); x.clip(); x.fillText(String.fromCharCode(32 + i), gx + cw / 2, gy + round(ch * 0.77)); x.restore(); }
+    gl.activeTexture(gl.TEXTURE2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, a);
+  }
+}
+{ const x = document.createElement('canvas').getContext('2d'); x.font = 'bold 100px ' + FONT; ADV = x.measureText('M').width / 100 || 0.6; }
+
+// per-frame camera: R = screen-right, F = screen-up on the ground, D = tiles per row, KZ = rows per height unit
+let Rx = 1, Ry = 0, Fx = 0, Fy = -1, D = 2.4, KZ = 0.69, camH = 0, pcx = 0, pcy = 0, offX = 0, offY = 0, U0 = 0, V0 = 0, vS = 0, r0g = 0, shx = 0, shy = 0, PX = 0, PY = 0, time = 0, viewMaxH = 0, QX = 0, QY = 0, pc0 = 0, pr0 = 0;
+function setupFrame(dt) {
+  const p = G.p, h = G.h;
+  CAM.yaw += angd(CAM.tyaw, CAM.yaw) * min(1, dt * 14);
+  Rx = cos(CAM.yaw); Ry = sin(CAM.yaw); Fx = sin(CAM.yaw); Fy = -cos(CAM.yaw);
+  const a = cw / ch; D = 1 / (a * sin(CAM.pitch)); KZ = a * cos(CAM.pitch) * 2.4;
+  PX = p.x; PY = p.y; tile(p.layer, PX, PY); camH = lerp(camH, qG, min(1, dt * 10));
+  const la = p.mounted ? clamp((h.sp - 8) / 32, 0, 1) * 16 : 0; // look ahead of a fast horse
+  CAM.lax = lerp(CAM.lax, cos(h.hd) * la, min(1, dt * 1.5)); CAM.lay = lerp(CAM.lay, sin(h.hd) * la, min(1, dt * 1.5));
+  QX = PX + CAM.lax; QY = PY + CAM.lay; pc0 = OW >> 1; pr0 = floor(OH * 0.56);
+  // snap the sampling lattice to whole cells in screen space and scroll the remainder in pixels: glyphs stay put while the world glides
+  const uq = QX * Rx + QY * Ry, vq = (QX * Fx + QY * Fy) / D;
+  U0 = floor(uq) - pc0; V0 = ceil(vq) + pr0; offX = floor((uq - floor(uq)) * cw); offY = floor((ceil(vq) - vq) * ch);
+  shx = offX > cw / 2 ? 1 : 0; shy = offY > ch / 2 ? 1 : 0;
+  pcx = pc0 - round(CAM.lax * Rx + CAM.lay * Ry); pcy = pr0 + round((CAM.lax * Fx + CAM.lay * Fy) / D);
+  const rad = hypot(TW / 2, TH * D) + 40, c0x = floor((QX - rad) / CS), c1x = floor((QX + rad) / CS), c0y = floor((QY - rad) / CS), c1y = floor((QY + rad) / CS);
+  viewMaxH = 0; for (let j = c0y; j <= c1y; j++) for (let i = c0x; i <= c1x; i++) viewMaxH = max(viewMaxH, getChunk(p.layer, i, j).maxH);
+}
+// oblique height-field march: each screen column walks the ground front-to-back, taller samples paint upward and occlude what is behind
+function renderTerrain() {
+  const W = TW, H = TH, lay = G.p.layer, pad = ceil(max(0, viewMaxH - camH) * KZ) + 1, ovr = ceil(max(0, camH) * KZ) + 1;
+  r0g = H - 1 + pad; vS = V0 - r0g;
+  const n = 2 * (r0g + ovr) + 1, sx = 0.5 * D * Fx, sy = 0.5 * D * Fy, tw = (time * 22) | 0, tg = (time * (18 + 26 * WX[G.w.kind] * G.w.k)) | 0, night = isNight(), tf = (time * 9) | 0;
+  let lcx = 1e9, lcy = 1e9, cT_, cH_, cS_, cV_, rcx = 1e9, rcy = 1e9, rc = null;
+  for (let c = 0; c < W; c++) {
+    const u = U0 + c; let wx = u * Rx + vS * D * Fx, wy = u * Ry + vS * D * Fy, yTop = H;
+    for (let i = 0; i < n && yTop > 0; i++, wx += sx, wy += sy) {
+      const tx = floor(wx), ty = floor(wy), kx = tx >> 6, ky = ty >> 6;
+      if (kx !== lcx || ky !== lcy) { const q = getChunk(lay, kx, ky); lcx = kx; lcy = ky; cT_ = q.T; cH_ = q.H; cS_ = q.S; cV_ = q.V; }
+      const k = (tx & 63) | (ty & 63) << 6, y = floor(r0g - i * 0.5 - (cH_[k] - camH) * KZ + 0.5);
+      if (y >= yTop) continue;
+      const t = cT_[k], v = cV_[k], s = cS_[k], span = yTop - y, kind = KIND[t], pi = (t << 2 | v & 3) << 4;
+      for (let r = yTop - 1, top = y < 0 ? 0 : y; r >= top; r--) {
+        let g, col;
+        if (r === y || span < 3) {
+          if (kind === 0) { const a = TOPG[t]; g = a[v % a.length]; col = PAL[pi | s]; }
+          else if (kind === 1) {
+            const ph = SINT[(tx * 5 + ty * 3 + tg) & 255] + (v - 128) * 0.008, sv = s + (v >> 5) - 4, ti = (tx & 255) | (ty & 255) << 8;
+            if (TR[ti] > time && TRK[ti] === (tx >> 8) * 31 + (ty >> 8)) { g = v & 1 ? 63 : 12; col = PAL[pi | (s > 4 ? s - 3 : 1)]; } // blades pressed flat where hooves and boots just passed
+            else { g = v < 20 ? 0 : v < 34 ? 7 : v < 48 ? 12 : ph > 0.45 ? 15 : ph < -0.45 ? 60 : 92; col = PAL[pi | (sv < 1 ? 1 : sv > 15 ? 15 : sv)]; }
+          }
+          else if (kind === 2) {
+            const vr = floor(vS + i * 0.5), ph = SINT[(vr * 67 + (SINT[(u * 3 + vr * 29 + tw) & 255] * 44 | 0) + (tw >> 2)) & 255];
+            g = ph > 0.95 ? 29 : ph > 0.66 ? 13 : ph > 0.54 ? (v < 40 ? 94 : 14) : 0; col = PAL[pi | (ph > 0.9 ? s : s - 2)];
+            if (t !== T.OCEAN && ph <= 0.66) for (let j = 1, hw = cH_[k]; j < 9; j++) { // mirror ray: the first thing tall enough to be seen in the water
+              const qx = floor(wx + Fx * D * j + SINT[(vr * 29 + tw * 2) & 255] * 0.7), qy = floor(wy + Fy * D * j), ax = qx >> 6, ay = qy >> 6;
+              if (ax !== rcx || ay !== rcy) { rc = getChunk(lay, ax, ay); rcx = ax; rcy = ay; }
+              const k2 = (qx & 63) | (qy & 63) << 6, t2 = rc.T[k2];
+              if (rc.H[k2] - hw >= j / KZ - 0.6 && !WATERT[t2]) { const a = FACEG[t2], v2 = rc.V[k2]; g = a[(v2 + j) % a.length]; col = PAL[((t2 << 2 | v2 & 3) << 4) | 4]; break; }
+            }
+          }
+          else if (kind === 5) { const ph = SINT[(tx * 3 + ty * 11 + (SINT[(tx * 2) & 255] * 16 | 0)) & 255], a = TOPG[t]; g = ph > 0.75 ? 94 : ph > 0.5 ? 13 : a[v % a.length]; col = PAL[pi | s + (ph > 0.5 ? 1 : 0)]; }
+          else if (kind === 6) { g = (ty & 3) === 0 ? 29 : (ty & 3) === 2 ? 2 : v & 1 ? 12 : 14; col = PAL[pi | s]; }
+          else if (kind === 4) { const a = TOPG[t]; g = a[(v + tf) % a.length] | 128; col = PAL[pi | 13]; }
+          else if (kind === 7) { g = TOPG[t][0] | 128; col = PAL[pi | 12]; }
+          else if (kind === 8) { const a = TOPG[t]; g = a[min(a.length - 1, (s * a.length + (v & 15)) >> 4)]; col = PAL[pi | s]; }
+          else { const a = TOPG[t]; g = a[v % a.length]; col = PAL[pi | s]; }
+        } else {
+          const a = FACEG[t], hk = yTop - 1 - r; g = a[(v + hk * 7) % a.length]; col = PALF[pi | (s > 3 ? s - 3 : 0)];
+          if (kind === 3 && hk % 4 === 2 && (tx + ty) % 5 === 0) { g = night ? 40 | 128 : 40; col = night ? 0x6ed2ff : 0x5a4636; } // windows glow after dark
+        }
+        const idx = r * W + c; tb[idx] = col | g << 24; dep[idx] = i; typ[idx] = t;
+      }
+      yTop = y;
+    }
+    for (let r = yTop - 1; r >= 0; r--) { const idx = r * W + c; tb[idx] = 0; dep[idx] = 1e9; typ[idx] = 255; }
+  }
+}
+// world -> overlay cell (oc, orow) and depth index (oi) comparable with dep[]
+let oc = 0, orow = 0, oi = 0;
+function toCell(x, y, z) { const rx = x - PX, ry = y - PY; oc = pcx + rx * Rx + ry * Ry; orow = pcy - (rx * Fx + ry * Fy) / D - (z - camH) * KZ; oi = ((x * Fx + y * Fy) / D - vS) * 2; }
+const tIdx = (c, r) => (r + shy) * TW + c + shx;
+function drawSprite(S, x, y, z, o) {
+  toCell(x, y, z); const c0 = round(oc) - S.ax, rb = round(orow) + (o.dy | 0), ie = oi - 1.5;
+  if (c0 >= OW || c0 + S.w < 0 || rb < 0 || rb - S.h >= OH + S.h) return;
+  const tint = o.tint, sh = (time * 70) | 0;
+  for (let j = 0; j < S.h; j++) for (let i = 0; i < S.w; i++) {
+    const ki = S.K[j * S.w + i]; if (ki === 255) continue;
+    const c = c0 + i, r = rb - S.h + 1 + j, rgb = tint && ki === K_TINT ? tint : KRGB[ki];
+    let f = o.flashT > 0 ? 1.6 : 1; if (ki < 3) f *= 0.84 + 0.3 * SINT[(i * 23 - j * 17 + sh) & 255]; // polished steel: a highlight band sweeps across the plates
+    if (c >= 0 && c < OW && r >= 0 && r < OH) {
+      const hid = dep[tIdx(c, r)] < ie;
+      if (!hid || o.xray) { const k = hid ? f * 0.38 : f; ob[r * OW + c] = pack(rgb[0] * k | 0, rgb[1] * k | 0, rgb[2] * k | 1) | (S.G[j * S.w + i] + 1) << 24; }
+    }
+    if ((o.xray || o.halo) && r >= 0 && r < OH) for (const c1 of [c - 1, c + 1]) if (c1 >= 0 && c1 < OW && !ob[r * OW + c1] && dep[tIdx(c1, r)] >= ie) ob[r * OW + c1] = 1 << 16 | 1 << 24;
+    const rr = rb + S.h - j; // mirrored row below the feet: reflect only onto water cells
+    if (c >= 0 && c < OW && rr >= 0 && rr < OH && WATERT[typ[tIdx(c, rr)]]) {
+      const c2 = clamp(c + round(SINT[(rr * 37 + sh) & 255] * 0.6), 0, OW - 1), k = 0.34;
+      if (!ob[rr * OW + c2]) ob[rr * OW + c2] = pack(rgb[0] * k | 0, rgb[1] * k + 8 | 0, (rgb[2] * k + 22) & 254) | (mapc(VFL, S.G[j * S.w + i]) + 1) << 24;
+    }
+  }
+}
+const put = (c, r, g, col) => { if (c >= 0 && c < OW && r >= 0 && r < OH && !ob[r * OW + c]) ob[r * OW + c] = (col & 0xfeffff) | (g.charCodeAt(0) - 31) << 24; };
+const sdir = a => { const sx = cos(a) * Rx + sin(a) * Ry, sy = -(cos(a) * Fx + sin(a) * Fy); return abs(sx) > abs(sy) * 0.8 ? (sx > 0 ? 'r' : 'l') : sy > 0 ? 'f' : 'b'; };
+function drawWorld() {
+  const p = G.p, h = G.h, list = [];
+  for (const e of ENTS) if (e.layer === p.layer && abs(e.x - PX) + abs(e.y - PY) < 520) list.push(e);
+  if (!p.layer && !p.mounted) list.push(h);
+  list.push(p);
+  list.sort((a, b) => (b.x * Fx + b.y * Fy) - (a.x * Fx + a.y * Fy));
+  for (const e of list) {
+    tile(p.layer, e.x, e.y); const z = qG;
+    if (e === p) {
+      if (p.mounted) { const fr = h.sp < 0.5 ? 1 : h.sp > 24 ? 4 + floor(h.ph) % 3 : floor(h.ph) % 4; drawSprite(MT[sdir(h.hd)][fr], p.x, p.y, z, {xray: 1, dy: fr === 6 ? -1 : 0}); }
+      else { const a = p.anim, d = a ? sdir(atan2(a.ty - a.fy, a.tx - a.fx)) : sdir(p.dir); drawSprite(KN[d][p.moving || a ? floor(p.ph) & 3 : 0], p.x, p.y, z, {xray: 1, dy: a ? -round(sin(PI * min(1, a.t)) * 3) - (a.mount ? round(a.t * 2) : round((1 - a.t) * 2)) : 0}); }
+      toCell(p.x, p.y, z); txt(round(oc / hk) - 3, floor((orow - (p.mounted ? 10 : 6)) / hk), 'KNIGHT', HC.w);
+    } else if (e === h) { const fr = h.sp < 0.5 ? 1 : h.sp > 24 ? 4 + floor(h.ph) % 3 : floor(h.ph) % 4; drawSprite(HS[sdir(h.hd)][fr], h.x, h.y, z, {halo: 1, dy: fr === 6 ? -1 : 0}); }
+    else if (e.k === 'chest') drawSprite(CHEST[e.big], e.x, e.y, z, {});
+    else { const set = SP[e.k === 'npc' ? e.role : e.kind]; drawSprite(set[e.dir > 0 ? 'r' : 'l'][floor(e.ph) & 1], e.x, e.y, z, {tint: e.tint, flashT: e.hit}); }
+  }
+  for (const q of G.parts) { toCell(q.x, q.y, q.z); const c = round(oc), r = round(orow); if (c >= 0 && c < OW && r >= 0 && r < OH && dep[tIdx(c, r)] >= oi - 2) put(c, r, q.g, pack(q.col[0], q.col[1], q.col[2])); }
+  for (const f of G.fx) {
+    if (f.k === 'slash') { const base = f.a - 1.1 + f.t / 0.22 * 2.2; for (let i = -2; i <= 2; i++) { const a = base + i * 0.16, rad = p.mounted ? 9 : 6; toCell(p.x + cos(a) * rad, p.y + sin(a) * rad, camH + 5); const sx = -sin(a) * Rx + cos(a) * Ry, sy = (-sin(a) * Fx + cos(a) * Fy) / D; put(round(oc), round(orow), abs(sx) > abs(sy) * 2.5 ? '-' : abs(sy) > abs(sx) * 2.5 ? '|' : sx * sy > 0 ? '/' : '\\', 0xffffff); } }
+    else for (let i = 0; i < 16; i++) { const a = i / 16 * TAU, rad = 2 + f.t * 9; toCell(f.x + cos(a) * rad, f.y + sin(a) * rad, camH); const c = round(oc), r = round(orow); if (c >= 0 && c < OW && r >= 0 && r < OH && WATERT[typ[tIdx(c, r)]]) { const sx = cos(a) * Rx + sin(a) * Ry; put(c, r, abs(sx) > 0.8 ? (sx > 0 ? ')' : '(') : abs(sx) < 0.3 ? '-' : (sx > 0) === (i < 8) ? '\\' : '/', pack(150, 190, 220)); } }
+  }
+}
+function drawWeather(dt) {
+  const w = G.w; if (G.p.layer) return;
+  const rain = w.kind === 'rain' || w.kind === 'storm' ? w.k * (w.kind === 'storm' ? 1.6 : 1) : 0, snow = w.kind === 'snow' ? w.k : 0;
+  for (let i = 0, n = rain * OW * OH * 0.016; i < n; i++) { const h = hash(i, 7, 3), r = ((h >>> 8) % 997 / 997 * OH + time * (34 + (h & 7))) % OH | 0; put(((h % OW) + r * (w.kind === 'storm' ? 0.5 : 0.2)) % OW | 0, r, w.kind === 'storm' ? '/' : h & 16 ? '|' : "'", pack(120, 150, 200)); }
+  for (let i = 0, n = snow * OW * OH * 0.012; i < n; i++) { const h = hash(i, 9, 5), r = ((h >>> 8) % 997 / 997 * OH + time * (4 + (h & 3))) % OH | 0; put((h % OW + SINT[(r * 9 + (h & 255)) & 255] * 2 + OW) % OW | 0, r, h & 16 ? '*' : '.', pack(230, 236, 246)); }
+  if ((G.birdT -= dt) < 0) { G.birdT = 14 + random() * 16; if (!rain && !isNight()) { const s = random() < 0.5 ? 1 : -1; G.birds = {x: s > 0 ? -8 : OW + 8, y: 4 + random() * OH * 0.5, vx: s * (16 + random() * 8), vy: random() * 2 - 1, n: 3 + (random() * 4 | 0)}; } }
+  const b = G.birds; if (b) { b.x += b.vx * dt; b.y += b.vy * dt; if (b.x < -20 || b.x > OW + 20) G.birds = null; else for (let i = 0; i < b.n; i++) put(round(b.x - Math.sign(b.vx) * i * 2), round(b.y + (i & 1 ? i : -i) * 0.6), ((time * 5 + i) | 0) & 1 ? 'v' : '-', pack(210, 214, 224)); }
+}
+
+// ===== ASCII HUD: its own cell grid (HW x HH), drawn unlit over everything =====
+const HC = {w: pack(222, 228, 238), d: pack(118, 128, 150), g: pack(228, 188, 84), r: pack(224, 76, 76), e: pack(96, 196, 116), b: pack(120, 178, 236)};
+let BTN = [];
+function txt(c, r, s, col) { if (r < 0 || r >= HH) return; for (let i = 0; i < s.length; i++) { const x = c + i; if (x >= 0 && x < HW) hb[r * HW + x] = (col === undefined ? HC.w : col) | (s.charCodeAt(i) - 31) << 24; } }
+const ctr = (r, s, col) => txt((HW - s.length) >> 1, r, s, col);
+const bar = (c, r, lab, v, w, col) => { const n = round(clamp(v, 0, 1) * w); txt(c, r, lab, HC.d); txt(c + lab.length, r, '[' + '#'.repeat(n) + '-'.repeat(w - n) + ']', col); };
+function box(c, r, w, h) { for (let j = 0; j < h; j++) txt(c, r + j, j === 0 || j === h - 1 ? '+' + '-'.repeat(w - 2) + '+' : '|' + ' '.repeat(w - 2) + '|', HC.d); }
+function btn(c, r, s, fn) { txt(c, r, s, HC.b); BTN.push([c, r, s.length, fn]); return s.length + 1; }
+const LOGO = [" ___   ___    ___    _  _   _  _    ___     ___    ___ ", "|_ _| | _ \\  / _ \\  | \\| | | || |  / _ \\   / _ \\  | __|", " | |  |   / | (_) | | .` | | __ | | (_) | | (_) | | _| ", "|___| |_|_\\  \\___/  |_|\\_| |_||_|  \\___/   \\___/  |_|  "];
+const HELP = ['WASD / ARROWS  MOVE (ON FOOT)  -  STEER (MOUNTED)', 'SHIFT          RUN (ON FOOT)  -  FASTER GAIT (MOUNTED)', 'X              SLOWER GAIT', 'F  MOUNT / DISMOUNT      H  WHISTLE FOR YOUR HORSE', 'SPACE / CLICK  STRIKE    E  TALK / OPEN / USE', 'R  MAKE CAMP AND REST    M  MAP', 'DRAG  TURN AND TILT THE VIEW     WHEEL  ZOOM', 'Z / C  TURN VIEW   - / =  ZOOM   ESC  MENU', 'P  SAVE    L  LOAD    AUTOSAVES AS YOU RIDE'];
+const BIOME = {[T.GRASS]: 'GRASSLANDS', [T.FLOWER]: 'MEADOW', [T.FOREST]: 'DEEP FOREST', [T.CANOPY]: 'DEEP FOREST', [T.SAND]: 'COAST', [T.DESERT]: 'DESERT', [T.SWAMP]: 'MARSH', [T.SWAMPW]: 'MARSH', [T.SNOW]: 'SNOWFIELDS', [T.PINE]: 'SNOWFIELDS', [T.ROCK]: 'MOUNTAINS', [T.SNOWROCK]: 'SNOWY PEAKS', [T.WATER_S]: 'SHALLOWS', [T.ROAD]: 'ROAD', [T.BRIDGE]: 'BRIDGE', [T.DFLOOR]: 'UNDERGROUND RUINS', [T.STAIRU]: 'UNDERGROUND RUINS', [T.FARM]: 'FARMLAND'};
+const MAPG = {[T.GRASS]: '"', [T.FOREST]: '&', [T.SAND]: '.', [T.DESERT]: ':', [T.SWAMP]: '%', [T.SWAMPW]: '%', [T.SNOW]: '*', [T.ROCK]: '^', [T.SNOWROCK]: 'A', [T.WATER_S]: '~', [T.WATER_D]: '~', [T.OCEAN]: '~'};
+function drawMap() {
+  const p = G.p, mw = min(HW - 4, 110) | 1, mh = min(HH - 7, 41) | 1, c0 = (HW - mw) >> 1, r0 = 3, s = 110;
+  if (!G.map || G.map.w !== mw || G.map.h !== mh) { const m = G.map = {w: mw, h: mh, x: p.x, y: p.y, g: [], c: []}; for (let j = 0; j < mh; j++) for (let i = 0; i < mw; i++) { const b = biomeAt(p.x + (i - (mw >> 1)) * s, p.y + (j - (mh >> 1)) * s * 2); m.g.push(MAPG[b] || '?'); m.c.push(PAL[(b * 4) * 16 + 10]); } }
+  const m = G.map; box(c0 - 1, r0 - 1, mw + 2, mh + 2);
+  for (let j = 0; j < mh; j++) for (let i = 0; i < mw; i++) txt(c0 + i, r0 + j, m.g[j * mw + i], m.c[j * mw + i]);
+  const mark = (x, y, g, col) => { const i = round((x - m.x) / s) + (mw >> 1), j = round((y - m.y) / (s * 2)) + (mh >> 1); if (i >= 0 && i < mw && j >= 0 && j < mh) txt(c0 + i, r0 + j, g, col); };
+  for (const k in G.found) { const f = G.found[k]; mark(f.x, f.y, LET[f.k], HC.g); }
+  mark(G.h.x, G.h.y, 'h', HC.e); if ((time * 3 | 0) & 1) mark(p.x, p.y, '@', HC.w);
+  ctr(1, ' MAP OF THE KNOWN WORLD - NORTH IS UP ', HC.g);
+  ctr(r0 + mh + 1, ' @ YOU  h HORSE  V VILLAGE  C CITY  K CASTLE  R RUINS  D BARROW  O STONES  B CAMP '.slice(0, HW - 2), HC.d);
+  ctr(r0 + mh + 2, ' PLACES DISCOVERED: ' + Object.keys(G.found).length + '   [M] CLOSE ', HC.w);
+}
+function drawHUD() {
+  const p = G.p, h = G.h, narrow = HW < 96; BTN = [];
+  if (G.ui === 'title') {
+    const r = max(1, (HH >> 1) - 11);
+    box(max(0, (HW - 62) >> 1), r - 1, min(HW, 62), narrow ? 13 : 22);
+    if (HW >= 58) LOGO.forEach((s, i) => ctr(r + i, s, HC.g)); else ctr(r + 2, 'I R O N H O O F', HC.g);
+    ctr(r + 5, 'AN ASCII OPEN WORLD', HC.w); ctr(r + 7, G.loaded ? 'YOUR JOURNEY CONTINUES' : HW < 54 ? 'A KNIGHT AND A WARHORSE' : 'A KNIGHT, A WARHORSE, AND NO ROAD YOU MUST FOLLOW', HC.d);
+    if (!narrow) HELP.forEach((s, i) => ctr(r + 9 + i, ' ' + s.padEnd(50) + ' ', HC.d));
+    ctr(r + (narrow ? 10 : 19), narrow ? '[ TAP TO RIDE ]' : '[ CLICK OR PRESS ANY KEY TO RIDE ]', (time * 2 | 0) & 1 ? HC.w : HC.d);
+    return;
+  }
+  if (G.ui === 'map') { drawMap(); BTN.push([0, 0, HW, () => { G.ui = 'play'; }]); return; }
+  // vitals
+  bar(1, 1, 'HP    ', p.hp / p.mhp, 14, p.hp < p.mhp * 0.3 ? HC.r : HC.e); txt(23, 1, '' + ceil(p.hp), HC.w);
+  bar(1, 2, 'HORSE ', h.stam / 100, 14, HC.b); bar(1, 3, 'TIRED ', h.fat / 100, 14, h.fat > 60 ? HC.r : HC.d);
+  txt(1, 4, 'GOLD ' + p.gold + '  SWORD +' + p.sword + '  PLACES ' + Object.keys(G.found).length, HC.g);
+  if (p.mounted) { let c = 1; GAIT.forEach((g, i) => { const on = i === h.gait; txt(c, 5, on ? '>' + g[0] + '<' : ' ' + g[0] + ' ', on ? HC.w : HC.d); c += g[0].length + 2; }); }
+  else txt(1, 5, p.layer ? 'ON FOOT - HORSE WAITS ABOVE' : 'ON FOOT', HC.d);
+  // compass strip: bearing across the top, discovered places and the horse marked beneath
+  const cwid = narrow ? 10 : 20, cc = HW >> 1, deg = CAM.yaw * 180 / PI, tiny = HW < 60, cr = tiny ? 9 : 0;
+  for (let j = -cwid; j <= cwid; j++) { const b = ((deg + j * 6) % 360 + 360) % 360, i = round(b / 45) % 8; txt(cc + j, cr + 1, abs(b - round(b / 45) * 45) < 3 ? (i & 1 ? '+' : 'NESW'[i >> 1]) : '.', abs(b - round(b / 45) * 45) < 3 && !(i & 1) ? HC.w : HC.d); }
+  txt(cc, cr, 'v', HC.g);
+  const mark = (x, y, g, col) => { const j = round(angd(atan2(x - p.x, -(y - p.y)), CAM.yaw) * 180 / PI / 6); if (abs(j) <= cwid) txt(cc + j, cr + 2, g, col); };
+  if (!p.layer) { for (const k in G.found) { const f = G.found[k]; if (hypot(f.x - p.x, f.y - p.y) < 2600 && hypot(f.x - p.x, f.y - p.y) > 60) mark(f.x, f.y, LET[f.k], HC.g); } if (!p.mounted) mark(h.x, h.y, 'h', HC.e); }
+  // clock, weather, place
+  const hr = G.t % 24, clock = 'DAY ' + (floor(G.t / 24) + 1) + '  ' + String(floor(hr)).padStart(2, '0') + ':' + String(floor(hr % 1 * 6) * 10).padStart(2, '0'), wn = p.layer ? 'UNDERGROUND' : G.w.kind.toUpperCase();
+  txt(HW - clock.length - 1, narrow ? 6 : 1, clock, HC.w); txt(HW - wn.length - 1, narrow ? 7 : 2, wn, HC.b);
+  const bn = BIOME[tile(p.layer, p.x, p.y)] || ''; if (!tiny) txt(HW - bn.length - 1, narrow ? 8 : 3, bn, HC.d);
+  // messages, prompt, dialogue, banner
+  G.msgs.forEach((m, i) => txt(1, HH - 6 - G.msgs.length + i, m.s.slice(0, HW - 2), m.t < 1.5 ? HC.d : m.col || HC.w));
+  if (G.dlg) { const d = G.dlg, w = min(HW - 2, max(d.s.length, d.who.length) + 4), c = (HW - w) >> 1, r = HH - 11; box(c, r, w, 4); txt(c + 2, r, ' ' + d.who + ' ', HC.g); txt(c + 2, r + 1, d.s.slice(0, w - 4), HC.w); if (d.s.length > w - 4) txt(c + 2, r + 2, d.s.slice(w - 4, 2 * w - 8), HC.w); }
+  else { const t = target(); if (t) ctr(HH - 9, ' ' + t.s + ' ', HC.g); }
+  if (G.ban) { const w = max(G.ban.a.length, G.ban.b.length) + 6, c = (HW - w) >> 1, r = max(4, (HH >> 2) - 2); box(c, r, w, 4); ctr(r + 1, G.ban.a, HC.d); ctr(r + 2, G.ban.b, HC.g); }
+  if (G.dead) ctr(HH >> 1, '  Y O U   H A V E   F A L L E N  ', HC.r);
+  // on-screen buttons double as key hints; they are the touch controls
+  const bs = [[p.mounted ? '[F DISMOUNT]' : '[F MOUNT]', mountToggle]];
+  if (p.mounted) bs.push(['[SHIFT FASTER]', () => gaitShift(1)], ['[X SLOWER]', () => gaitShift(-1)]); else bs.push(['[H WHISTLE]', callHorse]);
+  bs.push(['[E USE]', interact], ['[SPACE STRIKE]', attack], ['[R REST]', camp], ['[M MAP]', () => { G.ui = 'map'; G.map = null; }], ['[-]', () => setZoom(CAM.zoom / 1.15)], ['[+]', () => setZoom(CAM.zoom * 1.15)], ['[ESC MENU]', () => { G.ui = 'menu'; }]);
+  let c = 1, r = HH - 2; const total = bs.reduce((a, b) => a + b[0].length + 1, 0); if (total > HW - 2) r = HH - 2 - floor(total / (HW - 2));
+  for (const [s, fn] of bs) { if (c + s.length > HW - 1) { c = 1; r++; } c += btn(c, r, s, fn); }
+  if (G.ui === 'menu') {
+    const w = min(HW - 2, 56), hh = 8 + (narrow ? 0 : HELP.length + 1), c0 = (HW - w) >> 1, r0 = max(1, (HH - hh) >> 1); box(c0, r0, w, hh); ctr(r0, ' PAUSED ', HC.g);
+    const it = [['[ESC] RESUME', () => { G.ui = 'play'; }], ['[P] SAVE GAME', () => save()], ['[L] LOAD LAST SAVE', () => { say(load() ? 'GAME LOADED' : 'NO SAVED GAME FOUND'); G.ui = 'play'; }], [G.confirm > 0 ? '[N] PRESS AGAIN TO ABANDON THIS WORLD' : '[N] NEW WORLD', newWorld]];
+    it.forEach(([s, fn], i) => { txt(c0 + 3, r0 + 2 + i, s, HC.w); BTN.push([c0 + 3, r0 + 2 + i, s.length, fn]); });
+    txt(c0 + 3, r0 + 6, 'WORLD SEED ' + SEED, HC.d);
+    if (!narrow) HELP.forEach((s, i) => txt(c0 + 3, r0 + 8 + i, s.slice(0, w - 5), HC.d));
+  }
+}
+function newWorld() { if (G.confirm > 0) { G.confirm = 0; newGame((Date.now() ^ random() * 1e9) | 0); G.ui = 'play'; say('A NEW WORLD LIES BEFORE YOU'); save(true); } else G.confirm = 4; }
+
+const LBUF = new Float32Array(40), LCBUF = new Float32Array(30);
+function render(dt) {
+  resize(); setupFrame(dt); renderTerrain(); ob.fill(0); hb.fill(0); drawWorld(); drawWeather(dt); drawHUD();
+  const p = G.p, w = G.w, hr = G.t % 24; let amb = [0.04, 0.04, 0.07], dark = 1, fogK = 0, cloud = 0;
+  if (!p.layer) {
+    let i = 0; while (SKY[i + 1][0] < hr) i++; const a = SKY[i], b = SKY[i + 1], k = (hr - a[0]) / (b[0] - a[0]);
+    const wet = (w.kind === 'rain' || w.kind === 'storm' ? 0.3 : w.kind === 'clear' ? 0 : 0.14) * w.k;
+    amb = [1, 2, 3].map(j => lerp(a[j], b[j], k) * (1 - wet)); dark = clamp(1.25 - (amb[0] + amb[1] + amb[2]) / 2.2, 0, 1);
+    fogK = w.kind === 'fog' ? w.k * 0.86 : (w.kind === 'rain' || w.kind === 'storm' || w.kind === 'snow') ? w.k * 0.3 : 0;
+    cloud = lerp(WX.clear, WX[w.kind], w.k);
+  }
+  // lights: the knight's lantern plus the nearest torches of active places
+  const ls = [[p.x, p.y, camH + 4, 36, dark, 1, .82, .55]];
+  for (const [key, q] of ACTIVE) { if (+key.split(':')[1] !== p.layer) continue; const L = layoutOf(q); for (const l of p.layer ? L.ulights : L.lights) { const x = q.x + l[0], y = q.y + l[1]; if (abs(x - PX) + abs(y - PY) < 300) ls.push([x, y, (p.layer ? 0 : q.g) + 6, 46, dark * (0.85 + 0.15 * SINT[(time * 300 + x * 31 | 0) & 255]), 1, .68, .34]); } }
+  ls.sort((a, b) => hypot(a[0] - PX, a[1] - PY) - hypot(b[0] - PX, b[1] - PY)); LBUF.fill(0); LCBUF.fill(0);
+  for (let i = 0; i < min(10, ls.length); i++) { const l = ls[i]; toCell(l[0], l[1], l[2]); LBUF.set([oc * cw, orow * ch, l[3] * cw, l[4]], i * 4); LCBUF.set([l[5], l[6], l[7]], i * 3); }
+  const fogC = biomeAt(p.x, p.y) === T.DESERT ? [.62, .5, .34] : [.52, .56, .62], la = (amb[0] + amb[1] + amb[2]) / 3;
+  G.flash[3] = max(0, G.flash[3] - dt * (G.dead ? 0 : 1.6));
+  gl.activeTexture(gl.TEXTURE0); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, TW, TH, gl.RGBA, gl.UNSIGNED_BYTE, tb8);
+  gl.activeTexture(gl.TEXTURE1); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, OW, OH, gl.RGBA, gl.UNSIGNED_BYTE, ob8);
+  gl.activeTexture(gl.TEXTURE3); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, HW, HH, gl.RGBA, gl.UNSIGNED_BYTE, hb8);
+  gl.uniform1f(U.uHk, hk); gl.uniform1f(U.uGlow, clamp(0.36 - ch / dpr * 0.02, 0.08, 0.26)); // tiny glyphs cover few pixels: lift the cell tint so colour mass survives zooming out
+  gl.uniform2f(U.uCell, cw, ch); gl.uniform2f(U.uOff, offX, offY); gl.uniform2f(U.uRes, cv.width, cv.height); gl.uniform2f(U.uPl, pcx * cw, (pcy - 2) * ch);
+  // world position under a pixel (ground plane); kept relative to a coarse origin so the shader noise keeps float precision far from 0,0
+  const bx = floor(QX / 4096) * 4096, by = floor(QY / 4096) * 4096;
+  gl.uniform2f(U.uW0, QX - bx - pc0 * Rx + pr0 * D * Fx, QY - by - pc0 * Ry + pr0 * D * Fy); gl.uniform4f(U.uWm, Rx / cw, -Fx * D / ch, Ry / cw, -Fy * D / ch);
+  gl.uniform3fv(U.uAmb, amb); gl.uniform3f(U.uFog, fogC[0] * la, fogC[1] * la, fogC[2] * la); gl.uniform1f(U.uFogK, fogK); gl.uniform1f(U.uTime, time);
+  gl.uniform1f(U.uCloud, cloud); gl.uniform1f(U.uCloudVis, p.layer ? 0 : cloud * lerp(0.3, 1, sstep(15, 8, CAM.zoom))); gl.uniform1f(U.uYs, cw * D / ch);
+  gl.uniform4fv(U.uL, LBUF); gl.uniform3fv(U.uLC, LCBUF); gl.uniform4fv(U.uFlash, G.flash);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+// ===== input: keyboard, pointer (mouse drag = view, click = strike, touch left half = stick) =====
+const stick = {x: 0, y: 0, on: false}, ptrs = new Map();
+function begin() { if (G.ui === 'title') { G.ui = 'play'; cv.focus(); return true; } return false; }
+addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
+  if (e.repeat) return; keys[e.code] = true;
+  if (begin()) return;
+  const c = e.code;
+  if (c === 'Escape') G.ui = G.ui === 'play' ? 'menu' : 'play';
+  else if (c === 'KeyM') { G.ui = G.ui === 'map' ? 'play' : 'map'; G.map = null; }
+  else if (c === 'KeyP') save();
+  else if (c === 'KeyL') { say(load() ? 'GAME LOADED' : 'NO SAVED GAME FOUND'); G.ui = 'play'; }
+  else if (G.ui === 'menu') { if (c === 'KeyN') newWorld(); }
+  else if (G.ui !== 'play') return;
+  else if (c === 'KeyF') mountToggle(); else if (c === 'KeyH') callHorse(); else if (c === 'Space' || c === 'KeyJ') attack(); else if (c === 'KeyE' || c === 'Enter') interact();
+  else if (c === 'KeyR') camp(); else if (c === 'ShiftLeft' || c === 'ShiftRight') gaitShift(1); else if (c === 'KeyX') gaitShift(-1);
+  else if (c === 'Minus') setZoom(CAM.zoom / 1.15); else if (c === 'Equal') setZoom(CAM.zoom * 1.15);
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; stick.x = stick.y = 0; stick.on = false; });
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId); e.preventDefault(); if (begin()) return;
+  const r = cv.getBoundingClientRect(), c = floor((e.clientX - r.left) * dpr / (cw * hk)), row = floor((e.clientY - r.top) * dpr / (ch * hk));
+  for (const b of BTN) if (row === b[1] && c >= b[0] && c < b[0] + b[2]) { b[3](); return; }
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false, t: performance.now(), stick: e.pointerType === 'touch' && e.clientX - r.left < r.width * 0.42});
+});
+cv.addEventListener('pointermove', e => {
+  const q = ptrs.get(e.pointerId); if (!q) return;
+  if (q.stick) { stick.on = true; stick.x = clamp((e.clientX - q.sx) / 44, -1, 1); stick.y = clamp((e.clientY - q.sy) / 44, -1, 1); return; }
+  if (hypot(e.clientX - q.sx, e.clientY - q.sy) > 6) q.moved = true;
+  if (q.moved && G.ui === 'play') { CAM.tyaw -= (e.clientX - q.x) * 0.006; CAM.pitch = clamp(CAM.pitch + (e.clientY - q.y) * 0.004, 0.62, 1.32); }
+  q.x = e.clientX; q.y = e.clientY;
+});
+const pup = e => { const q = ptrs.get(e.pointerId); if (!q) return; ptrs.delete(e.pointerId); if (q.stick) { stick.x = stick.y = 0; stick.on = false; } else if (!q.moved && performance.now() - q.t < 350 && G.ui === 'play') attack(); };
+cv.addEventListener('pointerup', pup); cv.addEventListener('pointercancel', pup);
+cv.addEventListener('wheel', e => { e.preventDefault(); if (G.ui !== 'title') setZoom(CAM.zoom * Math.pow(1.0012, -e.deltaY)); }, {passive: false});
+cv.addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('visibilitychange', () => { if (document.hidden && G.p && G.ui !== 'title') save(true); });
+
+// ===== boot =====
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = min(0.05, (now - last) / 1000); last = now; time += dt; frameNo++;
+  if (keys.KeyZ) CAM.tyaw += dt * 1.6; if (keys.KeyC) CAM.tyaw -= dt * 1.6;
+  if (G.ui === 'play') update(dt);
+  render(dt);
+}
+function selfTest() { // open with #selftest: deterministic generation, physics and save round-trip
+  const A = (c, m) => { if (!c) throw new Error('selftest: ' + m); };
+  A(hash(3, 7, 11) === hash(3, 7, 11) && hash(3, 7, 11) !== hash(7, 3, 11), 'hash');
+  newGame(1337); const v = poiOf(HOME.rx, HOME.ry); A(v && v.kind === 'village', 'home village');
+  const a = genSurface(5, -3), b = genSurface(5, -3); A(a.T.every((t, i) => t === b.T[i]) && a.H.every((h, i) => h === b.H[i]), 'chunk determinism');
+  tile(0, G.p.x, G.p.y); A(!blocked(0, G.p.x, G.p.y, 1.2, qG, 9), 'spawn is free');
+  const fake = {layer: 0, x: v.x + 0.5, y: v.y + 8.5}; moveEnt(fake, 0, -12, 1.2, 1.3); A(fake.y > v.y + 2, 'well blocks movement');
+  const d = [...poisNear(v.x, v.y, RS * 6)].find(q => q.kind === 'dungeon'); if (d) { const c = getChunk(1, floor(d.x / CS), floor(d.y / CS)); A(c.T.includes(T.DFLOOR), 'dungeon carved'); }
+  G.p.gold = 77; G.found.x = {n: 'T', k: 'ruins', x: 1, y: 2}; const s = JSON.parse(JSON.stringify(snapshot())); newGame(5); A(applySave(s) && G.p.gold === 77 && SEED === 1337 && G.found.x.n === 'T', 'save round-trip');
+  const seen = {}; for (let i = 0; i < 4000; i++) seen[TT[biomeAt((rnd(i, 1, 2) - 0.5) * 2e5, (rnd(i, 3, 4) - 0.5) * 2e5)].n] = (seen[TT[cT].n] || 0) + 1;
+  for (const k of ['GRASS', 'FOREST', 'DESERT', 'SWAMP', 'SNOW', 'ROCK', 'OCEAN']) A(seen[k] > 20, 'biome present: ' + k + ' ' + JSON.stringify(seen));
+  newGame(1337); return seen;
+}
+function start(d) {
+  if (location.hash === '#selftest') { try { window.__selftest = selfTest(); document.title = 'SELFTEST PASS'; } catch (e) { window.__selftest = String(e); document.title = 'SELFTEST FAIL'; console.error(e); } }
+  else if ((d && d.v && applySave(d)) || load()) G.loaded = true;
+  else newGame(1337);
+  window.__game = {G, CAM, T, TT, ENTS, biomeAt, poiOf, poisNear, setZoom, tile, bench(n = 30) { const t = performance.now(); for (let i = 0; i < n; i++) { setupFrame(0.016); renderTerrain(); ob.fill(0); hb.fill(0); drawWorld(); drawHUD(); } return (performance.now() - t) / n; }};
+  if (cv.clientWidth < 700 && !G.loaded) CAM.zoom = 10;
+  resize(); cv.focus(); requestAnimationFrame(frame);
+}
+const hot = window.claude && window.claude.hot; // keeps the ride going when an open page is updated in place
+try { if (hot && hot.snapshot) hot.snapshot(() => snapshot()); } catch (e) {}
+if (hot && hot.ready) hot.ready(start); else start(hot && hot.data || null);
+})();
+</script>
