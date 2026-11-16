@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASCII MOUNTAIN DRIVING</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #c { display: block; width: 100vw; height: 100vh; }
+  #help {
+    position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(4, 8, 14, 0.72); color: #d8dee6; font: 14px/1.5 "DejaVu Sans Mono", Menlo, Consolas, monospace; text-align: center;
+  }
+  #help[hidden] { display: none; }
+  #help pre { margin: 0 0 6px; color: #f5c451; font: bold 12px/1.15 "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+  #help p { margin: 4px 0 14px; color: #9fb0c2; }
+  #help table { border-collapse: collapse; text-align: left; }
+  #help td { padding: 1px 14px; }
+  #help td:first-child { color: #f5c451; white-space: nowrap; }
+  #status { margin-top: 18px; color: #7fe0a0; font-weight: bold; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="ASCII 산악 주행 게임 화면"></canvas>
+<div id="help" role="dialog" aria-label="게임 안내">
+<pre>
+            /\                                   /\
+       /\  /  \      /\          /\        /\   /  \  /\
+      /  \/    \  /\/  \    /\  /  \  /\  /  \_/    \/  \
+     /          \/      \  /  \/    \/  \/               \
+    /   A S C I I   M O U N T A I N   D R I V I N G       \
+   /_______________________________________________________\
+</pre>
+<p>아무도 없는 산맥. 자동차 한 대. 목적지는 없습니다.</p>
+<table>
+  <tr><td>W A S D / 방향키</td><td>가속 · 조향 · 브레이크 (정지 후 계속 누르면 후진)</td></tr>
+  <tr><td>SPACE</td><td>핸드브레이크 (드리프트)</td></tr>
+  <tr><td>Q / E · M</td><td>기어 내림 / 올림 · 자동/수동 변속 전환</td></tr>
+  <tr><td>G</td><td>차고: 차량 · 타이어 · 서스펜션 · 도색 · 주유 · 수리 (정차 중)</td></tr>
+  <tr><td>TAB / ESC</td><td>월드: 날씨 · 계절 · 시간 · 저장/불러오기 · 새 월드</td></tr>
+  <tr><td>C · H · R</td><td>카메라 전환 · 전조등 · 마지막 안전 지점으로 복구</td></tr>
+  <tr><td>[ ] · T · P</td><td>날씨 변경 · 시간 배속 · 일시정지</td></tr>
+  <tr><td>F5 / F9 · N · F1</td><td>저장 / 불러오기 · 소리 켬/끔 · 이 안내 다시 보기</td></tr>
+</table>
+<div id="status">월드를 생성하는 중…</div>
+</div>
+<script src="js/world.js"></script>
+<script src="js/env.js"></script>
+<script src="js/car.js"></script>
+<script src="js/render.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -17,3 +17,7 @@ Aster AI를 휴대폰 홈 화면에서 실행하는 설치형 안드로이드 �
 앱 자체에는 AI 모델이 포함되지 않습니다. 휴대폰과 같은 네트워크에 있는 Ollama 서버 또는 호환 프록시 주소가 필요합니다. 최초 실행 시 앱 설정에서 서버 주소와 모델 이름을 입력합니다.
 
 최소 Android 8.0(API 26) 이상입니다.
+
+## ASCII Mountain Driving
+
+같은 저장소의 `ascii-mountain-driving/` 폴더에 별도의 브라우저 게임이 있습니다. `ascii-mountain-driving/index.html`을 열면 실행됩니다.
