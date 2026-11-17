@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { World, moveBody, findVault, pathAt, rayHitbox, sampleAt, angDiff, dirFrom, yawTo, F, R, H_STAND, H_CROUCH, EYE_STAND, EYE_CROUCH } from './core.js';
 import { collisionBoxes, SPAWNS, MAT, botName, ZONES } from './map.js';
 import { buildWorld, SUN } from './build.js';
@@ -28,25 +29,26 @@ const r2 = (v) => Math.round(v * 100) / 100, r4 = (v) => Math.round(v * 10000) /
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 2;
 const PATTERN = [0, 0.3, -0.2, 0.5, 0.8, 0.5, -0.2, -0.8, -1.1, -0.6, 0.2, 0.9, 1.2, 0.7, -0.3, -1.0, -1.2, -0.4, 0.5, 1.1];
-const HIP_FOV = 78, ADS_FOV = 55, SCOPE_FOV = 64, VM_FOV = 56, MAG = 3.5;
+const HIP_FOV = 78, ADS_FOV = 55, SCOPE_FOV = 64, VM_FOV = 56, VM_ADS_FOV = 42, MAG = 3.5;
 const netReady = connect(); // start before the heavy scene build so the handshake overlaps it
 
 // ---------------------------------------------------------------- renderer
 const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+const LOW_END = matchMedia('(pointer: coarse)').matches; // phones/tablets: smaller shadow map, no AO
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false; // refreshed once per frame, even when the scope renders the scene a second time
 let pixelRatio = Math.min(devicePixelRatio || 1, 1.5);
 renderer.setPixelRatio(pixelRatio);
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xc3d1e2, 0.0042);
+scene.fog = new THREE.FogExp2(0xbcd0e8, 0.0024);
 const camera = new THREE.PerspectiveCamera(HIP_FOV, 1, 0.03, 600); camera.rotation.order = 'YXZ';
 const vmScene = new THREE.Scene(), vmCam = new THREE.PerspectiveCamera(VM_FOV, 1, 0.01, 10);
-scene.add(new THREE.HemisphereLight(0xb7cff0, 0xd8d2c8, 1.15));
-const sun = new THREE.DirectionalLight(0xfff2e0, 3.2);
-sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.025;
-Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 160 });
+scene.add(new THREE.HemisphereLight(0xa6c4ee, 0xcbc2b4, 0.62));
+const sun = new THREE.DirectionalLight(0xfff0dc, 4.4);
+sun.castShadow = true; sun.shadow.mapSize.setScalar(LOW_END ? 2048 : 4096); sun.shadow.bias = -0.00015; sun.shadow.normalBias = 0.02;
+Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 160 });
 scene.add(sun, sun.target);
 const scopeRT = new THREE.WebGLRenderTarget(512, 512, { type: THREE.HalfFloatType });
 const scopeCam = new THREE.PerspectiveCamera(10, 1, 0.05, 600);
@@ -54,6 +56,18 @@ const muzzleLight = new THREE.PointLight(0xffa850, 0, 10, 2); scene.add(muzzleLi
 
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
+// Contact shadows: ambient occlusion in corners, under props and along wall bases (world only, before the viewmodel).
+const gtao = new GTAOPass(scene, camera, 1, 1);
+gtao.updateGtaoMaterial({ radius: 0.9, distanceFallOff: 1, thickness: 1.2, scale: 1.25, samples: 12 });
+gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+const gtaoSize = gtao.setSize.bind(gtao), gtaoHide = gtao.overrideVisibility.bind(gtao);
+gtao.setSize = (w, h) => gtaoSize(Math.ceil(w / 2), Math.ceil(h / 2)); // half resolution keeps it affordable
+gtao.overrideVisibility = () => { // see-through and depthless things must not cast AO
+  gtaoHide();
+  scene.traverse((o) => { const m = o.material; if (o.isSprite || (m && (m.transparent || m.alphaTest > 0 || m.depthWrite === false))) o.visible = false; });
+};
+gtao.enabled = !LOW_END;
+composer.addPass(gtao);
 const vmPass = new RenderPass(vmScene, vmCam); vmPass.clear = false; vmPass.clearDepth = true; composer.addPass(vmPass);
 // Clamp HDR before bloom: one overflowing specular pixel would otherwise bloom into a black screen.
 composer.addPass(new ShaderPass({
@@ -61,7 +75,7 @@ composer.addPass(new ShaderPass({
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; if (any(isnan(c))) c = vec3(0.0); gl_FragColor = vec4(clamp(c, 0.0, 48.0), 1.0); }',
 }));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.5, 0.9));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.5, 4.0)); // only muzzle flashes, the sun and glints
 composer.addPass(new OutputPass());
 const grade = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uDmg: { value: 0 }, uLow: { value: 0 }, uDead: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) } },
@@ -74,7 +88,10 @@ const grade = new ShaderPass({
       col = mix(col, vec3(l), clamp(uLow * 0.7 + uDead * 0.55, 0.0, 0.9));
       col = mix(col, col * vec3(1.3, 0.55, 0.5), uDmg * 0.45 + uDead * 0.3);
       col *= mix(1.0, smoothstep(0.95, 0.2, length(c * vec2(1.0, 0.85))), 0.45 + uLow * 0.3);
-      col *= vec3(0.97, 1.0, 1.04);
+      col *= vec3(0.98, 1.0, 1.03);
+      float g = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(g), col, 1.12);
+      col = mix(col, col * col * (3.0 - 2.0 * col), 0.35);
       float n = fract(sin(dot(vUv * uRes + fract(uTime) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
       gl_FragColor = vec4(col + (n - 0.5) * 0.028, 1.0);
     }`,
@@ -397,6 +414,7 @@ function updateCamera(dt, now) {
   const fov = HIP_FOV + ((weapon.optic === 'scope' ? SCOPE_FOV : ADS_FOV) - HIP_FOV) * weapon.ads + (me.sprinting ? 4 : 0);
   camera.fov += (fov - camera.fov) * Math.min(1, dt * 14);
   camera.updateProjectionMatrix();
+  vmCam.fov = VM_FOV + (VM_ADS_FOV - VM_FOV) * weapon.ads; vmCam.updateProjectionMatrix(); // sights fill more of the view when aiming
   if (me.state === 'menu' || me.state === 'waiting') {
     const t = now / 1000;
     camera.position.set(Math.sin(t * 0.05) * 1.1, 2.1 + Math.sin(t * 0.13) * 0.12, 27 - ((t * 0.55) % 42));
@@ -452,11 +470,11 @@ function fireShot(now) {
     if (h) { best = h.t; hit = e; zone = h.zone; }
   }
   const hp = [o[0] + d[0] * best, o[1] + d[1] * best, o[2] + d[2] * best];
-  const muzzle = camera.localToWorld(weapon.toCamera(weapon.muzzle, new THREE.Vector3(), camera.fov, VM_FOV));
+  const muzzle = camera.localToWorld(weapon.toCamera(weapon.muzzle, new THREE.Vector3(), camera.fov, vmCam.fov));
   if (best > 2.5) fx.tracer(muzzle, vA.set(...hp));
   muzzleLight.position.copy(muzzle); muzzleLight.intensity = 7;
   if (me.shots % 3 === 2) fx.smoke(muzzle);
-  const ej = camera.localToWorld(weapon.toCamera(weapon.port, new THREE.Vector3(), camera.fov, VM_FOV));
+  const ej = camera.localToWorld(weapon.toCamera(weapon.port, new THREE.Vector3(), camera.fov, vmCam.fov));
   const ev = new THREE.Vector3(2.0 + Math.random() * 1.2, 1.3 + Math.random() * 0.9, 0.3 + Math.random() * 0.6).applyQuaternion(camera.quaternion);
   ev.x += me.vx; ev.z += me.vz;
   weapon.casings.spawn(ej, ev);
@@ -645,13 +663,13 @@ function frame(now) {
     prT = 0;
     const max = Math.min(devicePixelRatio || 1, 1.5);
     const next = ftAvg > 22 && pixelRatio > 0.55 ? pixelRatio - 0.15 : ftAvg < 14.5 && pixelRatio < max ? Math.min(max, pixelRatio + 0.1) : pixelRatio;
-    if (next !== pixelRatio) { pixelRatio = next; renderer.setPixelRatio(next); composer.setPixelRatio(next); resize(); }
+    if (next !== pixelRatio) { pixelRatio = next; renderer.setPixelRatio(next); composer.setPixelRatio(next); resize(); gtao.enabled = !LOW_END && next > 0.7; }
   }
   renderer.shadowMap.needsUpdate = true;
   if (weapon.optic === 'scope' && weapon.ads > 0.15 && weapon.root.visible) {
     // magnified view for the scope's eyepiece: lens size as seen by the viewmodel camera, divided by the magnification
     weapon.pip.getWorldPosition(vB);
-    const k = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.tan(THREE.MathUtils.degToRad(VM_FOV) / 2);
+    const k = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / Math.tan(THREE.MathUtils.degToRad(vmCam.fov) / 2);
     scopeCam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(0.0195 / Math.max(0.05, -vB.z) * k / MAG));
     scopeCam.position.copy(camera.position); scopeCam.quaternion.copy(camera.quaternion);
     scopeCam.updateProjectionMatrix(); scopeCam.updateMatrixWorld();

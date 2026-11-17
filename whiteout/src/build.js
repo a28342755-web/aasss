@@ -101,10 +101,15 @@ export function buildWorld(scene, renderer) {
   const winFrames = [], winGlass = [], winLit = [], sills = [], sillSnow = [], lintels = [], icicles = [];
   for (const [x0, z0, x1, z1, h, style] of BUILDINGS) {
     worldUV(B.box(brick[style], x1 - x0, h, z1 - z0, (x0 + x1) / 2, h / 2, (z0 + z1) / 2), 1.8);
-    // coping + snow along the roof line
-    for (const [cx, cz, w, d] of [[(x0 + x1) / 2, z0 + 0.15, x1 - x0, 0.42], [(x0 + x1) / 2, z1 - 0.15, x1 - x0, 0.42], [x0 + 0.15, (z0 + z1) / 2, 0.42, z1 - z0], [x1 - 0.15, (z0 + z1) / 2, 0.42, z1 - z0]]) {
-      Bns.box(M.stone, w + 0.1, 0.28, d, cx, h + 0.14, cz);
-      Bns.box(M.snowCap, w, 0.12, d - 0.06, cx, h + 0.34, cz);
+    // stepped stone cornice + snow along the roof line (casts a crisp shadow line down the facade)
+    for (const [ax, sx, sz] of [[0, 0, -1], [0, 0, 1], [1, -1, 0], [1, 1, 0]]) {
+      const len = ax ? z1 - z0 : x1 - x0, ex = sx < 0 ? x0 : sx > 0 ? x1 : (x0 + x1) / 2, ez = sz < 0 ? z0 : sz > 0 ? z1 : (z0 + z1) / 2;
+      const band = (out, y0, y1, mat, extra = 0) => {
+        const dpt = 0.3 + out, w = ax ? dpt : len + 2 * out + extra, d = ax ? len + 2 * out + extra : dpt;
+        return B.box(mat, w, y1 - y0, d, ex + sx * (out - dpt / 2), (y0 + y1) / 2, ez + sz * (out - dpt / 2));
+      };
+      band(0.08, h - 0.42, h - 0.24, M.stone); band(0.2, h - 0.24, h + 0.06, M.stone);
+      band(0.18, h + 0.06, h + 0.16, M.snowCap, -0.04);
     }
     const faces = [[0, 1, z1, x0, x1], [0, -1, z0, x0, x1], [1, 0, x1, z0, z1], [-1, 0, x0, z0, z1]];
     for (const [nx, nz, c, a0, a1] of faces) {
@@ -157,6 +162,10 @@ export function buildWorld(scene, renderer) {
             Bns.box(M.snowCap, 0.74, 0.08, 0.48, ax, ay + 0.28, az, ry);
           }
         }
+      }
+      if (anyOpen) for (let fy = 3.9; fy < h - 1.2; fy += 3.2) { // stone string course at each floor
+        const len = a1 - a0, mid = (a0 + a1) / 2;
+        Bns.box(M.stone, nx ? 0.1 : len, 0.12, nx ? len : 0.1, nx ? c + nx * 0.05 : mid, fy, nx ? mid : c + nz * 0.05);
       }
       if (anyOpen && h <= 7.5) { // chain-link fence along the roof edge
         const len = a1 - a0, mid = (a0 + a1) / 2, fx = nx ? c - nx * 0.15 : mid, fz = nx ? mid : c - nz * 0.15;
@@ -360,6 +369,18 @@ export function buildWorld(scene, renderer) {
     }
   }
 
+  // ---- rooftop silhouettes: stair bulkheads, HVAC units, vent stacks
+  for (const [x0, z0, x1, z1, h, style] of BUILDINGS) {
+    const w = x1 - x0, d = z1 - z0;
+    if (w < 6 || d < 6) continue;
+    worldUV(B.box(brick[style], 3.2, 2.6, 3.0, (x0 + x1) / 2 + (rnd() - 0.5) * (w - 6), h + 1.3, (z0 + z1) / 2 + (rnd() - 0.5) * (d - 6)), 1.8);
+    for (let k = 0; k < 3; k++) {
+      const x = x0 + 1.5 + rnd() * (w - 3), z = z0 + 1.5 + rnd() * (d - 3);
+      if (rnd() < 0.5) { B.box(M.steel, 1.5, 1.0, 1.1, x, h + 0.5, z); Bns.add(new THREE.CylinderGeometry(0.4, 0.4, 0.05, 16), M.dark, mat4(x, h + 1.03, z)); }
+      else { B.add(new THREE.CylinderGeometry(0.14, 0.14, 1.6, 10), M.steel, mat4(x, h + 0.8, z)); Bns.add(new THREE.ConeGeometry(0.26, 0.2, 10), M.steel, mat4(x, h + 1.7, z)); }
+    }
+  }
+
   // ---- rooftop water tanks and the skyline beyond the block
   const Bfar = new Batch(), staves = std({ map: T.stavesTex(), roughness: 0.9 });
   const facade = [0, 1, 2, 3].map((k) => std({ map: T.facadeTex(k), roughness: k ? 0.85 : 0.2, metalness: k ? 0 : 0.5, envMapIntensity: k ? 1 : 1.6 }));
@@ -424,7 +445,7 @@ export function buildWorld(scene, renderer) {
   }
   const pm = new THREE.PMREMGenerator(renderer);
   scene.environment = pm.fromScene(envScene, 0.04).texture;
-  scene.environmentIntensity = 0.8;
+  scene.environmentIntensity = 0.6;
 
   // ---- falling snow, lit by the lamps it drifts past
   const N = 2500, pos = new Float32Array(N * 3), spd = new Float32Array(N), ph = new Float32Array(N), sc = new Float32Array(N);

@@ -1,11 +1,13 @@
 // Soldier model: limb segments placed between 15 joints. Joints come from IK poses while alive and
 // from a verlet ragdoll after death, so the same meshes serve both.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { F } from './core.js';
+import { mergedRifle } from './rifle.js';
 
 const HEAD = 0, NECK = 1, PEL = 2, SHL = 3, SHR = 4, ELL = 5, ELR = 6, HAL = 7, HAR = 8, HPL = 9, HPR = 10, KNL = 11, KNR = 12, FTL = 13, FTR = 14, NJ = 15;
-const LIMBS = [[SHL, ELL, 0.29, 0.058, 0.05], [SHR, ELR, 0.29, 0.058, 0.05], [ELL, HAL, 0.27, 0.05, 0.042], [ELR, HAR, 0.27, 0.05, 0.042],
-  [HPL, KNL, 0.45, 0.085, 0.066], [HPR, KNR, 0.45, 0.085, 0.066], [KNL, FTL, 0.44, 0.064, 0.05], [KNR, FTR, 0.44, 0.064, 0.05]];
+const LIMBS = [[SHL, ELL, 0.29, 0.066, 0.056], [SHR, ELR, 0.29, 0.066, 0.056], [ELL, HAL, 0.27, 0.055, 0.046], [ELR, HAR, 0.27, 0.055, 0.046],
+  [HPL, KNL, 0.45, 0.098, 0.078], [HPR, KNR, 0.45, 0.098, 0.078], [KNL, FTL, 0.44, 0.074, 0.06], [KNR, FTR, 0.44, 0.074, 0.06]];
 const CONSTRAINTS = [[NECK, HEAD], [NECK, SHL], [NECK, SHR], [SHL, SHR], [SHL, ELL], [ELL, HAL], [SHR, ELR], [ELR, HAR], [NECK, PEL], [PEL, HPL], [PEL, HPR], [HPL, HPR],
   [HPL, KNL], [KNL, FTL], [HPR, KNR], [KNR, FTR], [SHL, HPL], [SHR, HPR], [SHL, HPR], [SHR, HPL], [HEAD, SHL], [HEAD, SHR], [SHL, PEL], [SHR, PEL]];
 const SOFT = [[HPL, FTL, 0.42], [HPR, FTR, 0.42], [SHL, HAL, 0.2], [SHR, HAR, 0.2], [HEAD, PEL, 0.55]];
@@ -24,26 +26,29 @@ let shared = null;
 function sharedAssets() {
   if (shared) return shared;
   const std = (o) => new THREE.MeshStandardMaterial(o);
-  const parts = [
-    new THREE.BoxGeometry(0.05, 0.07, 0.34).translate(0, 0, 0.0), new THREE.BoxGeometry(0.055, 0.06, 0.26).translate(0, 0.005, -0.28),
-    new THREE.CylinderGeometry(0.011, 0.011, 0.26, 8).rotateX(Math.PI / 2).translate(0, 0.01, -0.53), new THREE.BoxGeometry(0.03, 0.15, 0.06).rotateX(0.25).translate(0, -0.1, -0.08),
-    new THREE.BoxGeometry(0.04, 0.09, 0.24).translate(0, -0.02, 0.27), new THREE.BoxGeometry(0.03, 0.045, 0.07).translate(0, 0.06, -0.02),
-    new THREE.BoxGeometry(0.028, 0.09, 0.04).rotateX(-0.3).translate(0, -0.07, 0.07),
-  ].map((g) => g.toNonIndexed());
+  const rb = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 2, r);
   shared = {
-    limb: LIMBS.map(([, , len, r0, r1]) => new THREE.CylinderGeometry(r1, r0, len, 9)),
-    torso: new THREE.BoxGeometry(0.42, 0.52, 0.25),
-    vest: new THREE.BoxGeometry(0.37, 0.32, 0.07),
-    pouch: new THREE.BoxGeometry(0.08, 0.1, 0.05),
-    hips: new THREE.BoxGeometry(0.36, 0.2, 0.24),
-    head: new THREE.SphereGeometry(0.105, 14, 10),
-    helm: new THREE.SphereGeometry(0.128, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
-    goggle: new THREE.BoxGeometry(0.17, 0.05, 0.06),
-    joint: new THREE.SphereGeometry(1, 8, 6),
-    hand: new THREE.BoxGeometry(0.08, 0.1, 0.05),
-    boot: new THREE.BoxGeometry(0.11, 0.11, 0.28),
-    rifle: mergeAll(parts),
-    gun: std({ color: 0x1b1c1e, roughness: 0.45, metalness: 0.7 }),
+    limb: LIMBS.map(([, , len, r0, r1]) => new THREE.CapsuleGeometry((r0 + r1) / 2, len - (r0 + r1) / 2, 4, 10)),
+    torso: rb(0.4, 0.5, 0.24, 0.07),
+    plate: rb(0.34, 0.33, 0.06, 0.02),
+    cummer: rb(0.43, 0.13, 0.27, 0.04),
+    pouch: rb(0.075, 0.11, 0.05, 0.012),
+    radio: rb(0.06, 0.13, 0.08, 0.015),
+    pack: rb(0.3, 0.38, 0.15, 0.04),
+    strap: new THREE.BoxGeometry(0.05, 0.03, 0.3),
+    hips: rb(0.36, 0.2, 0.25, 0.06),
+    head: new THREE.SphereGeometry(0.1, 16, 12),
+    helm: new THREE.SphereGeometry(0.126, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    ear: new THREE.CylinderGeometry(0.042, 0.042, 0.035, 14).rotateZ(Math.PI / 2),
+    nvg: rb(0.045, 0.035, 0.03, 0.006),
+    rail: new THREE.BoxGeometry(0.012, 0.02, 0.12),
+    goggle: rb(0.165, 0.042, 0.05, 0.015),
+    antenna: new THREE.CylinderGeometry(0.003, 0.003, 0.3, 4),
+    joint: new THREE.SphereGeometry(1, 10, 8),
+    hand: rb(0.08, 0.1, 0.05, 0.015),
+    boot: rb(0.11, 0.12, 0.29, 0.03),
+    rifle: mergedRifle(),
+    gun: std({ color: 0x1d1e21, roughness: 0.5, metalness: 0.6 }),
     glove: std({ color: 0x151517, roughness: 0.8 }),
     face: std({ color: 0x1d1e20, roughness: 0.95 }),
     lens: std({ color: 0x0c1418, roughness: 0.15, metalness: 0.6, envMapIntensity: 2 }),
@@ -51,14 +56,6 @@ function sharedAssets() {
     mats: new Map(),
   };
   return shared;
-}
-function mergeAll(list) {
-  let n = 0; for (const g of list) n += g.attributes.position.count;
-  const out = new THREE.BufferGeometry(), pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
-  let o = 0;
-  for (const g of list) { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; }
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  return out;
 }
 const mat = (hex) => {
   const s = sharedAssets();
@@ -88,7 +85,7 @@ function place(m, a, b, right) {
 }
 
 export class Humanoid {
-  constructor(scene, styleIdx, accent) {
+  constructor(scene, styleIdx) {
     const S = sharedAssets(), st = STYLES[styleIdx % STYLES.length];
     this.scene = scene; this.g = new THREE.Group(); scene.add(this.g);
     this.j = Array.from({ length: NJ }, () => new THREE.Vector3());
@@ -96,15 +93,22 @@ export class Humanoid {
     const mk = (geo, m, cast = true) => { const x = new THREE.Mesh(geo, m); x.matrixAutoUpdate = false; x.castShadow = cast; this.g.add(x); return x; };
     this.limbs = LIMBS.map((l, i) => mk(S.limb[i], mat(i < 4 ? st.coat : st.pants)));
     this.torso = mk(S.torso, mat(st.coat));
-    const vest = new THREE.Mesh(S.vest, mat(st.vest)); vest.position.set(0, 0.04, -0.15); this.torso.add(vest);
-    for (const px of [-0.11, 0, 0.11]) { const p = new THREE.Mesh(S.pouch, mat(st.vest)); p.position.set(px, -0.04, -0.2); this.torso.add(p); }
-    const pack = new THREE.Mesh(S.vest, mat(st.vest)); pack.scale.set(0.85, 1.2, 2.2); pack.position.set(0, 0.03, 0.2); this.torso.add(pack);
-    if (accent !== undefined) { const band = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.05, 0.26), new THREE.MeshStandardMaterial({ color: accent, roughness: 0.6, emissive: accent, emissiveIntensity: 0.25 })); band.position.y = 0.18; this.torso.add(band); }
+    const gear = (geo, m, x, y, z, parent = this.torso) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; parent.add(o); return o; };
+    gear(S.plate, mat(st.vest), 0, 0.04, -0.14); gear(S.plate, mat(st.vest), 0, 0.04, 0.14); gear(S.cummer, mat(st.vest), 0, -0.11, 0);
+    for (const sx of [-0.13, 0.13]) gear(S.strap, mat(st.vest), sx, 0.235, 0);
+    for (const px of [-0.085, 0, 0.085]) gear(S.pouch, mat(st.vest), px, -0.03, -0.185);
+    gear(S.radio, mat(st.vest), -0.225, -0.02, 0.05); gear(S.antenna, S.gun, -0.235, 0.2, 0.07);
+    gear(S.pack, mat(st.vest), 0, 0.03, 0.235);
     this.hips = mk(S.hips, mat(st.pants));
     this.head = mk(S.head, S.face);
-    const helm = new THREE.Mesh(S.helm, mat(st.beanie || st.helm)); helm.position.y = 0.012; if (st.beanie) helm.scale.set(0.9, 1.1, 0.95); this.head.add(helm);
-    if (!st.beanie) { const gg = new THREE.Mesh(S.goggle, S.lens); gg.position.set(0, 0.035, -0.085); this.head.add(gg); }
-    this.joints = [ELL, ELR, KNL, KNR, SHL, SHR].map((k, i) => { const m = mk(S.joint, mat(i < 2 || i > 3 ? st.coat : st.pants), false); m.userData.k = k; m.userData.r = i > 3 ? 0.075 : 0.062; return m; });
+    const helm = gear(S.helm, mat(st.beanie || st.helm), 0, 0.014, 0, this.head);
+    if (st.beanie) helm.scale.set(0.9, 1.1, 0.95);
+    else {
+      gear(S.nvg, S.gun, 0, 0.09, -0.11, this.head);
+      for (const sx of [-1, 1]) { gear(S.ear, S.gun, sx * 0.112, -0.005, 0.0, this.head); gear(S.rail, S.gun, sx * 0.118, 0.045, 0.0, this.head); }
+    }
+    gear(S.goggle, S.lens, 0, 0.03, -0.087, this.head);
+    this.joints = [SHL, SHR].map((k) => { const m = mk(S.joint, mat(st.coat), false); m.userData.k = k; m.userData.r = 0.072; return m; });
     this.hands = [mk(S.hand, S.glove), mk(S.hand, S.glove)];
     this.boots = [mk(S.boot, S.boots), mk(S.boot, S.boots)];
     this.rifle = new THREE.Mesh(S.rifle, S.gun); this.rifle.castShadow = true; scene.add(this.rifle);
@@ -150,7 +154,7 @@ export class Humanoid {
     const aim = new THREE.Vector3(c * ax + s * az, ay, -s * ax + c * az).normalize();
     vz.copy(aim).negate(); vx.crossVectors(UP, vz).normalize(); vy.crossVectors(vz, vx);
     this.rifle.matrixAutoUpdate = false;
-    this.rifle.matrix.makeBasis(vx, vy, vz).setPosition(this.j[HAR]);
+    this.rifle.matrix.makeBasis(vx, vy, vz).setPosition(v1.copy(this.j[HAR]).addScaledVector(vy, 0.06).addScaledVector(vz, -0.065)); // grip in the right hand
     this.rifle.matrixWorldNeedsUpdate = true;
     this.apply();
   }
@@ -177,7 +181,7 @@ export class Humanoid {
     });
   }
 
-  muzzle(out) { return out.set(0, 0.01, -0.68).applyMatrix4(this.rifle.matrix); }
+  muzzle(out) { return out.set(0, 0.03, -0.65).applyMatrix4(this.rifle.matrix); }
   headPos(out) { return out.copy(this.j[HEAD]); }
   chestPos(out) { return out.copy(this.j[NECK]).lerp(this.j[PEL], 0.3); }
 

@@ -1,6 +1,9 @@
 // First-person assault rifle: model, arms, recoil springs, ADS, reload timeline, ejected brass.
 import * as THREE from 'three';
 import * as T from './textures.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { rifleParts, rifleMaterials } from './rifle.js';
 
 export const RIFLE = { name: 'AR-17', cal: '5.56', interval: 0.08, mag: 30, reserve: 120, reload: 2.1, reloadEmpty: 2.7 };
 
@@ -19,13 +22,11 @@ export class Rifle {
   constructor(vmScene, scene, world) {
     this.scene = scene; this.world = world;
     const std = (o) => new THREE.MeshStandardMaterial(o);
-    const metal = std({ color: 0x232427, roughness: 0.42, metalness: 0.6 });
-    const poly = std({ color: 0x17181a, roughness: 0.72, metalness: 0.05 });
-    const fde = std({ color: 0x7a6a50, roughness: 0.74, metalness: 0.05 });
-    const steel = std({ color: 0xa3a6aa, roughness: 0.25, metalness: 0.95 });
+    const RM = rifleMaterials(), metal = RM.metal;
     const sleeve = std({ color: 0x3a3c36, roughness: 0.93 });
-    const skin = std({ color: 0x9a6a4f, roughness: 0.6 });
-    const glove = std({ color: 0x141416, roughness: 0.78 });
+    const skin = std({ color: 0x9a6a4f, roughness: 0.55 });
+    const glove = std({ color: 0x141416, roughness: 0.82 });
+    const knuckle = std({ color: 0x26272a, roughness: 0.55 });
     const lens = std({ color: 0x9ec4ff, transparent: true, opacity: 0.16, roughness: 0.12, metalness: 0.9, envMapIntensity: 3, depthWrite: false });
 
     this.root = new THREE.Group(); vmScene.add(this.root);
@@ -34,39 +35,23 @@ export class Rifle {
     const box = (p, m, w, h, d, x, y, z, rx, ry, rz) => add(p, new THREE.BoxGeometry(w, h, d), m, x, y, z, rx, ry, rz);
     const cylZ = (p, m, r0, r1, len, x, y, z, open = false) => add(p, new THREE.CylinderGeometry(r0, r1, len, 18, 1, open), m, x, y, z, Math.PI / 2);
     const G = this.gun;
-    box(G, metal, 0.044, 0.055, 0.25, 0, 0.035, -0.04);
-    box(G, metal, 0.04, 0.045, 0.19, 0, -0.012, -0.02);
-    box(G, metal, 0.036, 0.05, 0.075, 0, -0.045, -0.085);
-    box(G, poly, 0.03, 0.095, 0.042, 0, -0.06, 0.055, -0.35);
-    box(G, metal, 0.008, 0.008, 0.06, 0, -0.045, 0.015);
-    cylZ(G, metal, 0.014, 0.014, 0.17, 0, 0.02, 0.17);
-    box(G, poly, 0.04, 0.075, 0.13, 0, 0.0, 0.26);
-    box(G, poly, 0.042, 0.1, 0.02, 0, -0.01, 0.33);
-    box(G, fde, 0.05, 0.056, 0.3, 0, 0.03, -0.31);
-    box(G, metal, 0.022, 0.012, 0.42, 0, 0.064, -0.25);
-    for (const s of [-1, 1]) box(G, metal, 0.008, 0.016, 0.22, s * 0.028, 0.03, -0.33);
-    for (let i = 0; i < 9; i++) box(G, metal, 0.024, 0.004, 0.012, 0, 0.0715, -0.44 + i * 0.045);
-    cylZ(G, metal, 0.0095, 0.0095, 0.16, 0, 0.03, -0.53);
-    box(G, metal, 0.025, 0.025, 0.03, 0, 0.03, -0.47);
-    cylZ(G, metal, 0.014, 0.014, 0.055, 0, 0.03, -0.635);
-    for (let i = 0; i < 3; i++) box(G, poly, 0.03, 0.004, 0.01, 0, 0.044, -0.62 + i * 0.015);
-    box(G, metal, 0.03, 0.01, 0.03, 0, 0.065, 0.075);
-    box(G, poly, 0.002, 0.02, 0.052, 0.0225, 0.035, -0.02);
-    this.bolt = box(G, steel, 0.004, 0.014, 0.045, 0.0232, 0.035, -0.02);
-    // Holographic sight: hooded window with a 65 MOA ring and centre dot, on the same axis (y 0.103) as the scope.
     this.holo = new THREE.Group(); G.add(this.holo);
-    const H = this.holo;
-    box(H, metal, 0.034, 0.014, 0.075, 0, 0.076, -0.035);
-    box(H, metal, 0.03, 0.016, 0.03, 0, 0.09, -0.01);
-    for (const sd of [-1, 1]) box(H, metal, 0.005, 0.036, 0.062, sd * 0.0215, 0.101, -0.04);
-    box(H, metal, 0.048, 0.006, 0.062, 0, 0.121, -0.04);
-    add(H, new THREE.PlaneGeometry(0.038, 0.03), lens, 0, 0.102, -0.058);
-    const ret = add(H, new THREE.PlaneGeometry(0.03, 0.03), new THREE.MeshBasicMaterial({ map: holoReticle(), color: new THREE.Color(4, 0.35, 0.3), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), 0, 0.103, -0.0575);
+    this.mag = new THREE.Group(); G.add(this.mag);
+    const byMat = new Map(); // static parts merged per material; moving parts stay separate
+    for (const p of rifleParts()) {
+      if (p.name === 'bolt') { this.bolt = new THREE.Mesh(p.geo, RM[p.mat]); G.add(this.bolt); continue; }
+      if (p.name) { (p.name === 'mag' ? this.mag : this.holo).add(new THREE.Mesh(p.geo, RM[p.mat])); continue; }
+      if (!byMat.has(p.mat)) byMat.set(p.mat, []);
+      byMat.get(p.mat).push(p.geo.index ? p.geo.toNonIndexed() : p.geo);
+    }
+    for (const [k, list] of byMat) G.add(new THREE.Mesh(mergeGeometries(list), RM[k]));
+    add(this.holo, new THREE.PlaneGeometry(0.037, 0.03), lens, 0, 0.103, -0.058);
+    const ret = add(this.holo, new THREE.PlaneGeometry(0.03, 0.03), new THREE.MeshBasicMaterial({ map: holoReticle(), color: new THREE.Color(4, 0.35, 0.3), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), 0, 0.103, -0.0575);
     ret.renderOrder = 6;
     // 3.5x prism scope: the eyepiece shows a picture-in-picture render of the magnified view (main.js feeds it).
     this.scope = new THREE.Group(); this.scope.visible = false; G.add(this.scope);
     const SC = this.scope;
-    for (const z of [-0.025, -0.09]) { box(SC, metal, 0.03, 0.014, 0.022, 0, 0.074, z); add(SC, new THREE.TorusGeometry(0.0172, 0.004, 8, 22), metal, 0, 0.103, z); }
+    for (const z of [-0.025, -0.09]) { box(SC, metal, 0.03, 0.014, 0.022, 0, 0.069, z); add(SC, new THREE.TorusGeometry(0.0172, 0.004, 8, 22), metal, 0, 0.103, z); }
     cylZ(SC, metal, 0.016, 0.016, 0.1, 0, 0.103, -0.055);
     cylZ(SC, metal, 0.019, 0.025, 0.036, 0, 0.103, -0.122);
     cylZ(SC, metal, 0.021, 0.021, 0.04, 0, 0.103, 0.01);
@@ -75,41 +60,58 @@ export class Rifle {
     const ovl = add(SC, new THREE.CircleGeometry(0.0196, 40), new THREE.MeshBasicMaterial({ map: scopeReticle(), transparent: true, depthWrite: false }), 0, 0.103, 0.031);
     ovl.renderOrder = 6;
     this.optic = 'holo';
-    this.mag = new THREE.Group(); G.add(this.mag);
-    [[-0.095, -0.085, 0.08], [-0.158, -0.073, 0.2], [-0.215, -0.052, 0.35]].forEach(([y, z, r]) => box(this.mag, poly, 0.026, 0.07, 0.062, 0, y, z, r));
-    this.muzzle = new THREE.Object3D(); this.muzzle.position.set(0, 0.03, -0.67); G.add(this.muzzle);
-    this.port = new THREE.Object3D(); this.port.position.set(0.03, 0.035, -0.02); G.add(this.port);
+    this.muzzle = new THREE.Object3D(); this.muzzle.position.set(0, 0.03, -0.65); G.add(this.muzzle);
+    this.port = new THREE.Object3D(); this.port.position.set(0.03, 0.033, 0.0); G.add(this.port);
 
-    // gloved arms
-    const limb = (p, a, b, r0, r1, m) => {
-      const d = new THREE.Vector3().subVectors(b, a), len = d.length();
-      const o = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, len, 14), m);
+    // gloved hands wrapped on the handguard and grip, bare forearms, rolled sleeves
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const seg = (p, a, b, r, m) => {
+      const d = b.clone().sub(a), len = d.length();
+      const o = new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, len), 4, 10), m);
       o.position.copy(a).addScaledVector(d, 0.5); o.quaternion.setFromUnitVectors(UPV, d.normalize()); p.add(o); return o;
     };
-    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const forearm = (p, wrist, elbow) => {
+      const d = elbow.clone().sub(wrist), len = d.length();
+      const prof = [[0, 0], [0.026, 0], [0.029, 0.035], [0.038, 0.12], [0.042, 0.19], [0.039, len], [0, len]].map(([r, y]) => new THREE.Vector2(r, Math.min(y, len)));
+      const o = new THREE.Mesh(new THREE.LatheGeometry(prof, 18), skin);
+      o.position.copy(wrist); o.quaternion.setFromUnitVectors(UPV, d.normalize()); p.add(o);
+    };
+    const sleeveRoll = (p, a, b) => {
+      seg(p, a, b, 0.053, sleeve);
+      const t = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.013, 8, 20), sleeve);
+      t.position.copy(a); t.quaternion.setFromUnitVectors(V(0, 0, 1), b.clone().sub(a).normalize()); p.add(t);
+    };
     this.armR = new THREE.Group(); G.add(this.armR);
-    box(this.armR, glove, 0.05, 0.085, 0.1, 0.004, -0.068, 0.062, -0.35);
-    box(this.armR, glove, 0.018, 0.05, 0.03, -0.024, -0.035, 0.03, -0.2);
-    limb(this.armR, V(0.014, -0.1, 0.1), V(0.15, -0.25, 0.36), 0.041, 0.05, skin);
-    limb(this.armR, V(0.014, -0.1, 0.1), V(0.03, -0.118, 0.125), 0.046, 0.047, glove);
-    limb(this.armR, V(0.1, -0.19, 0.27), V(0.19, -0.29, 0.43), 0.06, 0.066, sleeve);
+    const AR = this.armR;
+    const rp = new THREE.Mesh(new RoundedBoxGeometry(0.036, 0.085, 0.05, 2, 0.012), glove); rp.position.set(0.012, -0.062, 0.075); rp.rotation.x = -0.35; AR.add(rp);
+    for (let i = 0; i < 3; i++) { const y = -0.07 - i * 0.017, z = 0.04 + i * 0.006; seg(AR, V(0.024, y, z + 0.012), V(-0.016, y - 0.002, z), 0.0085, glove); }
+    seg(AR, V(0.02, -0.024, 0.052), V(0.006, -0.026, 0.028), 0.0078, glove);
+    seg(AR, V(-0.014, -0.028, 0.072), V(-0.02, -0.004, 0.05), 0.009, glove);
+    seg(AR, V(0.016, -0.1, 0.1), V(0.03, -0.12, 0.125), 0.025, glove);
+    forearm(AR, V(0.03, -0.12, 0.125), V(0.15, -0.27, 0.36));
+    sleeveRoll(AR, V(0.11, -0.21, 0.28), V(0.2, -0.31, 0.44));
     this.armL = new THREE.Group(); G.add(this.armL);
-    box(this.armL, glove, 0.052, 0.04, 0.105, -0.016, -0.004, -0.33);
-    box(this.armL, glove, 0.016, 0.05, 0.09, -0.032, 0.028, -0.33, 0, 0, -0.2);
-    box(this.armL, glove, 0.03, 0.02, 0.08, 0.018, -0.022, -0.335);
-    limb(this.armL, V(-0.035, -0.03, -0.29), V(-0.21, -0.2, -0.06), 0.041, 0.05, skin);
-    limb(this.armL, V(-0.035, -0.03, -0.29), V(-0.05, -0.045, -0.268), 0.046, 0.047, glove);
-    limb(this.armL, V(-0.16, -0.15, -0.125), V(-0.26, -0.25, 0.0), 0.06, 0.066, sleeve);
+    const AL = this.armL;
+    const lp = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.026, 0.09, 2, 0.01), glove); lp.position.set(-0.004, -0.006, -0.33); lp.rotation.z = 0.25; AL.add(lp);
+    for (let i = 0; i < 4; i++) {
+      const z = -0.296 - i * 0.022, r = i === 3 ? 0.0072 : 0.0085, k1 = V(-0.036, 0.026, z);
+      seg(AL, V(-0.026, -0.004, z), k1, r, glove); seg(AL, k1, V(-0.021, 0.05, z - 0.002), r * 0.92, glove);
+      const kn = new THREE.Mesh(new THREE.SphereGeometry(r * 1.08, 8, 6), knuckle); kn.position.copy(k1); AL.add(kn);
+    }
+    seg(AL, V(0.018, -0.008, -0.3), V(0.03, 0.018, -0.338), 0.0095, glove);
+    seg(AL, V(-0.01, -0.016, -0.285), V(-0.032, -0.036, -0.262), 0.024, glove);
+    forearm(AL, V(-0.032, -0.036, -0.262), V(-0.2, -0.205, -0.045));
+    sleeveRoll(AL, V(-0.16, -0.165, -0.095), V(-0.26, -0.27, 0.03));
     // wristwatch, face turned toward the shooter's eye
-    const wr = V(-0.035, -0.03, -0.29), axis = V(-0.21, -0.2, -0.06).sub(wr).normalize(), wp = wr.clone().addScaledVector(axis, 0.035);
+    const wr = V(-0.032, -0.036, -0.262), axis = V(-0.2, -0.205, -0.045).sub(wr).normalize(), wp = wr.clone().addScaledVector(axis, 0.03);
     const toEye = V(-0.07, 0.14, 0.27).sub(wp), nrm = toEye.addScaledVector(axis, -toEye.dot(axis)).normalize();
     const caseM = std({ color: 0x18191b, roughness: 0.35, metalness: 0.6 });
     const wcase = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.011, 24), caseM);
-    wcase.position.copy(wp).addScaledVector(nrm, 0.047); wcase.quaternion.setFromUnitVectors(UPV, nrm); this.armL.add(wcase);
+    wcase.position.copy(wp).addScaledVector(nrm, 0.032); wcase.quaternion.setFromUnitVectors(UPV, nrm); AL.add(wcase);
     const dial = new THREE.Mesh(new THREE.CircleGeometry(0.0158, 32), new THREE.MeshStandardMaterial({ map: watchFace(), roughness: 0.25, metalness: 0.2 }));
-    dial.position.copy(wp).addScaledVector(nrm, 0.0532); dial.quaternion.setFromUnitVectors(V(0, 0, 1), nrm); this.armL.add(dial);
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.0065, 6, 28), std({ color: 0x111112, roughness: 0.8 }));
-    strap.position.copy(wp); strap.quaternion.setFromUnitVectors(V(0, 0, 1), axis); strap.scale.set(1, 1, 1.8); this.armL.add(strap);
+    dial.position.copy(wp).addScaledVector(nrm, 0.0382); dial.quaternion.setFromUnitVectors(V(0, 0, 1), nrm); AL.add(dial);
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.006, 6, 28), std({ color: 0x111112, roughness: 0.8 }));
+    strap.position.copy(wp); strap.quaternion.setFromUnitVectors(V(0, 0, 1), axis); strap.scale.set(1, 1, 1.8); AL.add(strap);
     this.armL.userData.rest = this.armL.position.clone();
 
     // muzzle flash: a camera-facing star plus two plume planes along the barrel
@@ -162,7 +164,7 @@ export class Rifle {
     this.swx.v += -s.look[0] * 0.00045 * (1 - this.ads * 0.6); this.swy.v += -s.look[1] * 0.00045 * (1 - this.ads * 0.6);
     const kz = this.kz.step(dt), krx = this.krx.step(dt), kry = this.kry.step(dt), krz = this.krz.step(dt);
     const swx = this.swx.step(dt), swy = this.swy.step(dt), land = this.land.step(dt);
-    const hip = [0.135, -0.17, -0.315], aim = [0, -0.103, -0.225], a = this.ads;
+    const hip = [0.135, -0.17, -0.315], aim = [0, -0.103, -0.17], a = this.ads;
     const bx = Math.sin(this.phase) * 0.012 * sp * k, by = -Math.abs(Math.cos(this.phase)) * 0.01 * sp * k;
     const br = Math.sin(this.t * 1.6) * 0.0012 * (1 - a * 0.7);
     let px = hip[0] + (aim[0] - hip[0]) * a + bx + swx * 0.3 + this.sprint * 0.03;
@@ -190,7 +192,7 @@ export class Rifle {
     this.root.position.set(px, py, pz);
     this.root.rotation.set(rx, ry, rz, 'YXZ');
     this.boltT = Math.min(1, this.boltT + dt / 0.075);
-    this.bolt.position.z = -0.02 + Math.sin(Math.PI * this.boltT) * 0.022;
+    this.bolt.position.z = Math.sin(Math.PI * this.boltT) * 0.02;
     this.flashT -= dt;
     this.flash.visible = this.flashT > 0;
     this.flashLight.intensity = this.flashT > 0 ? 4 : this.flashLight.intensity * 0.5;
