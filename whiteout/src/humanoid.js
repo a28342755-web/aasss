@@ -84,12 +84,23 @@ function place(m, a, b, right) {
   m.matrixWorldNeedsUpdate = true;
 }
 
+export const JOINT = { HEAD, NECK, PEL, SHL, SHR, ELL, ELR, HAL, HAR, HPL, HPR, KNL, KNR, FTL, FTR };
+
 export class Humanoid {
   constructor(scene, styleIdx) {
-    const S = sharedAssets(), st = STYLES[styleIdx % STYLES.length];
+    const S = sharedAssets();
     this.scene = scene; this.g = new THREE.Group(); scene.add(this.g);
     this.j = Array.from({ length: NJ }, () => new THREE.Vector3());
     this.L = Array.from({ length: NJ }, () => new THREE.Vector3());
+    this.build(STYLES[styleIdx % STYLES.length], styleIdx);
+    this.rifle = new THREE.Mesh(S.rifle, S.gun); this.rifle.castShadow = true; scene.add(this.rifle);
+    this.flash = null;
+    this.phase = Math.random() * 6; this.crouch = 0; this.rag = null; this.yaw = 0; this.dropVel = new THREE.Vector3(); this.dropSpin = new THREE.Vector3();
+  }
+
+  // Procedural fallback body (used until the skinned soldier model has loaded).
+  build(st) {
+    const S = sharedAssets();
     const mk = (geo, m, cast = true) => { const x = new THREE.Mesh(geo, m); x.matrixAutoUpdate = false; x.castShadow = cast; this.g.add(x); return x; };
     this.limbs = LIMBS.map((l, i) => mk(S.limb[i], mat(i < 4 ? st.coat : st.pants)));
     this.torso = mk(S.torso, mat(st.coat));
@@ -111,9 +122,6 @@ export class Humanoid {
     this.joints = [SHL, SHR].map((k) => { const m = mk(S.joint, mat(st.coat), false); m.userData.k = k; m.userData.r = 0.072; return m; });
     this.hands = [mk(S.hand, S.glove), mk(S.hand, S.glove)];
     this.boots = [mk(S.boot, S.boots), mk(S.boot, S.boots)];
-    this.rifle = new THREE.Mesh(S.rifle, S.gun); this.rifle.castShadow = true; scene.add(this.rifle);
-    this.flash = null;
-    this.phase = Math.random() * 6; this.crouch = 0; this.rag = null; this.yaw = 0; this.dropVel = new THREE.Vector3(); this.dropSpin = new THREE.Vector3();
   }
 
   // st = [x,y,z,yaw,pitch,flags]; vel = world velocity [vx,vz] used for gait.

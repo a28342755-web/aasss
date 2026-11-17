@@ -11,6 +11,7 @@ import { collisionBoxes, SPAWNS, MAT, botName, ZONES } from './map.js';
 import { buildWorld, SUN } from './build.js';
 import { Rifle } from './weapon.js';
 import { Humanoid } from './humanoid.js';
+import { loadSoldier, soldierReady, SkinnedSoldier } from './soldier.js';
 import { FX } from './fx.js';
 import { Sound } from './audio.js';
 import { Sim, SCORE_LIMIT } from './sim.js';
@@ -283,7 +284,9 @@ function spawnAt(x, y, z, yaw) {
 
 // ---------------------------------------------------------------- remote entities
 function hash(s) { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
-function makeHum(key, bot, team) { return new Humanoid(scene, (team === 1 ? 2 : 0) + (hash(key) % 2)); }
+function makeHum(key, bot, team) { return new (soldierReady() ? SkinnedSoldier : Humanoid)(scene, (team === 1 ? 2 : 0) + (hash(key) % 2)); }
+// Swap in the skinned soldiers once the model arrives; the procedural body stays as the fallback if it never does.
+loadSoldier('assets/soldier.glb').then((ok) => { if (ok) for (const e of ents.values()) if (!e.hum.rag) { e.hum.dispose(); e.hum = makeHum(e.key, e.bot, e.team); } });
 function removeEnt(key) {
   const e = ents.get(key);
   if (!e) return;

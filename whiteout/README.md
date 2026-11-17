@@ -19,3 +19,7 @@ Controls: WASD, Shift sprint, C crouch, Space jump / vault / climb, mouse fire, 
 ## Checks
 
 `node whiteout/test.mjs` covers collision, vaulting, hitboxes, interpolation, lag-compensated hit validation, friendly fire, and a 4-minute bot Domination soak.
+
+## Credits
+
+Soldier model and its idle/walk/run animations: Mixamo (Adobe), the `Soldier.glb` shipped with the three.js examples. Mixamo characters are royalty-free for use in projects such as games, but may not be redistributed as standalone assets. Everything else (map, rifle, textures, sounds) is generated in code.
