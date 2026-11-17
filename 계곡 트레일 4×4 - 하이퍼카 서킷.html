@@ -390,7 +390,7 @@ kbd{font-family:var(--f-disp);font-weight:600;font-size:11px;display:inline-bloc
     return f0(input,init);};
 })();
 </script>
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"}}</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js","three/webgpu":"https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js","three/tsl":"https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"}}</script>
 <script type="module">
 // three r186 with its WebGPU renderer, straight from the CDN by full URL; TSL is its node language. The import map points
 // 'three' at the same build, so the glTF loader (for the hypercar's body) shares this one THREE
@@ -1602,6 +1602,8 @@ const GPU_OK=await(async()=>{try{return !!(navigator.gpu&&await navigator.gpu.re
 const renderer=new THREE.WebGPURenderer({antialias:false,powerPreference:'high-performance',forceWebGL:!GPU_OK,reversedDepthBuffer:GPU_OK,logarithmicDepthBuffer:!GPU_OK});
 await renderer.init();
 const RENDER_API=renderer.backend&&renderer.backend.isWebGPUBackend?'WebGPU':'WebGL2';
+// screen-space global illumination (three's SSGINode, see PFX): WebGPU only - its GI buffer is an RG11B10 target
+const SSGI=RENDER_API==='WebGPU'&&renderer.hasFeature('rg11b10ufloat-renderable')?await import('three/addons/tsl/display/SSGINode.js').then(m=>m.ssgi,e=>{console.warn('SSGI',e);return null;}):null;
 // instance matrices go through instanced vertex attributes, which follow every setMatrixAt(); the uniform-buffer path
 // r186 picks for small instance counts does not see later updates (tiles refilled as the camera moves, moving parts)
 (()=>{try{renderer.backend.capabilities.getUniformBufferLimit=()=>0;}catch(_){}})();
@@ -7289,7 +7291,10 @@ const PFX=(()=>{
   const P={level:2,ao:0.9,bloom:0.2,shaft:0.42,grade:1,dbg:0,dof:0,useAO:!LOWQ,useSh:!LOWQ,useBl:true,msaa:LOWQ?2:4};
   const scenePass=pass(scene,camera,{samples:P.msaa});
   // motion vectors for the temporal anti-aliasing, written beside the colour
-  scenePass.setMRT(TSL.mrt({output:TSL.output,velocity:TSL.velocity}));
+  // (and, for the global illumination, each pixel's normal and albedo: blended by the surface's coverage - 1 for
+  // anything opaque - so dust, glass, tyre tracks and the shadow blob leave what is behind them)
+  {const o={output:TSL.output,velocity:TSL.velocity};if(SSGI){o.normal=vec4(TSL.packNormalToRGB(TSL.normalView),TSL.diffuseColor.a);o.diffuseColor=TSL.diffuseColor;}
+   const M=TSL.mrt(o);if(SSGI)for(const k of['normal','diffuseColor'])M.setBlendMode(k,new THREE.BlendMode(THREE.NormalBlending));scenePass.setMRT(M);}
   // (two channels are all a motion vector needs: half the multisampled buffer's memory traffic of the four-channel one)
   scenePass.getTexture('velocity').format=THREE.RGFormat;
   const velTex=scenePass.getTextureNode('velocity');
@@ -7307,6 +7312,17 @@ const PFX=(()=>{
    // (a puff at or behind the camera plane, now or a frame ago, gets none: no Inf/NaN for the TAA to keep)
    pMat.mrtNode=TSL.mrt({velocity:select(c.w.greaterThan(1e-3).and(q.w.greaterThan(1e-3)),c.xy.div(c.w).sub(q.xy.div(q.w)),vec2(0))});}
   const colRaw=scenePass.getTextureNode('output'),dep=scenePass.getTextureNode('depth');
+  // ---- global illumination: light bounced off what is on screen (the grass's green on the car's flanks, the sunlit road
+  // under its sills, a red car on the asphalt beside it), from three's SSGINode at half resolution, one slice of 12 steps
+  // turned every frame: noisy alone, averaged out by the TAA it goes in before. Added to the lit frame as albedo x the
+  // gathered light, nowhere on the sky, at twice the node's own strength (at 1 it came to a few per cent of the lit
+  // frame, under 2 % over most of it: hardly seen for its cost). (Its own occlusion term is not used: the frame has its
+  // ambient occlusion.)
+  const uGI=uniform(2),giN=SSGI?(()=>{for(const k of['normal','diffuseColor'])scenePass.getTexture(k).type=THREE.UnsignedByteType;
+    const nT=scenePass.getTextureNode('normal'),g=SSGI(colRaw,dep,TSL.sample(c=>TSL.unpackRGBToNormal(nT.sample(c).rgb)),camera);
+    const ss=g.setSize.bind(g);g.setSize=(w,h)=>ss(Math.max(1,Math.round(w/2)),Math.max(1,Math.round(h/2)));
+    g.sliceCount.value=1;g.stepCount.value=12;P.gi={node:g,k:uGI};return g.getGINode();})():null;
+  const difT=SSGI?scenePass.getTextureNode('diffuseColor'):null;
   // a mirror-sharp highlight can overflow half float to Inf, which a blur would spread over the frame: keep it finite
   const col=vec4(clamp(colRaw.rgb,0,6e4),1);
   // ambient occlusion at half resolution: view positions from the depth (the camera's own inverse projection, so the
@@ -7439,6 +7455,7 @@ const PFX=(()=>{
      const d=clamp(lc.sub(ln),lc.mul(-0.25),lc.mul(0.25));c.mulAssign(float(1).add(d.mul(uSharp).mul(2).div(max(lc,1e-4))));}
     {const w=Wd(uv()),coc=clamp(w.sub(uFoc.mul(1.7)).div(uFoc.mul(4).add(12)),0,1).mul(uDof);c.assign(mix(c,clamp(dof2.sample(uv()).rgb,0,6e4),coc));}
     c.mulAssign(mix(1,aoTex.r,uAO));
+    if(giN){const d=dep.sample(uv()).x,sky=renderer.reversedDepthBuffer?step(d,1e-6):step(0.999999,d);c.addAssign(difT.sample(uv()).rgb.mul(giN.sample(uv()).rgb).mul(uGI).mul(sky.oneMinus()));}
     c.addAssign(uSunC.mul(shTex.r).mul(uSh));
     c.addAssign(bl.rgb.mul(uBl));
     // ungraded linear light: the grade, vignette and tone curve run after the TAA (the display stage below), so the
