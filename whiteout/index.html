@@ -1,6 +1,6 @@
 <title>Whiteout Alley</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Snowbound brick-alley deathmatch: assault rifle, vaulting, bots and live multiplayer.">
+<meta name="description" content="Sunny, snowed-in rooftop alleys: two squads fight over capture points A, B and C.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
@@ -13,6 +13,8 @@
     --frost: #9fb0be;
     --sodium: #ffad4a;
     --blood: #d0141e;
+    --team: #35d0c3;
+    --enemy: #ef4b4b;
     --glass: rgba(10, 14, 19, 0.62);
     --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
     --ui: "Barlow Semi Condensed", "Segoe UI", Roboto, system-ui, sans-serif;
@@ -65,16 +67,35 @@
   #res { font: 700 22px var(--display); color: var(--frost); margin-left: 6px; font-variant-numeric: tabular-nums; }
   #ammo.low #mag { color: var(--sodium); }
   .wpn { margin-top: 4px; }
-  #top { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: baseline; padding: 4px 16px 6px; background: linear-gradient(90deg, transparent, var(--glass) 20%, var(--glass) 80%, transparent); }
-  #timer { font: 700 24px var(--display); letter-spacing: .06em; font-variant-numeric: tabular-nums; }
-  #scoreline { font: 700 18px var(--display); font-variant-numeric: tabular-nums; color: var(--frost); }
-  #myk { color: var(--sodium); font-size: 26px; }
-  #lead { font: 600 11px var(--ui); letter-spacing: .16em; text-transform: uppercase; margin-left: 8px; }
+  #top { position: absolute; top: max(10px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  #obj { display: flex; gap: 7px; align-items: center; }
+  .score { font: 800 24px var(--display); min-width: 2.4em; font-variant-numeric: tabular-nums; }
+  #ours { color: var(--team); text-align: right; } #theirs { color: var(--enemy); }
+  .obj { --p: 0; --c: var(--team); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; position: relative;
+    background: conic-gradient(var(--c) calc(var(--p) * 360deg), rgba(255,255,255,.22) 0); }
+  .obj::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: rgba(10,14,19,.72); }
+  .obj b { position: relative; font: 800 15px/1 var(--display); color: var(--snow); }
+  .obj.us::before { background: var(--team); } .obj.them::before { background: var(--enemy); }
+  .obj.us b, .obj.them b { color: #071315; text-shadow: none; }
+  .obj.hot { animation: pulse .6s infinite; }
+  #timer { font: 600 12px var(--ui); letter-spacing: .2em; color: var(--frost); font-variant-numeric: tabular-nums; }
+  #markers .mk, #tags .tag { position: fixed; left: 0; top: 0; will-change: transform; }
+  .mk { display: flex; flex-direction: column; align-items: center; margin: -15px 0 0 -15px; width: 30px; }
+  .mk b { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 800 14px/1 var(--display); border: 2px solid var(--snow); background: rgba(10,14,19,.45); }
+  .mk.us b { border-color: var(--team); color: var(--team); } .mk.them b { border-color: var(--enemy); color: var(--enemy); }
+  .mk span { font: 600 10px var(--ui); letter-spacing: .08em; margin-top: 2px; white-space: nowrap; }
+  .tag { font: 700 12px var(--ui); color: var(--team); letter-spacing: .04em; white-space: nowrap; }
+  .tag::after { content: ""; display: block; margin: 2px auto 0; width: 0; height: 0; border: 4px solid transparent; border-top-color: var(--team); }
+  #capture { position: fixed; left: 50%; top: 21%; transform: translateX(-50%); width: min(260px, 70vw); text-align: center; }
+  #captxt { font: 800 16px var(--display); letter-spacing: .22em; }
+  #capture .track { height: 5px; background: rgba(255,255,255,.2); margin-top: 5px; }
+  #capbar { display: block; height: 100%; width: 0; background: var(--team); }
+  #capture.them #capbar { background: var(--enemy); }
   #feed { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; top: max(52px, calc(env(safe-area-inset-top, 0px) + 40px)); }
   .kill { font: 600 14px var(--ui); background: var(--glass); padding: 3px 10px; display: flex; gap: 8px; align-items: center; border-left: 2px solid transparent; max-width: 46vw; }
   .kill.mine { border-left-color: var(--sodium); }
   .kill .w { font: 700 10px var(--ui); letter-spacing: .12em; color: var(--frost); border: 1px solid rgba(255,255,255,.28); padding: 0 4px; }
-  .kill .v { color: #ff9f9f; }
+  .kill .us { color: var(--team); } .kill .them { color: #ff8f8f; }
   #banner { position: fixed; left: 0; right: 0; top: 27%; text-align: center; padding-inline: 16px; }
   #banner .b1 { font: 900 clamp(40px, 9vw, 76px)/.95 var(--display); letter-spacing: .08em; text-transform: uppercase; }
   #banner .b2 { font: 600 16px var(--ui); letter-spacing: .14em; color: var(--frost); margin-top: 8px; text-transform: uppercase; }
@@ -86,6 +107,8 @@
   #board .rank { color: var(--frost); width: 1.5em; }
   #board .tag { font-size: 10px; letter-spacing: .14em; color: var(--frost); }
   #board tr.me td { color: var(--sodium); }
+  #board tr.us th:first-child { color: var(--team); } #board tr.them th:first-child { color: var(--enemy); }
+  #board thead tr th { padding-top: 10px; }
 
   #menu { position: fixed; inset: 0; display: flex; align-items: center; overflow-y: auto; z-index: 10;
     padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -121,6 +144,7 @@
   #t-jump { right: calc(40px + env(safe-area-inset-right, 0px)); bottom: calc(142px + env(safe-area-inset-bottom, 0px)); }
   #t-crouch { right: calc(124px + env(safe-area-inset-right, 0px)); bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
   #t-reload { right: calc(210px + env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+  #t-optic { right: calc(210px + env(safe-area-inset-right, 0px)); bottom: calc(124px + env(safe-area-inset-bottom, 0px)); font-size: 10px; }
   #t-menu { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: 46px; height: 46px; border-radius: 4px; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--night); font: 700 22px var(--display); letter-spacing: .3em; color: var(--frost); z-index: 20; text-transform: uppercase; }
   @media (max-width: 640px) { #menu { background: rgba(8,11,15,.82); } .keys { display: none; } }
@@ -137,7 +161,13 @@
   <div id="center"></div>
   <div id="prompt" hidden></div>
   <div id="net" class="corner tl"></div>
-  <div id="top"><div id="timer">8:00</div><div id="scoreline"><span id="myk">0</span> / <span id="limit">25</span><span id="lead"></span></div></div>
+  <div id="markers"></div>
+  <div id="tags"></div>
+  <div id="top">
+    <div id="obj"><span class="score" id="ours">0</span><i class="obj" id="obj0"><b>A</b></i><i class="obj" id="obj1"><b>B</b></i><i class="obj" id="obj2"><b>C</b></i><span class="score" id="theirs">0</span></div>
+    <div id="timer">10:00</div>
+  </div>
+  <div id="capture" hidden><div id="captxt"></div><div class="track"><span id="capbar"></span></div></div>
   <div id="feed" class="corner tr"></div>
   <div id="vitals" class="corner bl"><div class="lbl">Health</div><div id="hpnum">100</div><div class="bar"><span id="hpbar"></span></div></div>
   <div id="ammo" class="corner br"><div><span id="mag">30</span><span id="res">/ 120</span></div><div class="wpn">AR-17 · 5.56×45 · Auto</div></div>
@@ -150,9 +180,9 @@
     <div>
       <h1>WHITEOUT</h1>
       <h2>ALLEY</h2>
-      <p class="wx">−7 °C · wind 18 km/h NW · visibility 60 m</p>
+      <p class="wx">−4 °C · clear · wind 14 km/h NW · 38° sun</p>
     </div>
-    <p class="tag">Free-for-all in a snowed-in brick alley. Bots fill the empty slots, anyone else who opens this page drops into the same match, and the first to 25 eliminations takes the round.</p>
+    <p class="tag">Two squads fight over capture points A, B and C across sunny, snowed-in rooftop alleys. Bots fill both squads, anyone else who opens this page joins the smaller one, and the first squad to 150 points takes the round.</p>
     <div class="field">
       <label for="callsign">Callsign</label>
       <input id="callsign" type="text" maxlength="16" autocomplete="off" spellcheck="false">
@@ -166,7 +196,7 @@
       <kbd>W A S D</kbd><span>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch</span>
       <kbd>Space</kbd><span>Jump, or vault and climb low cover</span>
       <kbd>Mouse 1</kbd><span>Fire · 750 rounds/min, full auto</span>
-      <kbd>Mouse 2</kbd><span>Aim down the red-dot sight</span>
+      <kbd>Mouse 2</kbd><span>Aim down sights · <kbd>V</kbd> holo or 3.5× scope</span>
       <kbd>R</kbd><span>Reload · 30-round magazine</span>
       <kbd>Tab</kbd><span>Scoreboard · <kbd>Esc</kbd> menu</span>
     </div>
@@ -185,6 +215,7 @@
   <button class="tbtn" id="t-jump">JUMP</button>
   <button class="tbtn" id="t-crouch">DUCK</button>
   <button class="tbtn" id="t-reload">R</button>
+  <button class="tbtn" id="t-optic">OPTIC</button>
   <button class="tbtn" id="t-menu" aria-label="Menu">II</button>
 </div>
 

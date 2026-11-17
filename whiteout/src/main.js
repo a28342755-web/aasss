@@ -639,6 +639,14 @@ function frame(now) {
   grade.uniforms.uLow.value = me.state === 'alive' ? Math.max(0, Math.min(1, (50 - me.hp) / 50)) : 0;
   grade.uniforms.uDead.value = me.state === 'dead' ? 1 : 0;
   input.endFrame();
+  // Adaptive resolution, applied before rendering: resizing clears the canvas, so doing it after would flash black.
+  ftAvg += (dtMs - ftAvg) * 0.05; prT += dtMs;
+  if (prT > 2000) {
+    prT = 0;
+    const max = Math.min(devicePixelRatio || 1, 1.5);
+    const next = ftAvg > 22 && pixelRatio > 0.55 ? pixelRatio - 0.15 : ftAvg < 14.5 && pixelRatio < max ? Math.min(max, pixelRatio + 0.1) : pixelRatio;
+    if (next !== pixelRatio) { pixelRatio = next; renderer.setPixelRatio(next); composer.setPixelRatio(next); resize(); }
+  }
   renderer.shadowMap.needsUpdate = true;
   if (weapon.optic === 'scope' && weapon.ads > 0.15 && weapon.root.visible) {
     // magnified view for the scope's eyepiece: lens size as seen by the viewmodel camera, divided by the magnification
@@ -650,16 +658,9 @@ function frame(now) {
     renderer.setRenderTarget(scopeRT); renderer.render(scene, scopeCam); renderer.setRenderTarget(null);
   }
   composer.render();
-  ftAvg += (dtMs - ftAvg) * 0.05; prT += dtMs;
-  if (prT > 2000) {
-    prT = 0;
-    const max = Math.min(devicePixelRatio || 1, 1.5);
-    const next = ftAvg > 22 && pixelRatio > 0.55 ? pixelRatio - 0.15 : ftAvg < 14.5 && pixelRatio < max ? Math.min(max, pixelRatio + 0.1) : pixelRatio;
-    if (next !== pixelRatio) { pixelRatio = next; renderer.setPixelRatio(next); composer.setPixelRatio(next); resize(); }
-  }
 }
 $('loading').hidden = true;
 requestAnimationFrame(frame);
 
 // Test hook (headless checks drive the game through this).
-window.__wa = { me, ents, weapon, input, get sim() { return sim; }, get net() { return net; }, fireShot: () => fireShot(performance.now()), spawnAt };
+window.__wa = { me, ents, weapon, input, camera, muzzleLight, get sim() { return sim; }, get net() { return net; }, fireShot: () => fireShot(performance.now()), spawnAt };

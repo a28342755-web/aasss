@@ -12,8 +12,8 @@ const SOFT = [[HPL, FTL, 0.42], [HPR, FTR, 0.42], [SHL, HAL, 0.2], [SHR, HAR, 0.
 
 // Two looks per team: team 0 wears black kit with coyote plate carriers, team 1 olive and tan.
 export const STYLES = [
-  { coat: 0x2a2c30, pants: 0x34363b, helm: 0x23252a, vest: 0x6e6450 },
-  { coat: 0x313338, pants: 0x2a2c30, helm: 0x2c2e33, vest: 0x5f5a4b, beanie: 0x1f2024 },
+  { coat: 0x3b3e43, pants: 0x45484d, helm: 0x34373b, vest: 0x7a6f57 },
+  { coat: 0x43464b, pants: 0x393c41, helm: 0x3c3f44, vest: 0x6b6553, beanie: 0x2b2d31 },
   { coat: 0x59583f, pants: 0x4a4936, helm: 0x5d5b46, vest: 0x3c3e30 },
   { coat: 0x6c614a, pants: 0x585141, helm: 0x6c614a, vest: 0x46412f, beanie: 0x4b4636 },
 ];
@@ -98,6 +98,7 @@ export class Humanoid {
     this.torso = mk(S.torso, mat(st.coat));
     const vest = new THREE.Mesh(S.vest, mat(st.vest)); vest.position.set(0, 0.04, -0.15); this.torso.add(vest);
     for (const px of [-0.11, 0, 0.11]) { const p = new THREE.Mesh(S.pouch, mat(st.vest)); p.position.set(px, -0.04, -0.2); this.torso.add(p); }
+    const pack = new THREE.Mesh(S.vest, mat(st.vest)); pack.scale.set(0.85, 1.2, 2.2); pack.position.set(0, 0.03, 0.2); this.torso.add(pack);
     if (accent !== undefined) { const band = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.05, 0.26), new THREE.MeshStandardMaterial({ color: accent, roughness: 0.6, emissive: accent, emissiveIntensity: 0.25 })); band.position.y = 0.18; this.torso.add(band); }
     this.hips = mk(S.hips, mat(st.pants));
     this.head = mk(S.head, S.face);

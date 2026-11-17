@@ -36,15 +36,52 @@ export class HUD {
   prompt(text) { if (text !== this.promptText) { this.promptText = text; $('prompt').textContent = text; $('prompt').hidden = !text; } }
   aimName(text) { if (text !== this.an) { this.an = text; $('aimname').textContent = text; } }
   net(text) { if (text !== this.nt) { this.nt = text; $('net').textContent = text; } }
-  top(seconds, mine, lead, limit) {
+  // zs: [{owner: 1 ours | 0 neutral | -1 theirs, rel: capture progress toward us (-1..1), contested}]
+  objectives(zs, ours, theirs, seconds, limit) {
     const t = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-    const k = `${t}|${mine}|${lead}`;
-    if (k === this.tk) return;
-    this.tk = k; $('timer').textContent = t; $('myk').textContent = mine; $('limit').textContent = limit; $('lead').textContent = lead;
+    const k = JSON.stringify(zs) + `|${ours}|${theirs}|${t}`;
+    if (k === this.ok) return;
+    this.ok = k;
+    $('ours').textContent = ours; $('theirs').textContent = theirs; $('timer').textContent = `${t} · ${limit}`;
+    zs.forEach((z, i) => {
+      const o = $('obj' + i);
+      o.className = 'obj ' + (z.owner === 1 ? 'us' : z.owner === -1 ? 'them' : 'free') + (z.contested ? ' hot' : '');
+      o.style.setProperty('--p', Math.abs(z.rel).toFixed(3));
+      o.style.setProperty('--c', z.rel >= 0 ? 'var(--team)' : 'var(--enemy)');
+    });
   }
-  feed(killer, victim, hs, mine) {
+  markers(list) {
+    const box = $('markers');
+    while (box.children.length < list.length) { const m = el('div', 'mk'); m.append(el('b'), el('span')); box.append(m); }
+    list.forEach((m, i) => {
+      const d = box.children[i];
+      d.hidden = !m.show;
+      if (!m.show) return;
+      d.className = 'mk ' + m.cls; d.style.transform = `translate(${m.x.toFixed(0)}px, ${m.y.toFixed(0)}px)`;
+      d.style.opacity = Math.hypot(m.x - innerWidth / 2, m.y - innerHeight / 2) < 70 ? 0.3 : 1; // keep the crosshair clear
+      d.firstChild.textContent = m.letter; d.lastChild.textContent = m.dist + ' m';
+    });
+  }
+  capture(text, prog, side) {
+    const c = $('capture');
+    c.hidden = !text;
+    if (!text) return;
+    $('captxt').textContent = text; $('capbar').style.width = (prog * 100).toFixed(1) + '%'; c.className = side;
+  }
+  tags(list) {
+    const box = $('tags');
+    while (box.children.length < list.length) box.append(el('div', 'tag'));
+    [...box.children].forEach((d, i) => {
+      const t = list[i];
+      d.hidden = !t;
+      if (!t) return;
+      if (d.textContent !== t.name) d.textContent = t.name;
+      d.style.transform = `translate(${t.x.toFixed(0)}px, ${t.y.toFixed(0)}px) translate(-50%, -100%)`;
+    });
+  }
+  feed(killer, victim, hs, mine, killerUs, victimUs) {
     const f = $('feed'), row = el('div', 'kill' + (mine ? ' mine' : ''));
-    row.append(el('span', 'k', killer), el('span', 'w', hs ? 'HS' : 'AR'), el('span', 'v', victim));
+    row.append(el('span', 'k ' + (killerUs ? 'us' : 'them'), killer), el('span', 'w', hs ? 'HS' : 'AR'), el('span', 'v ' + (victimUs ? 'us' : 'them'), victim));
     f.prepend(row);
     while (f.children.length > 5) f.lastChild.remove();
     setTimeout(() => row.remove(), 7000);
@@ -57,23 +94,28 @@ export class HUD {
     b.hidden = !title;
     if (title) b.replaceChildren(el('div', 'b1', title), el('div', 'b2', sub || ''));
   }
-  board(rows, show, title) {
+  // rows: {name, k, d, caps, bot, me, us}; our squad first
+  board(rows, show, ours, theirs) {
     const b = $('board');
     b.hidden = !show;
     if (!show) return;
-    const key = JSON.stringify(rows) + title;
+    const key = JSON.stringify(rows) + ours + '|' + theirs;
     if (key === this.bk) return;
     this.bk = key;
-    const tb = el('tbody');
-    rows.forEach((r, i) => {
-      const tr = el('tr', r.me ? 'me' : '');
-      tr.append(el('td', 'rank', String(i + 1)), el('td', 'name', r.name), el('td', 'tag', r.bot ? 'BOT' : r.host ? 'HOST' : ''), el('td', 'num', String(r.k)), el('td', 'num', String(r.d)));
-      tb.append(tr);
-    });
-    const th = el('thead'), hr = el('tr');
-    hr.append(el('th', '', '#'), el('th', '', title || 'Operator'), el('th', '', ''), el('th', 'num', 'K'), el('th', 'num', 'D'));
-    th.append(hr);
-    $('boardtable').replaceChildren(th, tb);
+    const parts = [];
+    for (const [us, label, score] of [[true, 'Your squad', ours], [false, 'Enemy squad', theirs]]) {
+      const th = el('thead'), hr = el('tr', us ? 'us' : 'them');
+      hr.append(el('th', '', label), el('th', 'num', String(score)), el('th', 'num', 'CAP'), el('th', 'num', 'K'), el('th', 'num', 'D'));
+      th.append(hr);
+      const tb = el('tbody');
+      for (const r of rows.filter((x) => x.us === us)) {
+        const tr = el('tr', r.me ? 'me' : '');
+        tr.append(el('td', 'name', r.name), el('td', 'tag', r.bot ? 'BOT' : ''), el('td', 'num', String(r.caps)), el('td', 'num', String(r.k)), el('td', 'num', String(r.d)));
+        tb.append(tr);
+      }
+      parts.push(th, tb);
+    }
+    $('boardtable').replaceChildren(...parts);
   }
   // amount: damage taken; ang: attacker direction relative to view, radians (0 = straight ahead)
   damage(amount, ang) {

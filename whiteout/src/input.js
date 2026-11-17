@@ -24,6 +24,7 @@ export class Input {
     addEventListener('contextmenu', (e) => { if (this.active) e.preventDefault(); });
     addEventListener('mousemove', (e) => {
       if (!this.active || this.touch || (!this.locked && !this.lockFailed)) return;
+      if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return; // browsers emit occasional huge spikes
       this.dx += e.movementX || 0; this.dy += e.movementY || 0;
     });
     document.addEventListener('pointerlockchange', () => {
@@ -70,6 +71,7 @@ export class Input {
     btn('t-jump', () => this.taps.add('Space'));
     btn('t-crouch', () => { this.touchCrouch = !this.touchCrouch; });
     btn('t-reload', () => this.taps.add('KeyR'));
+    btn('t-optic', () => this.taps.add('KeyV'));
     ui.addEventListener('touchstart', (e) => {
       if (!this.active) return;
       for (const t of e.changedTouches) {
