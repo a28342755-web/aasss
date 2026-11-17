@@ -1,0 +1,196 @@
+<title>Whiteout Alley</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Snowbound brick-alley deathmatch: assault rifle, vaulting, bots and live multiplayer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
+<style>
+  /* Layout: full-bleed render of the alley; HUD pinned to the corners; the menu is a left column over the live scene.
+     One committed night palette, so no light theme. */
+  :root {
+    --night: #0a0d12;
+    --snow: #edf1f4;
+    --frost: #9fb0be;
+    --sodium: #ffad4a;
+    --blood: #d0141e;
+    --glass: rgba(10, 14, 19, 0.62);
+    --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+    --ui: "Barlow Semi Condensed", "Segoe UI", Roboto, system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--night); color: var(--snow); font-family: var(--ui); overflow: hidden; -webkit-user-select: none; user-select: none; touch-action: none; }
+  #gl, #blood { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #blood { pointer-events: none; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.5); }
+  .corner { position: absolute; }
+  .tl { top: max(14px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
+  .tr { top: max(14px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
+  .bl { bottom: max(16px, env(safe-area-inset-bottom, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
+  .br { bottom: max(16px, env(safe-area-inset-bottom, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
+
+  #xhair { position: fixed; left: 50%; top: 50%; --gap: 8px; transition: opacity .12s; }
+  #xhair i { position: absolute; background: var(--snow); box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
+  #xhair .t, #xhair .b { width: 2px; height: 9px; left: -1px; }
+  #xhair .t { bottom: var(--gap); } #xhair .b { top: var(--gap); }
+  #xhair .l, #xhair .r { height: 2px; width: 9px; top: -1px; }
+  #xhair .l { right: var(--gap); } #xhair .r { left: var(--gap); }
+  #hitmark { position: fixed; left: 50%; top: 50%; opacity: 0; }
+  #hitmark i { position: absolute; left: -1px; top: -5px; width: 2px; height: 10px; background: #fff; box-shadow: 0 0 2px #000; }
+  #hitmark i:nth-child(1) { transform: rotate(45deg) translateY(-13px); }
+  #hitmark i:nth-child(2) { transform: rotate(135deg) translateY(-13px); }
+  #hitmark i:nth-child(3) { transform: rotate(225deg) translateY(-13px); }
+  #hitmark i:nth-child(4) { transform: rotate(315deg) translateY(-13px); }
+  #hitmark.show { animation: hm .22s ease-out; }
+  #hitmark.head i { background: var(--sodium); }
+  #hitmark.kill { animation-duration: .5s; }
+  #hitmark.kill i { background: var(--blood); height: 15px; }
+  @keyframes hm { 0% { opacity: 1; transform: scale(1.45); } 60% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
+  #aimname { position: fixed; left: 50%; top: calc(50% + 30px); transform: translateX(-50%); font: 600 13px var(--ui); letter-spacing: .1em; color: #ffc9c0; }
+  #center { position: fixed; left: 50%; top: 61%; transform: translateX(-50%); font: 800 20px var(--display); letter-spacing: .2em; color: var(--sodium); opacity: 0; transition: opacity .25s; white-space: pre; }
+  #center.show { opacity: 1; }
+  #prompt { position: fixed; left: 50%; bottom: 24%; transform: translateX(-50%); font: 700 13px var(--ui); letter-spacing: .26em; color: var(--snow); padding: 5px 12px; background: var(--glass); white-space: pre; }
+
+  #vitals .lbl, .wpn, #net { font: 600 11px/1 var(--ui); letter-spacing: .24em; color: var(--frost); text-transform: uppercase; }
+  #hpnum { font: 800 46px/1 var(--display); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  #vitals .bar { width: min(190px, 40vw); height: 5px; background: rgba(255,255,255,.18); margin-top: 4px; }
+  #hpbar { display: block; height: 100%; width: 100%; background: var(--snow); transition: width .15s; }
+  #vitals.low #hpnum { color: var(--blood); animation: pulse .85s infinite; }
+  #vitals.low #hpbar { background: var(--blood); }
+  @keyframes pulse { 50% { opacity: .55; } }
+  #ammo { text-align: right; }
+  #mag { font: 800 58px/.9 var(--display); font-variant-numeric: tabular-nums; }
+  #res { font: 700 22px var(--display); color: var(--frost); margin-left: 6px; font-variant-numeric: tabular-nums; }
+  #ammo.low #mag { color: var(--sodium); }
+  .wpn { margin-top: 4px; }
+  #top { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: baseline; padding: 4px 16px 6px; background: linear-gradient(90deg, transparent, var(--glass) 20%, var(--glass) 80%, transparent); }
+  #timer { font: 700 24px var(--display); letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+  #scoreline { font: 700 18px var(--display); font-variant-numeric: tabular-nums; color: var(--frost); }
+  #myk { color: var(--sodium); font-size: 26px; }
+  #lead { font: 600 11px var(--ui); letter-spacing: .16em; text-transform: uppercase; margin-left: 8px; }
+  #feed { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; top: max(52px, calc(env(safe-area-inset-top, 0px) + 40px)); }
+  .kill { font: 600 14px var(--ui); background: var(--glass); padding: 3px 10px; display: flex; gap: 8px; align-items: center; border-left: 2px solid transparent; max-width: 46vw; }
+  .kill.mine { border-left-color: var(--sodium); }
+  .kill .w { font: 700 10px var(--ui); letter-spacing: .12em; color: var(--frost); border: 1px solid rgba(255,255,255,.28); padding: 0 4px; }
+  .kill .v { color: #ff9f9f; }
+  #banner { position: fixed; left: 0; right: 0; top: 27%; text-align: center; padding-inline: 16px; }
+  #banner .b1 { font: 900 clamp(40px, 9vw, 76px)/.95 var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  #banner .b2 { font: 600 16px var(--ui); letter-spacing: .14em; color: var(--frost); margin-top: 8px; text-transform: uppercase; }
+  #board { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -38%); width: min(480px, calc(100% - 32px)); background: var(--glass); backdrop-filter: blur(6px); padding: 12px 16px; text-shadow: none; }
+  #board table { width: 100%; border-collapse: collapse; font: 600 15px var(--ui); font-variant-numeric: tabular-nums; }
+  #board th { font: 600 11px var(--ui); letter-spacing: .2em; color: var(--frost); text-align: left; padding: 4px 6px; text-transform: uppercase; border-bottom: 1px solid rgba(255,255,255,.15); }
+  #board td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.06); }
+  #board .num { text-align: right; width: 3em; }
+  #board .rank { color: var(--frost); width: 1.5em; }
+  #board .tag { font-size: 10px; letter-spacing: .14em; color: var(--frost); }
+  #board tr.me td { color: var(--sodium); }
+
+  #menu { position: fixed; inset: 0; display: flex; align-items: center; overflow-y: auto; z-index: 10;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(90deg, rgba(8,11,15,.94) 0%, rgba(8,11,15,.74) 40%, rgba(8,11,15,0) 75%); }
+  .panel { width: min(430px, 100%); display: flex; flex-direction: column; gap: 14px; margin-left: clamp(0px, 6vw, 84px); margin-block: auto; }
+  h1 { font: 900 clamp(64px, 12vw, 138px)/.8 var(--display); letter-spacing: .01em; margin: 0; text-shadow: 0 0 44px rgba(170,200,230,.28); text-wrap: balance; }
+  h2 { font: 700 clamp(18px, 3vw, 26px)/1 var(--display); letter-spacing: .62em; color: var(--sodium); margin: 2px 0 0 4px; }
+  .wx { font: 600 12px var(--ui); letter-spacing: .2em; color: var(--frost); text-transform: uppercase; margin: 2px 0 0; font-variant-numeric: tabular-nums; }
+  .tag { font: 500 17px/1.45 var(--ui); color: #c8d3dc; max-width: 36ch; margin: 0; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label { font: 600 11px var(--ui); letter-spacing: .22em; text-transform: uppercase; color: var(--frost); }
+  #callsign { font: 600 18px var(--ui); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.2); color: var(--snow); padding: 10px 12px; border-radius: 2px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  #deploy, #leave { font: 800 22px var(--display); letter-spacing: .18em; text-transform: uppercase; border: 0; padding: 14px 22px; cursor: pointer; border-radius: 2px; flex: 1 1 auto; }
+  #deploy { background: var(--sodium); color: #1a1006; }
+  #leave { background: rgba(255,255,255,.1); color: var(--snow); flex: 0 1 auto; }
+  #deploy:disabled { opacity: .5; cursor: wait; }
+  #deploy:focus-visible, #leave:focus-visible, #callsign:focus-visible, #sens:focus-visible { outline: 2px solid var(--snow); outline-offset: 2px; }
+  #roomline { font: 500 14px/1.4 var(--ui); color: var(--frost); min-height: 1.4em; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; font: 500 14px var(--ui); color: #b9c6d0; align-items: center; margin: 4px 0 0; }
+  kbd { font: 700 11px var(--ui); letter-spacing: .08em; color: var(--snow); border: 1px solid rgba(255,255,255,.3); border-bottom-width: 2px; padding: 2px 7px; border-radius: 3px; background: rgba(255,255,255,.05); white-space: nowrap; justify-self: start; }
+  #sens { width: 100%; accent-color: var(--sodium); }
+  .fine { font: 500 12px/1.4 var(--ui); color: var(--frost); margin: 0; }
+
+  #touch { position: fixed; inset: 0; z-index: 5; }
+  #stick { position: absolute; width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(0,0,0,.15); pointer-events: none; }
+  #stick i { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.35); }
+  .tbtn { position: absolute; width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(255,255,255,.45); background: rgba(10,14,19,.45); color: var(--snow); font: 700 12px var(--ui); letter-spacing: .1em; }
+  .tbtn.on { background: rgba(255,173,74,.5); }
+  #t-fire { width: 92px; height: 92px; right: calc(24px + env(safe-area-inset-right, 0px)); bottom: calc(28px + env(safe-area-inset-bottom, 0px)); background: rgba(208,20,30,.4); }
+  #t-ads { right: calc(132px + env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+  #t-jump { right: calc(40px + env(safe-area-inset-right, 0px)); bottom: calc(142px + env(safe-area-inset-bottom, 0px)); }
+  #t-crouch { right: calc(124px + env(safe-area-inset-right, 0px)); bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
+  #t-reload { right: calc(210px + env(safe-area-inset-right, 0px)); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+  #t-menu { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: 46px; height: 46px; border-radius: 4px; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--night); font: 700 22px var(--display); letter-spacing: .3em; color: var(--frost); z-index: 20; text-transform: uppercase; }
+  @media (max-width: 640px) { #menu { background: rgba(8,11,15,.82); } .keys { display: none; } }
+  @media (prefers-reduced-motion: reduce) { #hitmark.show, #vitals.low #hpnum { animation: none; opacity: 1; } }
+</style>
+
+<canvas id="gl" aria-label="Whiteout Alley game view"></canvas>
+<canvas id="blood" aria-hidden="true"></canvas>
+
+<div id="hud" hidden>
+  <div id="xhair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+  <div id="hitmark"><i></i><i></i><i></i><i></i></div>
+  <div id="aimname"></div>
+  <div id="center"></div>
+  <div id="prompt" hidden></div>
+  <div id="net" class="corner tl"></div>
+  <div id="top"><div id="timer">8:00</div><div id="scoreline"><span id="myk">0</span> / <span id="limit">25</span><span id="lead"></span></div></div>
+  <div id="feed" class="corner tr"></div>
+  <div id="vitals" class="corner bl"><div class="lbl">Health</div><div id="hpnum">100</div><div class="bar"><span id="hpbar"></span></div></div>
+  <div id="ammo" class="corner br"><div><span id="mag">30</span><span id="res">/ 120</span></div><div class="wpn">AR-17 · 5.56×45 · Auto</div></div>
+  <div id="banner" hidden></div>
+  <div id="board" hidden><table id="boardtable"></table></div>
+</div>
+
+<div id="menu">
+  <div class="panel">
+    <div>
+      <h1>WHITEOUT</h1>
+      <h2>ALLEY</h2>
+      <p class="wx">−7 °C · wind 18 km/h NW · visibility 60 m</p>
+    </div>
+    <p class="tag">Free-for-all in a snowed-in brick alley. Bots fill the empty slots, anyone else who opens this page drops into the same match, and the first to 25 eliminations takes the round.</p>
+    <div class="field">
+      <label for="callsign">Callsign</label>
+      <input id="callsign" type="text" maxlength="16" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="row">
+      <button id="deploy" disabled>Deploy</button>
+      <button id="leave" hidden>Leave match</button>
+    </div>
+    <div id="roomline">Connecting to the room…</div>
+    <div class="keys">
+      <kbd>W A S D</kbd><span>Move · <kbd>Shift</kbd> sprint · <kbd>C</kbd> crouch</span>
+      <kbd>Space</kbd><span>Jump, or vault and climb low cover</span>
+      <kbd>Mouse 1</kbd><span>Fire · 750 rounds/min, full auto</span>
+      <kbd>Mouse 2</kbd><span>Aim down the red-dot sight</span>
+      <kbd>R</kbd><span>Reload · 30-round magazine</span>
+      <kbd>Tab</kbd><span>Scoreboard · <kbd>Esc</kbd> menu</span>
+    </div>
+    <div class="field">
+      <label for="sens">Mouse sensitivity</label>
+      <input id="sens" type="range" min="0.3" max="3" step="0.05" value="1">
+    </div>
+    <p class="fine">Headphones help: footsteps and gunfire are positional.</p>
+  </div>
+</div>
+
+<div id="touch" hidden>
+  <div id="stick" hidden><i></i></div>
+  <button class="tbtn" id="t-fire">FIRE</button>
+  <button class="tbtn" id="t-ads">ADS</button>
+  <button class="tbtn" id="t-jump">JUMP</button>
+  <button class="tbtn" id="t-crouch">DUCK</button>
+  <button class="tbtn" id="t-reload">R</button>
+  <button class="tbtn" id="t-menu" aria-label="Menu">II</button>
+</div>
+
+<div id="loading">Building the alley…</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+<script type="module" src="src/main.js"></script>
