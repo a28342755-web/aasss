@@ -110,7 +110,9 @@ export class Rifle {
     wcase.position.copy(wp).addScaledVector(nrm, 0.032); wcase.quaternion.setFromUnitVectors(UPV, nrm); AL.add(wcase);
     const dial = new THREE.Mesh(new THREE.CircleGeometry(0.0158, 32), new THREE.MeshStandardMaterial({ map: watchFace(), roughness: 0.25, metalness: 0.2 }));
     dial.position.copy(wp).addScaledVector(nrm, 0.0382); dial.quaternion.setFromUnitVectors(V(0, 0, 1), nrm); AL.add(dial);
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.006, 6, 28), std({ color: 0x111112, roughness: 0.8 }));
+    const strapM = std({ color: 0x111112, roughness: 0.8 });
+    this.watchParts = [caseM, dial.material, strapM]; // reused by the skinned arms' watch
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.006, 6, 28), strapM);
     strap.position.copy(wp); strap.quaternion.setFromUnitVectors(V(0, 0, 1), axis); strap.scale.set(1, 1, 1.8); AL.add(strap);
     this.armL.userData.rest = this.armL.position.clone();
 
@@ -135,6 +137,16 @@ export class Rifle {
   }
 
   get reloading() { return this.reloadT >= 0; }
+  // Skinned first-person arms replace the built-in ones once the soldier model has loaded.
+  useArms(fp) {
+    this.fp = fp; this.armR.visible = this.armL.visible = false;
+    const [caseM, dialM, strapM] = this.watchParts, w = new THREE.Group(); // dial on the back of the wrist (+x), strap around the forearm (y)
+    w.add(new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.011, 24).rotateZ(-Math.PI / 2).translate(0.05, 0, 0), caseM));
+    w.add(new THREE.Mesh(new THREE.CircleGeometry(0.0158, 32).rotateY(Math.PI / 2).translate(0.0557, 0, 0), dialM));
+    w.add(new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.007, 6, 28).rotateX(Math.PI / 2), strapM));
+    w.position.y = -0.055; w.rotation.y = 0.6; // turned toward the shooter's eye, as in the reference
+    fp.wearOnLeftWrist(w);
+  }
   setOptic(o) { this.optic = o; this.holo.visible = o === 'holo'; this.scope.visible = o === 'scope'; }
   reset() { this.ammo = RIFLE.mag; this.reserve = RIFLE.reserve; this.reloadT = -1; this.mag.position.set(0, 0, 0); this.armL.position.copy(this.armL.userData.rest); }
   startReload() {
@@ -170,13 +182,13 @@ export class Rifle {
     let px = hip[0] + (aim[0] - hip[0]) * a + bx + swx * 0.3 + this.sprint * 0.03;
     let py = hip[1] + (aim[1] - hip[1]) * a + by + br + land * 0.6 - this.sprint * 0.035 - this.vault * 0.09;
     let pz = hip[2] + (aim[2] - hip[2]) * a + kz * 0.025 + this.sprint * 0.03;
-    let rx = krx * 0.06 + swy + this.sprint * -0.42 - this.vault * 0.35 + Math.sin(this.t * 1.2) * 0.002;
-    let ry = kry * 0.05 + swx + this.sprint * 0.7;
-    let rz = krz * 0.05 + this.sprint * 0.22 + bx * 1.8 + this.vault * 0.55;
+    // root: recoil, sway, bob (the arms' shoulders ride along); gun: sprint, vault and reload tilts (the hands follow by IK)
+    const rx = krx * 0.06 + swy + Math.sin(this.t * 1.2) * 0.002, ry = kry * 0.05 + swx, rz = krz * 0.05 + bx * 1.8;
+    let gx = this.sprint * -0.42 - this.vault * 0.35, gy = this.sprint * 0.7, gz = this.sprint * 0.22 + this.vault * 0.55;
     if (this.reloading) {
       this.reloadT += dt;
       const t = this.reloadT / this.reloadDur, inn = smooth(0, 0.14, t) * (1 - smooth(0.86, 1, t));
-      rz += -0.55 * inn; rx += 0.12 * inn - 0.06 * Math.sin(Math.PI * smooth(0.6, 0.68, t)); ry += -0.15 * inn; py += 0.025 * inn; px -= 0.03 * inn;
+      gz += -0.55 * inn; gx += 0.12 * inn - 0.06 * Math.sin(Math.PI * smooth(0.6, 0.68, t)); gy += -0.15 * inn; py += 0.025 * inn; px -= 0.03 * inn;
       const out = smooth(0.2, 0.34, t) - smooth(0.5, 0.63, t);
       this.mag.position.y = -0.32 * out; this.mag.position.z = 0.03 * out;
       const L = this.armL.position, R0 = this.armL.userData.rest;
@@ -191,12 +203,14 @@ export class Rifle {
     }
     this.root.position.set(px, py, pz);
     this.root.rotation.set(rx, ry, rz, 'YXZ');
+    this.gun.rotation.set(gx, gy, gz, 'YXZ');
     this.boltT = Math.min(1, this.boltT + dt / 0.075);
     this.bolt.position.z = Math.sin(Math.PI * this.boltT) * 0.02;
     this.flashT -= dt;
     this.flash.visible = this.flashT > 0;
     this.flashLight.intensity = this.flashT > 0 ? 4 : this.flashLight.intensity * 0.5;
     this.root.updateMatrixWorld(true);
+    if (this.fp) this.fp.pose(this.armL.position.clone().sub(this.armL.userData.rest)); // the reload moves armL; the skinned hand follows it
   }
 
   // Camera-space point of a viewmodel part, rescaled so it lands on the same pixel under the world camera's FOV.

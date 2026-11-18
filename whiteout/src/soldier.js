@@ -237,3 +237,103 @@ export class SkinnedSoldier extends Humanoid {
   }
   dispose() { this.mixer.stopAllAction(); super.dispose(); }
 }
+
+// First-person arms: the same soldier, parented to the viewmodel rifle so only its arms are ever in view. Each frame the
+// arms are solved onto the grip points (elbows bend about their real hinge axis), the hands are turned to wrap the grip
+// and handguard, and the fingers curl around them. Everything in cfg is in gun space (barrel -Z, X right, Y up).
+const FP = {
+  shoulder: [0.07, -0.02, 0.36], yaw: -0.5, scale: 0.86, // right shoulder behind the stock, left shoulder forward (bladed); slimmer than the suit
+  hands: [
+    { wrist: [0.04, -0.005, 0.14], pole: [1, -1.2, 0.4], dir: [-0.15, -0.4, -0.9], back: [0.95, -0.1, 0.2], // right: wrapped on the pistol grip
+      thumb: [[-0.5, 0, 0.6], [0, 0, 0.5], [0, 0, 0.3]], curl: [[0.5, 0.7, 0.4], [1.2, 1.2, 0.9], [1.2, 1.25, 0.9], [1.15, 1.25, 0.9]] },
+    { wrist: [-0.087, 0.075, -0.282], pole: [-1, -0.45, 0.3], dir: [0.85, -0.2, -0.45], back: [-0.3, 1, 0], // left: over the top of the handguard,
+      thumb: [[0.5, 0, 0.5], [0, 0, 0.4], [0, 0, 0.3]], curl: [[1.15, 1.2, 0.8], [1.15, 1.2, 0.8], [1.15, 1.2, 0.8], [1.15, 1.25, 0.85]] }, // fingers down the far side
+  ],
+};
+const basis = (x, y, out) => out.setFromRotationMatrix(m4.makeBasis(x, y, new THREE.Vector3().crossVectors(x, y)));
+// Give a bone a world orientation: local X along x, local Y along y (x is made perpendicular to y first).
+function setFrame(bone, x, y) {
+  x.addScaledVector(y, -x.dot(y)).normalize();
+  bone.parent.getWorldQuaternion(q2);
+  bone.quaternion.copy(q2.invert().multiply(basis(x, y, q3)));
+  bone.updateMatrixWorld(true);
+}
+// The suit's texture would tint gloves and sleeves alike, so recolour by skin weights instead: vertices driven by the hand
+// and finger bones are black gloves, the forearms bare skin (as in the reference), everything else a dark sleeve.
+const ARM_COLORS = { glove: new THREE.Color(0x121315), skin: new THREE.Color(0x8c6c58), sleeve: new THREE.Color(0x2e3029) };
+function armMat(src, skeleton) {
+  const mat = src.clone(), kind = skeleton.bones.map((bn) => (/Hand/.test(bn.name) ? 2 : /ForeArm/.test(bn.name) ? 1 : 0));
+  mat.map = greyMap(src.map); mat.color.set(0xffffff);
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uKind = { value: kind }; sh.uniforms.uGlove = { value: ARM_COLORS.glove }; sh.uniforms.uSkin = { value: ARM_COLORS.skin }; sh.uniforms.uSleeve = { value: ARM_COLORS.sleeve };
+    sh.vertexShader = `uniform float uKind[${kind.length}];\nvarying vec2 vPart;\n` + sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>
+  vPart = vec2(0.0);
+  for (int i = 0; i < 4; i++) { float k = uKind[int(skinIndex[i])]; vPart += skinWeight[i] * vec2(k == 1.0 ? 1.0 : 0.0, k == 2.0 ? 1.0 : 0.0); }`);
+    sh.fragmentShader = 'uniform vec3 uGlove, uSkin, uSleeve;\nvarying vec2 vPart;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+  float lum = dot(diffuseColor.rgb, vec3(0.333));
+  vec3 skinC = uSkin, cloth = mix(uSleeve, uGlove, smoothstep(0.3, 0.7, vPart.y)) * (0.6 + 0.6 * lum); // skin ignores the suit's panel lines
+  diffuseColor.rgb = mix(cloth, skinC, smoothstep(0.35, 0.75, vPart.x) * (1.0 - smoothstep(0.3, 0.7, vPart.y)));`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(0.85, 0.55, smoothstep(0.35, 0.75, vPart.x));')
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n  normal = normalize(mix(normal, nonPerturbedNormal, smoothstep(0.35, 0.75, vPart.x))); // no armour seams on skin');
+  };
+  mat.customProgramCacheKey = () => 'fp-arms';
+  return mat;
+}
+export class FirstPersonArms {
+  constructor(root, gun) { // the body hangs on root (it shares recoil and sway); the hands track the gun, which also tilts
+    const m = this.model = SkeletonUtils.clone(base.scene);
+    m.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      if (o.name.includes('visor')) { o.visible = false; return; }
+      o.frustumCulled = false; o.material = armMat(o.material, o.skeleton);
+    });
+    const b = (n) => m.getObjectByName('mixamorig' + n) || m.getObjectByName('mixamorig:' + n);
+    for (const n of ['Neck', 'LeftUpLeg', 'RightUpLeg']) b(n).scale.setScalar(1e-4); // never in view; keeps them off the near plane
+    m.updateMatrixWorld(true);
+    this.shoulder0 = wp(b('RightArm'), new THREE.Vector3()); // bind pose, model space
+    this.cfg = JSON.parse(JSON.stringify(FP));
+    this.hands = ['Right', 'Left'].map((s) => {
+      const h = { arm: b(s + 'Arm'), fore: b(s + 'ForeArm'), hand: b(s + 'Hand') };
+      h.l1 = wp(h.arm, A).distanceTo(wp(h.fore, B)); h.l2 = B.distanceTo(wp(h.hand, C));
+      h.fingers = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'].map((f) => [1, 2, 3].map((k) => { const o = b(`${s}Hand${f}${k}`); return { o, q0: o.quaternion.clone() }; }));
+      return h;
+    });
+    root.add(m); this.gun = gun;
+  }
+  // Hang an object on the left wrist: x is across the back of the wrist, y runs toward the fingers (metres).
+  wearOnLeftWrist(obj) { const g = new THREE.Group(); g.scale.setScalar(100); g.add(obj); this.hands[1].hand.add(g); } // bone space is centimetres
+  // reach: extra offset for the left wrist (gun space), from the reload animation; cfg.shoulder is in root space
+  pose(reach) {
+    const c = this.cfg, gun = this.gun, gq = gun.getWorldQuaternion(qa);
+    this.model.rotation.set(0, c.yaw, 0); this.model.scale.setScalar(c.scale);
+    this.model.position.fromArray(c.shoulder).sub(this.shoulder0.clone().multiplyScalar(c.scale).applyEuler(this.model.rotation));
+    this.model.updateMatrixWorld(true);
+    const dir = (a) => new THREE.Vector3().fromArray(a).applyQuaternion(gq).normalize();
+    this.hands.forEach((h, i) => {
+      const s = c.hands[i], right = i === 0;
+      const target = new THREE.Vector3().fromArray(s.wrist); if (!right) target.add(reach);
+      gun.localToWorld(target);
+      // two-bone solve: elbow on the pole side of the shoulder-wrist line
+      wp(h.arm, A); T.subVectors(target, A);
+      const l1 = h.l1 * c.scale, l2 = h.l2 * c.scale, len = clamp(T.length(), Math.abs(l1 - l2) + 1e-3, l1 + l2 - 1e-3); T.normalize();
+      const x = (l1 * l1 - l2 * l2 + len * len) / (2 * len), hgt = Math.sqrt(Math.max(0, l1 * l1 - x * x)), pole = dir(s.pole);
+      bend.copy(pole).addScaledVector(T, -pole.dot(T)).normalize();
+      M.copy(A).addScaledVector(T, x).addScaledVector(bend, hgt);
+      E.copy(A).addScaledVector(T, len);
+      const y1 = new THREE.Vector3().subVectors(M, A).normalize(), y2 = new THREE.Vector3().subVectors(E, M).normalize();
+      // elbow hinge: flexion is +X on the right arm, -X on the left (bind-pose bone frames mirror each other)
+      const hinge = right ? new THREE.Vector3().crossVectors(y1, y2) : new THREE.Vector3().crossVectors(y2, y1);
+      if (hinge.lengthSq() < 1e-8) hinge.copy(bend).cross(y1);
+      hinge.normalize();
+      setFrame(h.arm, hinge.clone(), y1); setFrame(h.fore, hinge.clone(), y2);
+      // hand: local X is the back of the hand, local Y runs along the fingers
+      setFrame(h.hand, dir(s.back), dir(s.dir));
+      h.fingers.forEach((chain, f) => chain.forEach(({ o, q0 }, k) => {
+        if (f === 0) o.quaternion.copy(q0).multiply(q1.setFromEuler(new THREE.Euler(...s.thumb[k])));
+        else o.quaternion.copy(q0).multiply(q1.setFromAxisAngle(ZAX, s.curl[f - 1][k]));
+      }));
+      h.hand.updateMatrixWorld(true);
+    });
+  }
+}
+const ZAX = new THREE.Vector3(0, 0, 1);

@@ -11,7 +11,7 @@ import { collisionBoxes, SPAWNS, MAT, botName, ZONES } from './map.js';
 import { buildWorld, SUN } from './build.js';
 import { Rifle } from './weapon.js';
 import { Humanoid } from './humanoid.js';
-import { loadSoldier, soldierReady, SkinnedSoldier } from './soldier.js';
+import { loadSoldier, soldierReady, SkinnedSoldier, FirstPersonArms } from './soldier.js';
 import { FX } from './fx.js';
 import { Sound } from './audio.js';
 import { Sim, SCORE_LIMIT } from './sim.js';
@@ -286,7 +286,11 @@ function spawnAt(x, y, z, yaw) {
 function hash(s) { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
 function makeHum(key, bot, team) { return new (soldierReady() ? SkinnedSoldier : Humanoid)(scene, (team === 1 ? 2 : 0) + (hash(key) % 2)); }
 // Swap in the skinned soldiers once the model arrives; the procedural body stays as the fallback if it never does.
-const soldiers = loadSoldier('assets/soldier.json').then((ok) => { if (ok) for (const e of ents.values()) if (!e.hum.rag) { e.hum.dispose(); e.hum = makeHum(e.key, e.bot, e.team); } });
+const soldiers = loadSoldier('assets/soldier.json').then((ok) => {
+  if (!ok) return;
+  for (const e of ents.values()) if (!e.hum.rag) { e.hum.dispose(); e.hum = makeHum(e.key, e.bot, e.team); }
+  weapon.useArms(new FirstPersonArms(weapon.root, weapon.gun));
+});
 function removeEnt(key) {
   const e = ents.get(key);
   if (!e) return;
@@ -686,4 +690,4 @@ $('loading').hidden = true;
 requestAnimationFrame(frame);
 
 // Test hook (headless checks drive the game through this).
-window.__wa = { me, ents, weapon, input, camera, muzzleLight, get sim() { return sim; }, get net() { return net; }, fireShot: () => fireShot(performance.now()), spawnAt };
+window.__wa = { me, ents, weapon, input, camera, vmCam, muzzleLight, get sim() { return sim; }, get net() { return net; }, fireShot: () => fireShot(performance.now()), spawnAt };
