@@ -148,6 +148,15 @@
   #t-menu { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: 46px; height: 46px; border-radius: 4px; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--night); font: 700 22px var(--display); letter-spacing: .3em; color: var(--frost); z-index: 20; text-transform: uppercase; }
   @media (max-width: 640px) { #menu { background: rgba(8,11,15,.82); } .keys { display: none; } }
+  /* touch: room status clears the menu button, ammo sits left of the button cluster */
+  @media (pointer: coarse) { #net { left: calc(70px + env(safe-area-inset-left, 0px)); } #ammo { right: calc(290px + env(safe-area-inset-right, 0px)); } }
+  #rotate { display: none; position: fixed; inset: 0; z-index: 30; place-items: center; text-align: center; background: var(--night);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  #rotate div { display: flex; flex-direction: column; gap: 12px; align-items: center; max-width: 30ch; }
+  #rotate b { font: 800 30px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  #rotate span { font: 500 16px/1.4 var(--ui); color: var(--frost); }
+  #rotate button { font: 700 13px var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--snow); background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.3); padding: 10px 16px; border-radius: 2px; }
+  @media (pointer: coarse) and (orientation: portrait) { #rotate:not(.ok) { display: grid; } }
   @media (prefers-reduced-motion: reduce) { #hitmark.show, #vitals.low #hpnum { animation: none; opacity: 1; } }
 </style>
 
@@ -220,6 +229,7 @@
 </div>
 
 <div id="loading">Building the alley…</div>
+<div id="rotate"><div><b>Turn your phone sideways</b><span>Whiteout Alley is built for landscape: the view, the controls and the HUD all need the width.</span><button id="rotate-ok">Play in portrait anyway</button></div></div>
 
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }

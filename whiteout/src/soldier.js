@@ -9,8 +9,30 @@ import { F, angDiff } from './core.js';
 import { canvas } from './textures.js';
 
 let base = null;
-export function loadSoldier(url) {
-  return new Promise((res) => new GLTFLoader().load(url, (g) => { base = g; res(true); }, undefined, () => res(false)));
+// The artifact's CSP refuses fetch() of data:/blob: URLs, which is how GLTFLoader reads an embedded buffer and its
+// images. So decode the buffer here and hand the loader buffer views and textures directly: nothing is fetched but the file.
+export async function loadSoldier(url) {
+  try {
+    const text = await (await fetch(url)).text(), json = JSON.parse(text), s = atob(json.buffers[0].uri.split(',')[1]);
+    const bin = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) bin[i] = s.charCodeAt(i);
+    const view = (i) => { const v = json.bufferViews[i], o = v.byteOffset || 0; return bin.buffer.slice(o, o + v.byteLength); };
+    const loader = new GLTFLoader().register(() => ({
+      name: 'embedded',
+      loadBufferView: async (i) => view(i),
+      loadTexture: async (i) => {
+        const img = json.images[json.textures[i].source];
+        const t = new THREE.Texture(await createImageBitmap(new Blob([view(img.bufferView)], { type: img.mimeType })));
+        Object.assign(t, { flipY: false, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, needsUpdate: true });
+        return t;
+      },
+    }));
+    base = await loader.parseAsync(text, '');
+    return true;
+  } catch (e) {
+    console.warn('soldier model failed to load', e);
+    return false;
+  }
 }
 export const soldierReady = () => base !== null;
 

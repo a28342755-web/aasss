@@ -38,7 +38,7 @@ const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 const LOW_END = matchMedia('(pointer: coarse)').matches; // phones/tablets: smaller shadow map, no AO
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = LOW_END ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false; // refreshed once per frame, even when the scope renders the scene a second time
 let pixelRatio = Math.min(devicePixelRatio || 1, 1.5);
 renderer.setPixelRatio(pixelRatio);
@@ -55,7 +55,8 @@ const scopeRT = new THREE.WebGLRenderTarget(512, 512, { type: THREE.HalfFloatTyp
 const scopeCam = new THREE.PerspectiveCamera(10, 1, 0.05, 600);
 const muzzleLight = new THREE.PointLight(0xffa850, 0, 10, 2); scene.add(muzzleLight);
 
-const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+// Phones keep full resolution and drop the effects instead: no MSAA (sharp pixels beat smoothed blur there), no bloom.
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: LOW_END ? 0 : 4 }));
 composer.addPass(new RenderPass(scene, camera));
 // Contact shadows: ambient occlusion in corners, under props and along wall bases (world only, before the viewmodel).
 const gtao = new GTAOPass(scene, camera, 1, 1);
@@ -71,12 +72,12 @@ gtao.enabled = !LOW_END;
 composer.addPass(gtao);
 const vmPass = new RenderPass(vmScene, vmCam); vmPass.clear = false; vmPass.clearDepth = true; composer.addPass(vmPass);
 // Clamp HDR before bloom: one overflowing specular pixel would otherwise bloom into a black screen.
-composer.addPass(new ShaderPass({
+if (!LOW_END) composer.addPass(new ShaderPass({
   uniforms: { tDiffuse: { value: null } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; if (any(isnan(c))) c = vec3(0.0); gl_FragColor = vec4(clamp(c, 0.0, 48.0), 1.0); }',
 }));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.5, 4.0)); // only muzzle flashes, the sun and glints
+if (!LOW_END) composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.35, 0.5, 4.0)); // only muzzle flashes, the sun and glints
 composer.addPass(new OutputPass());
 const grade = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uDmg: { value: 0 }, uLow: { value: 0 }, uDead: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) } },
@@ -285,7 +286,7 @@ function spawnAt(x, y, z, yaw) {
 function hash(s) { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
 function makeHum(key, bot, team) { return new (soldierReady() ? SkinnedSoldier : Humanoid)(scene, (team === 1 ? 2 : 0) + (hash(key) % 2)); }
 // Swap in the skinned soldiers once the model arrives; the procedural body stays as the fallback if it never does.
-loadSoldier('assets/soldier.json').then((ok) => { if (ok) for (const e of ents.values()) if (!e.hum.rag) { e.hum.dispose(); e.hum = makeHum(e.key, e.bot, e.team); } });
+const soldiers = loadSoldier('assets/soldier.json').then((ok) => { if (ok) for (const e of ents.values()) if (!e.hum.rag) { e.hum.dispose(); e.hum = makeHum(e.key, e.bot, e.team); } });
 function removeEnt(key) {
   const e = ents.get(key);
   if (!e) return;
@@ -610,9 +611,10 @@ document.addEventListener('visibilitychange', () => {
 netReady.then((t) => {
   net = new Net(t);
   if (t.kind === 'solo') net.joinAt = -1e9;
-  $('deploy').disabled = false;
   roomLine();
 });
+Promise.all([netReady, soldiers]).then(() => { $('deploy').disabled = false; }); // nobody deploys into a match of placeholder bodies
+$('rotate-ok').addEventListener('click', () => $('rotate').classList.add('ok'));
 weapon.root.visible = false;
 
 let last = performance.now(), ftAvg = 16, prT = 0;
@@ -663,8 +665,9 @@ function frame(now) {
   ftAvg += (dtMs - ftAvg) * 0.05; prT += dtMs;
   if (prT > 2000) {
     prT = 0;
-    const max = Math.min(devicePixelRatio || 1, 1.5);
-    const next = ftAvg > 22 && pixelRatio > 0.55 ? pixelRatio - 0.15 : ftAvg < 14.5 && pixelRatio < max ? Math.min(max, pixelRatio + 0.1) : pixelRatio;
+    // phones never go below one render pixel per screen point (blur reads as "low quality"); they settle for ~30 fps instead
+    const max = Math.min(devicePixelRatio || 1, LOW_END ? 2 : 1.5), min = LOW_END ? 1 : 0.55, slow = LOW_END ? 30 : 22;
+    const next = ftAvg > slow && pixelRatio > min ? Math.max(min, pixelRatio - 0.15) : ftAvg < 14.5 && pixelRatio < max ? Math.min(max, pixelRatio + 0.1) : pixelRatio;
     if (next !== pixelRatio) { pixelRatio = next; renderer.setPixelRatio(next); composer.setPixelRatio(next); resize(); gtao.enabled = !LOW_END && next > 0.7; }
   }
   renderer.shadowMap.needsUpdate = true;
