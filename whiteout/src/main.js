@@ -46,8 +46,8 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xbcd0e8, 0.0024);
 const camera = new THREE.PerspectiveCamera(HIP_FOV, 1, 0.03, 600); camera.rotation.order = 'YXZ';
 const vmScene = new THREE.Scene(), vmCam = new THREE.PerspectiveCamera(VM_FOV, 1, 0.01, 10);
-scene.add(new THREE.HemisphereLight(0xa6c4ee, 0xcbc2b4, 0.62));
-const sun = new THREE.DirectionalLight(0xfff0dc, 4.4);
+scene.add(new THREE.HemisphereLight(0xc2d4ec, 0xd9d5cd, 1.2)); // bright sky plus bounce off the snow, like the reference
+const sun = new THREE.DirectionalLight(0xfff4e6, 4.2);
 sun.castShadow = true; sun.shadow.mapSize.setScalar(LOW_END ? 2048 : 4096); sun.shadow.bias = -0.00015; sun.shadow.normalBias = 0.02;
 Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 160 });
 scene.add(sun, sun.target);
@@ -89,10 +89,9 @@ const grade = new ShaderPass({
       col = mix(col, vec3(l), clamp(uLow * 0.7 + uDead * 0.55, 0.0, 0.9));
       col = mix(col, col * vec3(1.3, 0.55, 0.5), uDmg * 0.45 + uDead * 0.3);
       col *= mix(1.0, smoothstep(0.95, 0.2, length(c * vec2(1.0, 0.85))), 0.45 + uLow * 0.3);
-      col *= vec3(0.98, 1.0, 1.03);
       float g = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(g), col, 1.12);
-      col = mix(col, col * col * (3.0 - 2.0 * col), 0.35);
+      col = mix(vec3(g), col, 0.96);
+      col = mix(col, col * col * (3.0 - 2.0 * col), 0.15);
       float n = fract(sin(dot(vUv * uRes + fract(uTime) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
       gl_FragColor = vec4(col + (n - 0.5) * 0.028, 1.0);
     }`,

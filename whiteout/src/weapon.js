@@ -24,7 +24,7 @@ export class Rifle {
     const std = (o) => new THREE.MeshStandardMaterial(o);
     const RM = rifleMaterials(), metal = RM.metal;
     const sleeve = std({ color: 0x3a3c36, roughness: 0.93 });
-    const skin = std({ color: 0x9a6a4f, roughness: 0.55 });
+    const skin = std({ color: 0x8a6a56, roughness: 0.72 });
     const glove = std({ color: 0x141416, roughness: 0.82 });
     const knuckle = std({ color: 0x26272a, roughness: 0.55 });
     const lens = std({ color: 0x9ec4ff, transparent: true, opacity: 0.16, roughness: 0.12, metalness: 0.9, envMapIntensity: 3, depthWrite: false });

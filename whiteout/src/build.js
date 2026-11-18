@@ -56,7 +56,7 @@ export function buildWorld(scene, renderer) {
   const snowSet = T.snowSet();
   const M = {
     snow: std({ ...snowSet, roughness: 1, normalScale: new THREE.Vector2(0.7, 0.7) }),
-    snowCap: std({ color: 0xeef3f8, roughness: 0.55 }),
+    snowCap: std({ color: 0xeef3f8, roughness: 0.88 }),
     teal: std({ map: T.paintedMetal([62, 104, 98], 6), roughness: 0.5, metalness: 0.35 }),
     utility: std({ color: 0x8c9196, roughness: 0.5, metalness: 0.6 }),
     tube: new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.3, 2.4) }),
@@ -81,6 +81,7 @@ export function buildWorld(scene, renderer) {
     ao: new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: gradientTex([[0, '#000'], [0.55, '#404040'], [1, '#9a9a9a']]), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }),
   };
   M.ao.alphaMap.colorSpace = THREE.NoColorSpace;
+  M.streaks = new THREE.MeshBasicMaterial({ color: 0x2b241c, alphaMap: T.streakTex(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 });
   const gate = T.corrugated([92, 96, 100]), garage = T.corrugated([132, 116, 72]);
   M.gate = std({ ...gate, roughness: 0.5, metalness: 0.6 });
   M.garage = std({ ...garage, roughness: 0.55, metalness: 0.4 });
@@ -92,6 +93,19 @@ export function buildWorld(scene, renderer) {
   let doorways = 0;
   M.fenceRoof = std({ map: T.chainLink(), alphaTest: 0.5, side: THREE.DoubleSide, metalness: 0.7, roughness: 0.45 });
   const root = new THREE.Group(); scene.add(root);
+  // Photo-scanned surfaces (Poly Haven, CC0; built by tools/textures.py) replace the canvas textures once loaded.
+  // repeat converts this file's world-UV tile size to the scan's real size; offline or on error the canvas set stays.
+  const photo = (mat, name, repeat, color) => {
+    const L = new THREE.TextureLoader(), get = (k) => new Promise((res) => L.load(`assets/tex/${name}_${k}.jpg`, res, undefined, () => res(null)));
+    Promise.all(['col', 'nrm', 'rgh'].map(get)).then(([map, normalMap, roughnessMap]) => {
+      if (!map || !normalMap || !roughnessMap) return;
+      for (const t of [map, normalMap, roughnessMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.setScalar(repeat); t.anisotropy = 8; }
+      map.colorSpace = THREE.SRGBColorSpace;
+      Object.assign(mat, { map, normalMap, roughnessMap }); mat.color.set(color);
+    });
+  };
+  [[1.2, 1.15, 1.06], [1.16, 1.12, 1.04], [1, 1, 1], [1.08, 1.0, 0.88]].map((c) => new THREE.Color(...c)).forEach((c, s) => photo(brick[s], s === 2 ? 'redbrick' : 'brick', s === 2 ? 1.8 / 2.5 : 1.8 / 2, c));
+  photo(M.snow, 'ground', 1, new THREE.Color(1.2, 1.18, 1.12));
 
   // ---- ground
   const ground = worldUV(new THREE.PlaneGeometry(80, 130).rotateX(-Math.PI / 2).translate(0, 0, -12), 8);
@@ -120,8 +134,11 @@ export function buildWorld(scene, renderer) {
         if (!isOpen(wx + nx * 1.0, wz + nz * 1.0)) continue;
         const at = (out, y) => [wx + nx * out, y, wz + nz * out];
         anyOpen = true;
-        // fake contact shadow at the wall base
+        // fake contact shadow at the wall base, and rain streaks run down from the cornice (one of four strips per bay)
         Bns.add(new THREE.PlaneGeometry(2.6, 1.1), M.ao, mat4(...at(0.012, 0.55), 0, ry));
+        const sg = new THREE.PlaneGeometry(2.6, h), suv = sg.attributes.uv, k = (rnd() * 4) | 0;
+        for (let i = 0; i < suv.count; i++) suv.setX(i, (suv.getX(i) + k) / 4);
+        Bns.add(sg, M.streaks, mat4(...at(0.011, h / 2), 0, ry));
         if (rnd() < 0.45) B.add(new THREE.SphereGeometry(1, 10, 6), M.snowCap, mat4(...at(0.15, 0), 0, ry, 0, 0.7 + rnd() * 0.9, 0.2 + rnd() * 0.25, 0.45 + rnd() * 0.4));
         if (!pipeDone && rnd() < 0.25) { pipeDone = true; Bns.add(new THREE.CylinderGeometry(0.055, 0.055, h - 0.3, 8), M.steel, mat4(...at(0.1, h / 2), 0, ry).multiply(mat4(1.3, 0, 0))); }
         const r = rnd();
@@ -438,14 +455,14 @@ export function buildWorld(scene, renderer) {
   sky.frustumCulled = false; sky.renderOrder = -1; scene.add(sky);
   const envScene = new THREE.Scene();
   envScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), skyMat));
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8d8a86 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xd4d4d2 }));
   floor.position.y = -1.5; envScene.add(floor);
   for (const [x, z, w, h] of [[-6, 2, 3, 6], [6, -3, 4, 8], [1, 7, 5, 5]]) { // nearby facades in the reflections
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshBasicMaterial({ color: 0x9c8f78 })); b.position.set(x, h / 2 - 1.5, z); envScene.add(b);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshBasicMaterial({ color: 0xc9b99c })); b.position.set(x, h / 2 - 1.5, z); envScene.add(b);
   }
   const pm = new THREE.PMREMGenerator(renderer);
   scene.environment = pm.fromScene(envScene, 0.04).texture;
-  scene.environmentIntensity = 0.6;
+  scene.environmentIntensity = 0.75;
 
   // ---- falling snow, lit by the lamps it drifts past
   const N = 2500, pos = new Float32Array(N * 3), spd = new Float32Array(N), ph = new Float32Array(N), sc = new Float32Array(N);

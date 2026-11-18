@@ -22,4 +22,4 @@ Controls: WASD, Shift sprint, C crouch, Space jump / vault / climb, mouse fire, 
 
 ## Credits
 
-Soldier model and its idle/walk/run animations: Mixamo (Adobe), the `Soldier.glb` shipped with the three.js examples. Mixamo characters are royalty-free for use in projects such as games, but may not be redistributed as standalone assets. Everything else (map, rifle, textures, sounds) is generated in code.
+Soldier model and its idle/walk/run animations: Mixamo (Adobe), the `Soldier.glb` shipped with the three.js examples. Mixamo characters are royalty-free for use in projects such as games, but may not be redistributed as standalone assets. Brick and snow surfaces: photo-scanned textures from [Poly Haven](https://polyhaven.com) (CC0): `whitewashed_brick`, `castle_brick_02_white`, `snow_01`, `snow_02`. `python3 whiteout/tools/textures.py` rebuilds `assets/tex/` from them (needs numpy and Pillow). Everything else (map, rifle, other textures, sounds) is generated in code.

@@ -108,6 +108,22 @@ export function brickSet(style) {
   return { map: tex(A, true), normalMap: tex(normalFrom(H, 2.2), false), roughnessMap: tex(R, false) };
 }
 
+// Grime on facades (alpha only): four 2.6 m wide strips of soot and rain streaks hanging from the roof line.
+export function streakTex() {
+  const W = 1024, H = 1024, c = canvas(W, H), g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  for (let k = 0; k < 4; k++) for (let i = 0, n = 7 + rnd() * 9; i < n; i++) {
+    const x = k * 256 + 8 + rnd() * 240, w = 2 + rnd() * rnd() * 22, y = rnd() < 0.7 ? rnd() * 40 : rnd() * H * 0.6, len = H * (0.15 + rnd() * 0.65), a = 0.25 + rnd() * 0.45;
+    const gr = g.createLinearGradient(0, y, 0, y + len);
+    gr.addColorStop(0, rgb(255, 255, 255, 0)); gr.addColorStop(0.06, rgb(255, 255, 255, a)); gr.addColorStop(1, rgb(255, 255, 255, 0));
+    g.fillStyle = gr; g.fillRect(x, y, w, len); g.fillRect(x + w * 0.3, y, w * 0.4, len * 1.15);
+  }
+  const top = g.createLinearGradient(0, 0, 0, 90); top.addColorStop(0, rgb(255, 255, 255, 0.35)); top.addColorStop(1, rgb(255, 255, 255, 0));
+  g.fillStyle = top; g.fillRect(0, 0, W, 90);
+  g.globalCompositeOperation = 'multiply'; g.drawImage(noise(W, 5, 8, 120, 255), 0, 0);
+  return tex(c, false, false);
+}
+
 // Patchy packed snow over wet roofing tar. Tile = 8 m. Returns color, normal and roughness (wet tar is glossy).
 export function snowSet() {
   const S = 1024, H = noise(S, 6, 6), A = canvas(S), a = A.getContext('2d');
