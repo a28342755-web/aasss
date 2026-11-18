@@ -51,6 +51,29 @@ function tex(c, srgb, repeat = true) {
 }
 const rgb = (r, g, b, a = 1) => `rgba(${r | 0},${g | 0},${b | 0},${a})`;
 
+// Re-derive UVs from position (box projection along the dominant normal) so tiling textures keep real-world scale on any shape.
+export function worldUV(g, tile) {
+  const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    if (ay > 0.5) uv.setXY(i, x / tile, z / tile); else if (ax > 0.5) uv.setXY(i, z / tile, y / tile); else uv.setXY(i, x / tile, y / tile);
+  }
+  uv.needsUpdate = true;
+  return g;
+}
+// CC0 photo set (Poly Haven / ambientCG, built by tools/textures.py) swapped in once loaded; offline or on error the
+// canvas textures stay. repeat converts the geometry's UV tile size to the scan's real size; rough scales the scan's roughness.
+export function photo(mat, name, repeat, color, rough = 1) {
+  const L = new THREE.TextureLoader(), get = (k) => new Promise((res) => L.load(`assets/tex/${name}_${k}.jpg`, res, undefined, () => res(null)));
+  Promise.all(['col', 'nrm', 'rgh'].map(get)).then(([map, normalMap, roughnessMap]) => {
+    if (!map || !normalMap || !roughnessMap) return;
+    for (const t of [map, normalMap, roughnessMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.setScalar(repeat); t.anisotropy = 8; }
+    map.colorSpace = THREE.SRGBColorSpace;
+    Object.assign(mat, { map, normalMap, roughnessMap, roughness: rough, needsUpdate: true }); mat.color.set(color);
+  });
+}
+
 // Brick wall set. Tile = 1.8 m: 24 courses of 7.5 cm, 8 bricks of 22.5 cm, running bond.
 export function brickSet(style) {
   const P = [
@@ -148,23 +171,29 @@ export function snowSet() {
 
 // Distant tower facades: a 4x4 grid of window modules. kind: 0 blue glass, 1 cream stone, 2 gray concrete, 3 brick mid-rise
 export function facadeTex(kind) {
-  const S = 512, c = canvas(S), g = c.getContext('2d'), m = S / 4;
+  const S = 1024, c = canvas(S), g = c.getContext('2d'), m = S / 4; // one window bay (3.5 m) per 256 px
   const base = [[38, 52, 70], [206, 194, 168], [150, 152, 150], [150, 86, 62]][kind];
   g.fillStyle = rgb(...base); g.fillRect(0, 0, S, S);
+  if (kind) for (let y = 0; y < S; y += 9) { g.fillStyle = 'rgba(0,0,0,0.06)'; g.fillRect(0, y, S, 2); } // masonry coursing
   for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
     const k = 0.75 + rnd() * 0.35, px = x * m, py = y * m;
-    if (kind === 0) {
+    if (kind === 0) { // curtain wall: tinted glass, mullions, a bright spandrel band, some blinds drawn
       const gr = g.createLinearGradient(px, py, px + m, py + m);
       gr.addColorStop(0, rgb(70 * k, 100 * k, 135 * k)); gr.addColorStop(1, rgb(30 * k, 45 * k, 66 * k));
-      g.fillStyle = gr; g.fillRect(px + 3, py + 3, m - 6, m - 6);
-      g.fillStyle = 'rgba(200,215,230,0.5)'; g.fillRect(px, py + m * 0.62, m, 3);
-    } else {
-      const w = kind === 2 ? m - 10 : m * 0.42, h = kind === 2 ? m * 0.36 : m * 0.6;
-      g.fillStyle = rgb(26 * k, 32 * k, 40 * k); g.fillRect(px + (m - w) / 2, py + m * 0.22, w, h);
-      g.fillStyle = 'rgba(160,180,200,0.25)'; g.fillRect(px + (m - w) / 2, py + m * 0.22, w, h * 0.35);
+      g.fillStyle = gr; g.fillRect(px + 4, py + 4, m - 8, m - 8);
+      if (rnd() < 0.3) { g.fillStyle = 'rgba(205,210,215,0.35)'; g.fillRect(px + 4, py + 4, m - 8, (m - 8) * (0.2 + rnd() * 0.5)); }
+      g.fillStyle = 'rgba(200,215,230,0.5)'; g.fillRect(px, py + m * 0.62, m, 7);
+      g.fillStyle = 'rgba(18,24,32,0.9)'; for (const f of [1 / 3, 2 / 3]) g.fillRect(px + m * f - 2, py, 4, m);
+    } else { // punched windows: dark glass with sky reflection, centre mullion, stone sill
+      const w = kind === 2 ? m - 20 : m * 0.42, h = kind === 2 ? m * 0.36 : m * 0.6, wx = px + (m - w) / 2, wy = py + m * 0.22;
+      g.fillStyle = rgb(26 * k, 32 * k, 40 * k); g.fillRect(wx, wy, w, h);
+      g.fillStyle = 'rgba(160,180,200,0.25)'; g.fillRect(wx, wy, w, h * 0.35);
+      if (rnd() < 0.35) { g.fillStyle = 'rgba(200,196,186,0.4)'; g.fillRect(wx, wy, w, h * (0.15 + rnd() * 0.5)); }
+      g.fillStyle = rgb(base[0] * 0.35, base[1] * 0.35, base[2] * 0.35); g.fillRect(wx + w / 2 - 3, wy, 6, h); g.fillRect(wx - 3, wy - 3, w + 6, 6);
+      g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(wx - 8, wy + h, w + 16, 8);
     }
   }
-  g.globalCompositeOperation = 'multiply'; g.drawImage(noise(S, 4, 4), 0, 0);
+  g.globalCompositeOperation = 'multiply'; g.drawImage(noise(S, 5, 4), 0, 0);
   return tex(c, true);
 }
 // Vertical wood staves with iron hoops, for rooftop water tanks.

@@ -101,7 +101,7 @@ composer.addPass(grade);
 // ---------------------------------------------------------------- world and systems
 const world = new World(collisionBoxes());
 const env = buildWorld(scene, renderer);
-vmScene.environment = scene.environment; vmScene.environmentIntensity = 0.7;
+vmScene.environment = scene.environment; vmScene.environmentIntensity = 1.0;
 const fx = new FX(scene, world), sound = new Sound(), hud = new HUD(), input = new Input(canvas);
 const weapon = new Rifle(vmScene, scene, world);
 weapon.pip.material.map = scopeRT.texture; weapon.pip.material.color.set(0xffffff); weapon.pip.material.needsUpdate = true;

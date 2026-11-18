@@ -1,7 +1,8 @@
-# Builds assets/tex/*.jpg from Poly Haven scans (CC0). Run once: python3 whiteout/tools/textures.py
-# Bricks are copied as-is (colour with AO baked in, OpenGL normal, roughness). The ground is composited:
-# smooth and trampled snow mixed by a large-scale mask, with patches of wet roofing tar showing through.
-import json, os, sys, tempfile, urllib.request
+# Builds assets/tex/*.jpg from CC0 scans (Poly Haven, ambientCG). Run once: python3 whiteout/tools/textures.py [cache dir]
+# Surfaces are copied as colour (AO baked in), OpenGL normal and roughness; "grey" sets lose their hue so the game can
+# tint one scan per use (paint colours, gun finishes). The ground is composited: smooth and trampled snow mixed by a
+# large-scale mask, with patches of wet roofing tar showing through.
+import json, os, sys, tempfile, urllib.request, zipfile
 import numpy as np
 from PIL import Image
 
@@ -9,23 +10,35 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', '
 CACHE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(tempfile.gettempdir(), 'polyhaven')
 os.makedirs(OUT, exist_ok=True); os.makedirs(CACHE, exist_ok=True)
 
-get = lambda url: urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'whiteout-texture-build'}))  # the API refuses urllib's default agent
-def fetch(asset, kind):
+get = lambda url: urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'whiteout-texture-build'}))  # the APIs refuse urllib's default agent
+load = lambda f: np.asarray(Image.open(f).convert('RGB'), dtype=np.float32) / 255
+def fetch(asset, kind):  # Poly Haven: one 1k JPG per map; None if the asset has no such map
     path = os.path.join(CACHE, f'{asset}_{kind}.jpg')
     if not os.path.exists(path):
         files = json.load(get(f'https://api.polyhaven.com/files/{asset}'))
+        if kind not in files: return None
         with get(files[kind]['1k']['jpg']['url']) as r, open(path, 'wb') as f: f.write(r.read())
-    return np.asarray(Image.open(path).convert('RGB'), dtype=np.float32) / 255
+    return load(path)
+def acg(asset, kind):  # ambientCG: a zip of 1K JPG maps per material
+    path = os.path.join(CACHE, f'{asset}_1K-JPG.zip')
+    if not os.path.exists(path):
+        with get(f'https://ambientcg.com/get?file={asset}_1K-JPG.zip') as r, open(path, 'wb') as f: f.write(r.read())
+    with zipfile.ZipFile(path) as z:
+        names = [n for n in z.namelist() if n.endswith(f'_{kind}.jpg')]
+        return load(z.open(names[0])) if names else None
 
 def save(a, name, q):
     a = np.clip(a * 255 + 0.5, 0, 255).astype(np.uint8)
     Image.fromarray(a if a.ndim == 3 else a, 'RGB' if a.ndim == 3 else 'L').save(os.path.join(OUT, name), quality=q, optimize=True)
 
-for asset, name in [('whitewashed_brick', 'brick'), ('castle_brick_02_white', 'redbrick')]:
-    col, ao = fetch(asset, 'Diffuse'), fetch(asset, 'AO')
-    save(col * (0.35 + 0.65 * ao), f'{name}_col.jpg', 84)
-    save(fetch(asset, 'nor_gl'), f'{name}_nrm.jpg', 88)
-    save(fetch(asset, 'Rough')[..., 0], f'{name}_rgh.jpg', 84)
+KINDS = {fetch: ('Diffuse', 'nor_gl', 'Rough', 'AO'), acg: ('Color', 'NormalGL', 'Roughness', 'AmbientOcclusion')}
+for src, asset, name, grey in [(fetch, 'whitewashed_brick', 'brick', 0), (fetch, 'castle_brick_02_white', 'redbrick', 0),
+                               (fetch, 'plastered_wall', 'stone', 0), (fetch, 'concrete_floor_worn_001', 'concrete', 0), (fetch, 'raw_plank_wall', 'wood', 0),
+                               (acg, 'Metal055A', 'paint', 1), (acg, 'Metal027', 'gunmetal', 1), (acg, 'Metal028', 'steel', 1), (acg, 'Plastic012A', 'polymer', 1)]:
+    col, nrm, rgh, ao = (src(asset, k) for k in KINDS[src])
+    if ao is not None: col = col * (0.35 + 0.65 * ao)
+    if grey: col = (col @ np.array([0.2126, 0.7152, 0.0722], np.float32))[..., None].repeat(3, 2); col *= 0.8 / col.mean()
+    save(col, f'{name}_col.jpg', 84); save(nrm, f'{name}_nrm.jpg', 88); save(rgh[..., 0], f'{name}_rgh.jpg', 84)
 
 # ---- ground: 8 m tile at 2048 px; each 2 m snow scan is tiled 4x4
 S, rng = 2048, np.random.default_rng(7)

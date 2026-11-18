@@ -7,7 +7,7 @@ import * as T from './textures.js';
 // Direction toward the low winter sun (south-west, about 38 degrees up).
 export const SUN = new THREE.Vector3(-0.5, 0.62, 0.6).normalize();
 
-const { rnd } = T;
+const { rnd, worldUV, photo } = T;
 const OPEN = [[-3.5, -64, 3.5, 38.3], [-16, 6, -3.5, 12], [-28, 0, -16, 20], [3.5, -14, 16, -8], [16, -24, 30, -2]];
 const isOpen = (x, z) => OPEN.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
 const Q = new THREE.Quaternion(), E = new THREE.Euler(), V = new THREE.Vector3();
@@ -25,22 +25,13 @@ class Batch {
   box(mat, w, h, d, x, y, z, ry = 0, rx = 0, rz = 0) { return this.add(new THREE.BoxGeometry(w, h, d), mat, mat4(x, y, z, rx, ry, rz)); }
   build(parent, cast = true, receive = true) {
     for (const [mat, list] of this.m) {
-      const mesh = new THREE.Mesh(mergeGeometries(list), mat);
+      const geo = mergeGeometries(list);
+      if (mat.userData.tile) worldUV(geo, mat.userData.tile); // box-projected so scans keep real-world scale
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.castShadow = cast; mesh.receiveShadow = receive; mesh.matrixAutoUpdate = false;
       parent.add(mesh);
     }
   }
-}
-// Re-derive UVs from world position so tiling textures keep real-world scale on any box.
-function worldUV(g, tile) {
-  const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
-  for (let i = 0; i < p.count; i++) {
-    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    if (ay > 0.5) uv.setXY(i, x / tile, z / tile); else if (ax > 0.5) uv.setXY(i, z / tile, y / tile); else uv.setXY(i, x / tile, y / tile);
-  }
-  uv.needsUpdate = true;
-  return g;
 }
 function gradientTex(stops, w = 4, h = 128) {
   const c = T.canvas(w, h), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, h);
@@ -57,24 +48,24 @@ export function buildWorld(scene, renderer) {
   const M = {
     snow: std({ ...snowSet, roughness: 1, normalScale: new THREE.Vector2(0.7, 0.7) }),
     snowCap: std({ color: 0xeef3f8, roughness: 0.88 }),
-    teal: std({ map: T.paintedMetal([62, 104, 98], 6), roughness: 0.5, metalness: 0.35 }),
-    utility: std({ color: 0x8c9196, roughness: 0.5, metalness: 0.6 }),
+    teal: std({ map: T.paintedMetal([62, 104, 98], 6), roughness: 0.5, metalness: 0.1 }),
+    utility: std({ color: 0x8c9196, roughness: 0.5, metalness: 0.3 }),
     tube: new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.3, 2.4) }),
     void: new THREE.MeshBasicMaterial({ color: 0x050506 }),
     concrete: std({ ...T.concreteSet(), roughness: 0.92 }),
     stone: std({ color: 0x9a948a, roughness: 0.85 }),
     dark: std({ color: 0x1c1e21, roughness: 0.55, metalness: 0.7 }),
     steel: std({ color: 0x7d838a, roughness: 0.4, metalness: 0.85 }),
-    green: std({ map: T.paintedMetal([44, 74, 56]), roughness: 0.55, metalness: 0.45 }),
-    blue: std({ map: T.paintedMetal([38, 58, 92]), roughness: 0.55, metalness: 0.45 }),
-    rust: std({ map: T.paintedMetal([130, 52, 30]), roughness: 0.6, metalness: 0.5 }),
-    door: std({ map: T.paintedMetal([58, 66, 64]), roughness: 0.6, metalness: 0.5 }),
+    green: std({ map: T.paintedMetal([44, 74, 56]), roughness: 0.55, metalness: 0.1 }),
+    blue: std({ map: T.paintedMetal([38, 58, 92]), roughness: 0.55, metalness: 0.1 }),
+    rust: std({ map: T.paintedMetal([130, 52, 30]), roughness: 0.6, metalness: 0.1 }),
+    door: std({ map: T.paintedMetal([58, 66, 64]), roughness: 0.6, metalness: 0.1 }),
     wood: std({ map: T.woodTex(), roughness: 0.85 }),
     rubber: std({ color: 0x0e0e0f, roughness: 0.92 }),
     paint: new THREE.MeshPhysicalMaterial({ color: 0x5b1c18, roughness: 0.32, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.15 }),
     van: std({ map: T.paintedMetal([196, 198, 194], 3), roughness: 0.45, metalness: 0.4 }),
     glass: std({ color: 0x0a0f15, roughness: 0.12, metalness: 0.3, envMapIntensity: 1.8 }),
-    frame: std({ color: 0x272b2a, roughness: 0.55, metalness: 0.3 }),
+    frame: std({ color: 0x272b2a, roughness: 0.55, metalness: 0.1 }),
     bags: std({ color: 0x0b0c0d, roughness: 0.28, metalness: 0.1 }),
     yellow: std({ color: 0xc89a12, roughness: 0.6 }),
     ice: std({ color: 0xdcecff, roughness: 0.15, transparent: true, opacity: 0.82, envMapIntensity: 2.2 }),
@@ -93,19 +84,16 @@ export function buildWorld(scene, renderer) {
   let doorways = 0;
   M.fenceRoof = std({ map: T.chainLink(), alphaTest: 0.5, side: THREE.DoubleSide, metalness: 0.7, roughness: 0.45 });
   const root = new THREE.Group(); scene.add(root);
-  // Photo-scanned surfaces (Poly Haven, CC0; built by tools/textures.py) replace the canvas textures once loaded.
-  // repeat converts this file's world-UV tile size to the scan's real size; offline or on error the canvas set stays.
-  const photo = (mat, name, repeat, color) => {
-    const L = new THREE.TextureLoader(), get = (k) => new Promise((res) => L.load(`assets/tex/${name}_${k}.jpg`, res, undefined, () => res(null)));
-    Promise.all(['col', 'nrm', 'rgh'].map(get)).then(([map, normalMap, roughnessMap]) => {
-      if (!map || !normalMap || !roughnessMap) return;
-      for (const t of [map, normalMap, roughnessMap]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.setScalar(repeat); t.anisotropy = 8; }
-      map.colorSpace = THREE.SRGBColorSpace;
-      Object.assign(mat, { map, normalMap, roughnessMap }); mat.color.set(color);
-    });
-  };
   [[1.2, 1.15, 1.06], [1.16, 1.12, 1.04], [1, 1, 1], [1.08, 1.0, 0.88]].map((c) => new THREE.Color(...c)).forEach((c, s) => photo(brick[s], s === 2 ? 'redbrick' : 'brick', s === 2 ? 1.8 / 2.5 : 1.8 / 2, c));
   photo(M.snow, 'ground', 1, new THREE.Color(1.2, 1.18, 1.12));
+  // scans with userData.tile get box-projected UVs at that size (metres per texture repeat) when batched
+  Object.assign(M.stone.userData, { tile: 2 }); photo(M.stone, 'stone', 1, new THREE.Color(1.1, 1.06, 1.0));
+  Object.assign(M.concrete.userData, { tile: 2.5 }); photo(M.concrete, 'concrete', 1, new THREE.Color(1.3, 1.3, 1.28), 1.6);
+  Object.assign(M.wood.userData, { tile: 2 }); photo(M.wood, 'wood', 1, 0xffffff);
+  // one light, worn paint scan tinted per use (the scan averages 0.8, so tints sit 1/0.8 above the wanted colour)
+  for (const [k, c] of Object.entries({ door: 0x4a5350, teal: 0x4e827a, green: 0x375d46, blue: 0x304873, rust: 0xa2412a, utility: 0xafb5bc, frame: 0x313635 })) {
+    M[k].userData.tile = 1.5; photo(M[k], 'paint', 1, c, 2.2); // weathered paint is matte, the scan is glossier
+  }
 
   // ---- ground
   const ground = worldUV(new THREE.PlaneGeometry(80, 130).rotateX(-Math.PI / 2).translate(0, 0, -12), 8);
@@ -199,6 +187,7 @@ export function buildWorld(scene, renderer) {
   const litMat = std({ map: T.blindsTex(), roughness: 0.5, metalness: 0.1 });
   const inst = (geo, mat, list, cast = false) => {
     if (!list.length) return null;
+    if (mat.userData.tile) worldUV(geo, mat.userData.tile);
     const m = new THREE.InstancedMesh(geo, mat, list.length);
     list.forEach((mm, i) => m.setMatrixAt(i, mm));
     m.castShadow = cast; m.receiveShadow = true; root.add(m);
@@ -294,7 +283,7 @@ export function buildWorld(scene, renderer) {
     } else if (p.t === 'barrier') {
       const sh = new THREE.Shape([[-0.3, 0], [0.3, 0], [0.3, 0.08], [0.14, 0.3], [0.08, 0.85], [-0.08, 0.85], [-0.14, 0.3], [-0.3, 0.08]].map(([a, b]) => new THREE.Vector2(a, b)));
       const g = new THREE.ExtrudeGeometry(sh, { depth: 2.96, bevelEnabled: false }).translate(0, 0, -1.48).rotateY(Math.PI / 2);
-      worldUV(B.add(g, M.concrete, mat4(x, 0, z)), 2);
+      B.add(g, M.concrete, mat4(x, 0, z));
       snowTop(2.9, 0.14, x, 0.85, z);
     } else if (p.t === 'pallets') {
       for (let i = 0; i < 4; i++) {
@@ -334,9 +323,9 @@ export function buildWorld(scene, renderer) {
       Bns.box(M.stone, w + 0.08, 0.08, d + 0.08, (p.x0 + p.x1) / 2, p.h + 0.04, (p.z0 + p.z1) / 2);
       snowTop(w, d, (p.x0 + p.x1) / 2, p.h + 0.08, (p.z0 + p.z1) / 2);
     } else if (p.t === 'dock') {
-      worldUV(B.box(M.concrete, 3.5, 1.15, 16, 28.25, 0.575, -13), 2.5);
-      worldUV(B.box(M.concrete, 1.2, 0.38, 1.4, 25.9, 0.19, -5.7), 2.5);
-      worldUV(B.box(M.concrete, 0.8, 0.77, 1.4, 26.1, 0.385, -5.7), 2.5);
+      B.box(M.concrete, 3.5, 1.15, 16, 28.25, 0.575, -13);
+      B.box(M.concrete, 1.2, 0.38, 1.4, 25.9, 0.19, -5.7);
+      B.box(M.concrete, 0.8, 0.77, 1.4, 26.1, 0.385, -5.7);
       Bns.box(M.yellow, 0.12, 0.012, 16, 26.58, 1.156, -13);
       snowTop(3.2, 15.4, 28.4, 1.15, -13.2);
       for (const bz of [-19, -15, -11, -7.4]) Bns.box(M.rubber, 0.14, 0.45, 0.32, 26.43, 0.75, bz);

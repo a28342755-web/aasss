@@ -2,14 +2,17 @@
 // origin above the pistol grip, sight axis at y = 0.103 (ADS lines up on it). Shared by the viewmodel and soldiers.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { canvas, rnd } from './textures.js';
+import { worldUV, photo } from './textures.js';
 
 // Side profile drawn as (u forward, v up), extruded across the gun's width w.
-function side(shapeOrPts, w, bevel = 0.0015) {
+function side(shapeOrPts, w, bevel = 0.0022) {
   const s = shapeOrPts instanceof THREE.Shape ? shapeOrPts : new THREE.Shape(shapeOrPts.map(([u, v]) => new THREE.Vector2(u, v)));
   const d = Math.max(0.001, w - bevel * 2);
-  return new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 8 })
+  const g = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 8 })
     .translate(0, 0, -d / 2).rotateY(Math.PI / 2);
+  const n = g.attributes.normal, wr = new Float32Array(n.count); // flat normals: bevel faces lean between the caps (+-X) and the walls
+  for (let i = 0; i < n.count; i++) wr[i] = Math.abs(n.getX(i)) > 0.15 && Math.abs(n.getX(i)) < 0.95 ? 1 : 0;
+  return g.setAttribute('aWear', new THREE.BufferAttribute(wr, 1));
 }
 const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 const cylZ = (r0, r1, len, x, y, z, seg = 18) => new THREE.CylinderGeometry(r0, r1, len, seg).rotateX(Math.PI / 2).translate(x, y, z);
@@ -21,43 +24,51 @@ function rrect(path, x, y, w, h, r) {
   return path;
 }
 
+// Rubbed edges: bevel faces (aWear) wear through to brighter, smoother bare finish in patches broken up by the scan's grain.
+function wear(mat, color, k) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = 'attribute float aWear;\nvarying float vWear;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vWear = aWear;');
+    sh.fragmentShader = 'varying float vWear;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+  float wearK = vWear * ${k.toFixed(2)};
+  #ifdef USE_MAP
+    wearK *= smoothstep(0.54, 0.7, texture2D(map, vMapUv * 2.7).g); // linear: the scan averages ~0.6
+  #endif
+  diffuseColor.rgb = mix(diffuseColor.rgb, ${color}, wearK);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+  #ifdef USE_MAP
+    roughnessFactor *= 0.7 + 0.6 * texture2D(map, vMapUv * 0.21).g; // big, soft smudges from handling
+  #endif
+  roughnessFactor = mix(roughnessFactor, 0.3, wearK);`)
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n  metalnessFactor = mix(metalnessFactor, 0.9, wearK * metalnessFactor * 2.0);');
+  };
+  mat.customProgramCacheKey = () => `wear${color}${k}`; // same closure text for every material, so key on the constants
+}
 let mats = null;
-// Worn cerakote: scratches and rubbed edges show brighter, smoother metal.
 export function rifleMaterials() {
   if (mats) return mats;
-  const S = 512, c = canvas(S), g = c.getContext('2d'), r = canvas(S), rg = r.getContext('2d');
-  g.fillStyle = '#26272a'; g.fillRect(0, 0, S, S); rg.fillStyle = '#a0a0a0'; rg.fillRect(0, 0, S, S);
-  for (let i = 0; i < 70; i++) {
-    const x = rnd() * S, y = rnd() * S, rr = 6 + rnd() * 30;
-    const gr = g.createRadialGradient(x, y, 0, x, y, rr); gr.addColorStop(0, 'rgba(70,70,74,0.35)'); gr.addColorStop(1, 'rgba(70,70,74,0)');
-    g.fillStyle = gr; g.fillRect(x - rr, y - rr, rr * 2, rr * 2);
-    const rgr = rg.createRadialGradient(x, y, 0, x, y, rr); rgr.addColorStop(0, 'rgba(90,90,90,0.5)'); rgr.addColorStop(1, 'rgba(90,90,90,0)');
-    rg.fillStyle = rgr; rg.fillRect(x - rr, y - rr, rr * 2, rr * 2);
-  }
-  for (let i = 0; i < 320; i++) {
-    const x = rnd() * S, y = rnd() * S, a = rnd() * Math.PI, l = 3 + rnd() * 24;
-    g.strokeStyle = `rgba(140,140,146,${0.12 + rnd() * 0.4})`; g.lineWidth = 0.5 + rnd() * 0.9;
-    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
-    rg.strokeStyle = 'rgba(55,55,55,0.7)'; rg.lineWidth = 1;
-    rg.beginPath(); rg.moveTo(x, y); rg.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); rg.stroke();
-  }
-  const map = new THREE.CanvasTexture(c), rough = new THREE.CanvasTexture(r);
-  map.colorSpace = THREE.SRGBColorSpace;
-  for (const t of [map, rough]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(7, 7); t.anisotropy = 8; }
   const std = (o) => new THREE.MeshStandardMaterial(o);
   mats = {
-    metal: std({ map, roughnessMap: rough, roughness: 1, metalness: 0.5 }),
-    poly: std({ color: 0x18191b, roughness: 0.8, metalness: 0.04 }),
+    metal: std({ color: 0x2e3033, roughness: 0.45, metalness: 0.5 }),
+    poly: std({ color: 0x18191b, roughness: 0.8, metalness: 0.04, normalScale: new THREE.Vector2(2, 2) }),
     steel: std({ color: 0xa0a3a7, roughness: 0.26, metalness: 0.95 }),
     rubber: std({ color: 0x0d0d0e, roughness: 0.95 }),
     dark: new THREE.MeshBasicMaterial({ color: 0x050506 }),
   };
+  // scanned finishes replace the flat ones once loaded: scratched black anodizing, stippled polymer, bare steel
+  photo(mats.metal, 'gunmetal', 1, 0x3a3c40, 0.7); photo(mats.poly, 'polymer', 1, 0x2a2b2e, 1.8);
+  photo(mats.steel, 'steel', 1, 0xb4b8bd); photo(mats.rubber, 'polymer', 1, 0x18181a, 2.3);
+  wear(mats.metal, 'vec3(0.3, 0.31, 0.33)', 1); wear(mats.poly, 'vec3(0.09)', 0.6);
   return mats;
 }
 
+// Metres per texture repeat for each finish: UVs are box-projected in gun space so every part gets the same texel density.
+const TILE = { metal: 0.15, poly: 0.08, steel: 0.1, rubber: 0.08, dark: 0.1 };
 // [{geo, mat, name}] — name 'bolt' and 'mag' parts animate; 'holo' parts make up the sight.
 export function rifleParts() {
-  const P = [], put = (geo, mat, name) => P.push({ geo, mat, name });
+  const P = [], put = (geo, mat, name) => {
+    if (!geo.attributes.aWear) geo.setAttribute('aWear', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count), 1)); // merge needs it on every part
+    P.push({ geo: worldUV(geo, TILE[mat]), mat, name });
+  };
   // receivers
   put(side([[-0.09, 0.012], [0.14, 0.012], [0.14, 0.05], [0.03, 0.052], [-0.07, 0.052], [-0.09, 0.045]], 0.044), 'metal');
   put(side([[-0.085, 0.012], [0.12, 0.012], [0.12, -0.004], [0.073, -0.004], [0.076, -0.05], [0.069, -0.058], [-0.004, -0.058], [-0.008, -0.013],
