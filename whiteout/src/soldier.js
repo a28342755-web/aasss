@@ -4,7 +4,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { Humanoid, JOINT as J } from './humanoid.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { F, angDiff } from './core.js';
+import { canvas } from './textures.js';
 
 let base = null;
 export function loadSoldier(url) {
@@ -55,30 +57,80 @@ function frame(up, right, out) {
 
 const NAMES = { hips: 'Hips', spine: 'Spine', spine2: 'Spine2', neck: 'Neck', head: 'Head', lArm: 'LeftArm', lFore: 'LeftForeArm', lHand: 'LeftHand',
   rArm: 'RightArm', rFore: 'RightForeArm', rHand: 'RightHand', lUp: 'LeftUpLeg', lLeg: 'LeftLeg', lFoot: 'LeftFoot', rUp: 'RightUpLeg', rLeg: 'RightLeg', rFoot: 'RightFoot' };
-const teamMats = new Map();
+// The stock texture is orange-brown: desaturate it once, then tint per squad (black kit vs dark coyote, like the reference).
+const greys = new Map(), teamMats = new Map();
+function greyMap(t) {
+  if (!t || !t.image || !t.image.width) return t;
+  if (!greys.has(t)) {
+    const img = t.image, c = canvas(img.width, img.height), g = c.getContext('2d');
+    g.filter = 'grayscale(1) contrast(1.15)'; g.drawImage(img, 0, 0);
+    const n = new THREE.CanvasTexture(c);
+    Object.assign(n, { flipY: t.flipY, colorSpace: THREE.SRGBColorSpace, wrapS: t.wrapS, wrapT: t.wrapT, anisotropy: 4 });
+    greys.set(t, n);
+  }
+  return greys.get(t);
+}
 function teamMat(m, team) {
   const key = m.uuid + ':' + team;
-  if (!teamMats.has(key)) { const c = m.clone(); c.color.multiply(new THREE.Color(team === 1 ? 0xd6c49c : 0x60656d)); teamMats.set(key, c); } // dark kit vs khaki
+  if (!teamMats.has(key)) { const c = m.clone(); c.map = greyMap(m.map); c.color.set(team === 1 ? 0x5e5546 : 0x3a3c40); teamMats.set(key, c); }
   return teamMats.get(key);
+}
+
+// Webbing fabric for plate carriers, pouches and packs: rows of strap with stitching.
+let molle = null;
+function gearMats(team) {
+  if (!molle) {
+    const S = 256, c = canvas(S), g = c.getContext('2d');
+    g.fillStyle = '#8a8a7a'; g.fillRect(0, 0, S, S);
+    for (let y = 8; y < S; y += 32) {
+      g.fillStyle = 'rgba(40,40,32,0.55)'; g.fillRect(0, y, S, 16);
+      g.fillStyle = 'rgba(255,255,240,0.1)'; g.fillRect(0, y, S, 2);
+      for (let x = 12; x < S; x += 38) { g.fillStyle = 'rgba(20,20,16,0.6)'; g.fillRect(x, y, 3, 16); }
+    }
+    molle = new THREE.CanvasTexture(c); molle.colorSpace = THREE.SRGBColorSpace; molle.wrapS = molle.wrapT = THREE.RepeatWrapping;
+  }
+  const std = (o) => new THREE.MeshStandardMaterial(o);
+  const [plate, pack] = team === 1 ? [0x8a7c5c, 0x968664] : [0x5f5f45, 0x6e6c4c];
+  return { plate: std({ map: molle, color: plate, roughness: 0.92 }), pouch: std({ map: molle, color: plate, roughness: 0.92 }), pack: std({ map: molle, color: pack, roughness: 0.92 }),
+    roll: std({ color: team === 1 ? 0x6e6450 : 0x46463a, roughness: 0.95 }), lens: std({ color: 0x0c1014, roughness: 0.15, metalness: 0.6, envMapIntensity: 2 }) };
 }
 
 export class SkinnedSoldier extends Humanoid {
   build(st, styleIdx) {
     const team = styleIdx >= 2 ? 1 : 0;
     this.model = SkeletonUtils.clone(base.scene);
-    this.model.rotation.y = Math.PI; // the rig faces +Z; the game's forward is -Z
     this.g.add(this.model);
-    this.model.traverse((o) => { if (o.isSkinnedMesh) { o.castShadow = true; o.frustumCulled = false; o.material = teamMat(o.material, team); } });
+    this.model.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      if (o.name.includes('visor')) { o.visible = false; return; } // sci-fi visor off; goggles go on instead
+      o.castShadow = true; o.frustumCulled = false; o.material = teamMat(o.material, team);
+    });
     this.b = {};
     for (const [k, n] of Object.entries(NAMES)) this.b[k] = this.model.getObjectByName('mixamorig' + n) || this.model.getObjectByName('mixamorig:' + n);
     // helmet with NVG mount and ear pro, parented to the head bone (bone space is in centimetres)
-    const hm = new THREE.MeshStandardMaterial({ color: team === 1 ? 0x6e6650 : 0x2c2f33, roughness: 0.7 }), dark = new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.5, metalness: 0.5 });
+    const hm = new THREE.MeshStandardMaterial({ color: team === 1 ? 0x5a5240 : 0x26282b, roughness: 0.7 }), dark = new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: 0.5, metalness: 0.5 });
     const helm = new THREE.Group(); helm.scale.setScalar(100); helm.position.set(0, 12.5, 1.2);
     const part = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; helm.add(o); };
     part(new THREE.SphereGeometry(0.132, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.56), hm, 0, 0, 0);
     part(new THREE.BoxGeometry(0.05, 0.035, 0.03), dark, 0, 0.07, 0.12);
     for (const sx of [-1, 1]) { part(new THREE.CylinderGeometry(0.045, 0.045, 0.035, 14).rotateZ(Math.PI / 2), dark, sx * 0.12, -0.04, 0.0); part(new THREE.BoxGeometry(0.012, 0.022, 0.13), dark, sx * 0.126, 0.025, 0.0); }
     this.b.head.add(helm);
+    // load-bearing kit on the chest bone (+Y up the spine, +Z forward), knee pads on the shins (front is -Z)
+    const gm = gearMats(team), rb = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 2, r);
+    const kit = (bone, items) => {
+      const g = new THREE.Group(); g.scale.setScalar(100); bone.add(g);
+      for (const [geo, m, x, y, z, rx = 0] of items) { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.x = rx; o.castShadow = true; g.add(o); }
+    };
+    kit(this.b.spine2, [
+      [rb(0.31, 0.33, 0.06, 0.02), gm.plate, 0, 0.02, 0.13], [rb(0.31, 0.35, 0.05, 0.02), gm.plate, 0, 0.03, -0.13],
+      [rb(0.39, 0.12, 0.29, 0.04), gm.plate, 0, -0.17, 0],
+      [rb(0.07, 0.11, 0.05, 0.012), gm.pouch, -0.077, -0.03, 0.18], [rb(0.07, 0.11, 0.05, 0.012), gm.pouch, 0, -0.03, 0.18], [rb(0.07, 0.11, 0.05, 0.012), gm.pouch, 0.077, -0.03, 0.18],
+      [rb(0.31, 0.41, 0.18, 0.04), gm.pack, 0, 0.0, -0.25], [new THREE.CylinderGeometry(0.065, 0.065, 0.3, 14).rotateZ(Math.PI / 2), gm.roll, 0, 0.24, -0.24],
+      [new THREE.BoxGeometry(0.05, 0.025, 0.3), gm.plate, -0.12, 0.2, 0], [new THREE.BoxGeometry(0.05, 0.025, 0.3), gm.plate, 0.12, 0.2, 0],
+      [rb(0.07, 0.13, 0.08, 0.015), gm.pouch, 0.2, -0.05, -0.12], [new THREE.CylinderGeometry(0.003, 0.003, 0.32, 4), dark, 0.21, 0.18, -0.14],
+    ]);
+    for (const leg of [this.b.lLeg, this.b.rLeg]) kit(leg, [[rb(0.095, 0.11, 0.05, 0.02), dark, 0, 0.035, -0.075]]);
+    kit(this.b.head, [[rb(0.15, 0.042, 0.05, 0.015), gm.lens, 0, 0.085, 0.09]]);
     this.mixer = new THREE.AnimationMixer(this.model);
     this.act = {};
     for (const c of base.animations) if (['Idle', 'Walk', 'Run'].includes(c.name)) { const a = this.mixer.clipAction(c); a.play(); a.setEffectiveWeight(c.name === 'Idle' ? 1 : 0); this.act[c.name] = a; }
@@ -105,20 +157,23 @@ export class SkinnedSoldier extends Humanoid {
     this.act.Walk.timeScale = (back ? -1 : 1) * clamp(speed / 1.6, 0.7, 1.9); this.act.Run.timeScale = clamp(speed / 5, 0.8, 1.3);
     this.mixer.update(dt);
     this.g.updateMatrixWorld(true);
-    // crouch: lower the body and re-solve the legs so the feet stay planted
+    // combat stance: always low with bent knees (deeper when crouching); legs re-solved so the feet stay planted
     this.crouch += (((flags & F.CROUCH) ? 1 : 0) - this.crouch) * Math.min(1, dt * 10);
-    this.model.position.y = -0.36 * this.crouch;
     const fwd = tmp.set(-Math.sin(this.bodyYaw), 0, -Math.cos(this.bodyYaw)).clone();
-    if (this.crouch > 0.01) {
-      const fl = wp(b.lFoot, new THREE.Vector3()), fr = wp(b.rFoot, new THREE.Vector3());
-      this.g.updateMatrixWorld(true);
-      fr.addScaledVector(fwd, 0.22 * this.crouch);
-      const pole = fwd.clone().addScaledVector(UP, -0.2);
-      ik2(b.lUp, b.lLeg, b.lFoot, fl, pole); ik2(b.rUp, b.rLeg, b.rFoot, fr, pole);
-    } else this.g.updateMatrixWorld(true);
-    // spine twists back toward the aim; chest and head pitch with it
-    const twist = angDiff(this.bodyYaw, yaw), right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    const fl = wp(b.lFoot, new THREE.Vector3()), fr = wp(b.rFoot, new THREE.Vector3());
+    this.model.position.y = -(0.1 + 0.33 * this.crouch);
+    this.g.updateMatrixWorld(true);
+    fr.addScaledVector(fwd, 0.22 * this.crouch);
+    const pole = fwd.clone().addScaledVector(UP, -0.2);
+    ik2(b.lUp, b.lLeg, b.lFoot, fl, pole); ik2(b.rUp, b.rLeg, b.rFoot, fr, pole);
+    // hunch the torso forward, keep the head level; spine twists back toward the aim; chest and head pitch with it
+    const twist = angDiff(this.bodyYaw, yaw), right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), bodyRight = new THREE.Vector3(Math.cos(this.bodyYaw), 0, -Math.sin(this.bodyYaw));
+    const lean = 0.22 + 0.1 * this.crouch + (run ? 0.18 : 0);
+    rotateWorld(b.spine, q1.setFromAxisAngle(bodyRight, -lean));
     q1.setFromAxisAngle(UP, twist * 0.5); rotateWorld(b.spine, q1.clone()); rotateWorld(b.spine2, q1.setFromAxisAngle(UP, twist * 0.5));
+    rotateWorld(b.neck, q1.setFromAxisAngle(right, lean * 0.75));
+    // bladed shooting stance: left shoulder forward so the support hand reaches the handguard, head turned back to the aim
+    rotateWorld(b.spine2, q1.setFromAxisAngle(UP, -0.45)); rotateWorld(b.neck, q1.setFromAxisAngle(UP, 0.45));
     rotateWorld(b.spine2, q1.setFromAxisAngle(right, pitch * 0.55));
     rotateWorld(b.neck, q1.setFromAxisAngle(right, pitch * 0.35));
     // rifle shouldered on the right, along the aim line (low ready when sprinting or reloading)
@@ -132,7 +187,8 @@ export class SkinnedSoldier extends Humanoid {
     this.rifle.matrix.makeBasis(vx, vy, vz).setPosition(origin);
     this.rifle.matrixWorldNeedsUpdate = true;
     const grip = origin.clone().addScaledVector(vy, -0.08).addScaledVector(vz, 0.095);
-    const fore = origin.clone().addScaledVector(vy, -0.03).addScaledVector(vz, -0.3).addScaledVector(vx, -0.02);
+    const fore = origin.clone().addScaledVector(vy, -0.035).addScaledVector(vz, -0.21).addScaledVector(vx, -0.02);
+    fore.addScaledVector(A.subVectors(fore, wp(b.lArm, B)).normalize(), -0.06); // hand bone sits at the wrist, short of the palm
     ik2(b.rArm, b.rFore, b.rHand, grip, right.clone().addScaledVector(UP, -1).addScaledVector(aimDir, -0.3));
     ik2(b.lArm, b.lFore, b.lHand, fore, right.clone().negate().addScaledVector(UP, -1));
     this.fill();
