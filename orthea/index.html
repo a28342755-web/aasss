@@ -37,6 +37,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .jobs{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:10px}
 .job{border:1px solid var(--line);border-radius:4px;padding:10px;background:var(--panel-2);display:flex;flex-direction:column;gap:6px;min-width:0}
 .job b{font-family:var(--font-display);font-size:18px}
+.portrait{height:120px;width:90px;margin:0 auto 4px;background-size:800% 100%;background-position:0 0;image-rendering:pixelated}
 .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid rgba(52,64,122,.45);font-variant-numeric:tabular-nums;font-size:13px}
 .row>span:first-child{min-width:0}
 .row .r{display:flex;align-items:center;gap:8px}
@@ -201,6 +202,9 @@ const JOBS={
             {n:'견제 신호탄',t:'mark',amt:.4,dur:10,range:500,mp:6,cd:8},
             {n:'전술 후퇴 신호',t:'buff',dur:4,fx:{spd:.4,def:.3},mp:6,cd:12}]},
 };
+// illustrated sprites (sprites/cutout.py): 8-frame idle sheets per 1st job, adventurer before the job change
+const ART={knight:'squire',warrior:'warrior',lancer:'lanceman',archer:'archer',rogue:'rogue',mage:'mage',summoner:'summoner',cleric:'cleric',fighter:'fighter',hunter:'tracker',swords:'swordsman',tactician:'strategist'};
+const artOf=job=>ART[job]||'adventurer',SPR={},spr=id=>SPR[id]||(SPR[id]=Object.assign(new Image(),{src:`assets/${id}.png`}));
 const BASE_MODS={hp:1,mp:1,def:1,melee:1,ranged:1,magic:1,spd:1,range:1,cd:1,regen:1,heal:1,summon:1,guardTaken:.25,crit:0,eva:0,mercy:0,parryHeal:0,hpRegen:0};
 
 // ───────────────────────── reputation (V장) ─────────────────────────
@@ -614,9 +618,18 @@ function drawMobs(){
   }
 }
 function drawPlayer(){
-  if(P.dead){ctx.save();ctx.translate(P.x-cam,P.y);ctx.globalAlpha=.6;R(-22,-10,44,10,P.job?JOBS[P.job].color:'#8f7350');R(16,-12,12,12,'#f1c9a0');ctx.restore();return;}
+  const im=spr(artOf(P.job)),ok=im.complete&&im.naturalWidth,sx=Math.round(P.x-cam),y=Math.round(P.y),fw=ok&&im.width/8,fh=ok&&im.height,h=92,w=ok&&h*fw/fh;
+  if(P.dead){ctx.save();if(ok){ctx.imageSmoothingEnabled=false;ctx.globalAlpha=.6;ctx.translate(sx+h/2,y-w/2);ctx.rotate(-Math.PI/2);ctx.drawImage(im,0,0,fw,fh,-w/2,-h,w,h);}
+    else{ctx.translate(sx,y);ctx.globalAlpha=.6;R(-22,-10,44,10,P.job?JOBS[P.job].color:'#8f7350');R(16,-12,12,12,'#f1c9a0');}ctx.restore();return;}
   if(P.inv>0&&Math.floor(P.inv*20)%2&&!P.parry)return;
-  const sx=Math.round(P.x-cam),y=Math.round(P.y);ctx.save();ctx.translate(sx,y);ctx.scale(P.face,1);if(P.hidden>0)ctx.globalAlpha=.35;
+  if(ok){ // 8-frame idle loop at ~8 fps, bobs while walking, small lunge on attack
+    const f=Math.floor(gameTime*8.3)%8,bob=Math.abs(P.vx)>10&&P.onGround?-Math.abs(Math.sin(P.walk))*3:0;
+    ctx.save();ctx.translate(sx+(P.atkAnim>0?P.face*4:0),y+bob+2);ctx.scale(P.face,1);if(P.hidden>0)ctx.globalAlpha=.35;ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(im,f*fw,0,fw,fh,-w/2,-h,w,h);
+    if(P.guarding||(P.dash&&P.dash.guard)){ctx.strokeStyle='rgba(200,214,240,.9)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(8,-38,30,-1.1,1.1);ctx.stroke();}
+    ctx.restore();
+  }else{
+  ctx.save();ctx.translate(sx,y);ctx.scale(P.face,1);if(P.hidden>0)ctx.globalAlpha=.35;
   const tunic=P.job?JOBS[P.job].color:'#8f7350',ph=Math.abs(P.vx)>10&&P.onGround?Math.sin(P.walk):0;
   R(-6+ph*3,-14,5,14,'#3a3346');R(1-ph*3,-14,5,14,'#2f2a3a');R(-7+ph*3,-3,7,3,'#2a2018');R(0-ph*3,-3,7,3,'#2a2018');
   R(-9,-34,18,21,tunic);R(-9,-17,18,3,'#3b2a1a');R(-7,-47,14,13,'#f1c9a0');R(-8,-50,16,5,'#4b3325');R(-8,-47,3,8,'#4b3325');R(3,-42,2,2,'#1c1c24');
@@ -624,8 +637,8 @@ function drawPlayer(){
   else if(P.weapon==='bow'){ctx.strokeStyle='#8a5a2a';ctx.lineWidth=3;ctx.beginPath();ctx.arc(6,-26,14,-1.2,1.2);ctx.stroke();ctx.strokeStyle='#e8e0c8';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(6+14*Math.cos(-1.2),-26+14*Math.sin(-1.2));ctx.lineTo(P.atkAnim>0?2:6+14*Math.cos(1.2)-4,-26);ctx.lineTo(6+14*Math.cos(1.2),-26+14*Math.sin(1.2));ctx.stroke();}
   else{R(9,-52,3,42,'#6b4a2a');circle(10.5,-55,5,'#9fc4ff');circle(10.5,-55,9,'rgba(159,196,255,.25)');}
   if(P.guarding||(P.dash&&P.dash.guard)){R(10,-40,7,28,'#b8c2d8');R(11,-38,5,24,'#8592b0');}
-  ctx.restore();
-  if(P.shield>0){ctx.strokeStyle='rgba(130,180,255,.75)';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(sx,y-24,24,32,0,0,7);ctx.stroke();}
+  ctx.restore();}
+  if(P.shield>0){ctx.strokeStyle='rgba(130,180,255,.75)';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(sx,y-(ok?44:24),ok?34:24,ok?50:32,0,0,7);ctx.stroke();}
   if(P.parry>0){ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(sx+P.face*14,y-28,18,-1,1);ctx.stroke();}
   if(P.stun>0)for(let i=0;i<3;i++)circle(sx+Math.cos(gameTime*6+i*2)*12,y-56,2.5,'#ffe08a');
   if(P.summon){const s=P.summon;circle(s.x-cam,s.y,10,'rgba(215,176,255,.25)');circle(s.x-cam,s.y,5,'#e8d0ff');}
@@ -705,6 +718,7 @@ function render(){
 // ───────────────────────── panels ─────────────────────────
 let panelKind=null;
 function openPanel(kind,html){panelKind=kind;panel.innerHTML=`<div class="card" role="dialog" aria-modal="true">${html}</div>`;panel.hidden=false;paused=true;held.clear();
+  panel.querySelectorAll('[data-art]').forEach(el=>{const im=spr(el.dataset.art),fit=()=>{el.style.width=Math.round(120*im.width/8/im.height)+'px';};im.complete&&im.naturalWidth?fit():im.addEventListener('load',fit,{once:true});});
   const b=panel.querySelector('button.pri:not(:disabled)')||panel.querySelector('button:not(:disabled)');b&&b.focus({preventScroll:true});}
 function closePanel(){document.activeElement?.blur();panel.hidden=true;panelKind=null;paused=false;}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -752,7 +766,7 @@ function showStats(confirmReset){
   const statRows=STAT_KEYS.map(k=>`<div class="row"><span>${STAT_KO[k]} <span class="sub">${k}</span></span><span class="r">${P.stats[k].toFixed(1)} <span class="sub">유효 ${eff(P.stats[k]).toFixed(2)}</span>${btn('stat','+',{arg:k,sm:1,dis:P.points<=0||P.stats[k]>=100})}</span></div>`).join('');
   const dr=(a,b)=>`<div class="row"><span>${a}</span><span>${b}</span></div>`;
   const profRows=Object.keys(PROF_KO).map(k=>`<div class="row"><span>${PROF_KO[k]}</span><span class="r"><span class="bar"><i style="width:${P.prof[k]}%"></i></span>${P.prof[k].toFixed(1)}</span></div>`).join('');
-  const jobHtml=job?`<p><b>${job.name}</b> <span class="tag">${job.line}</span> <span class="sub">${job.blurb}</span></p>
+  const jobHtml=job?`<div class="portrait" data-art="${artOf(P.job)}" style="background-image:url(assets/${artOf(P.job)}.png)" role="img" aria-label="${job.name}"></div><p><b>${job.name}</b> <span class="tag">${job.line}</span> <span class="sub">${job.blurb}</span></p>
       <ul>${job.passives.map(p=>`<li>패시브 · <b>${p[0]}</b> — ${p[1]}</li>`).join('')}${job.skills.map((s,i)=>`<li>액티브 ${i+1} · <b>${s.n}</b> <span class="sub">Lv ${SKILL_LV[i]} · MP ${s.mp} · ${s.cd}초</span>${P.level<SKILL_LV[i]?' <span class="warn">미습득</span>':''}</li>`).join('')}</ul>`
     :`<p>모험가 <span class="sub">— Lv 3 이상, 숙련도 8 이상이면 전직 (현재 최고: ${PROF_KO[tk]} ${tv.toFixed(1)})</span></p>${jobReady()?btn('openjob','전직의 갈림길 열기',{pri:1}):''}`;
   openPanel('stats',`<h2>Lv.${P.level} ${job?job.name:'모험가'}</h2>
@@ -772,7 +786,7 @@ function showJob(){
   openPanel('job',`<span class="tag">행동 기반 3지 선다 전직</span><h2>전직의 갈림길</h2>
     <p>시스템이 당신의 플레이 기록을 분석했습니다. 가장 두드러진 성향은 <b>${PATH_KO[k]}</b>입니다 <span class="sub">(${PROF_KO[k]} ${v.toFixed(1)})</span>.</p>
     <p class="sub">하나를 고르면 1차 직업으로 확정됩니다. 직업과 패시브는 사망해도 유지되고, 액티브 스킬은 Lv ${SKILL_LV.join(' · ')}에 하나씩 익힙니다.</p>
-    <div class="jobs">${PATHS[k].map(id=>{const j=JOBS[id];return`<div class="job"><span class="tag">${j.line}</span><b>${j.name}</b><span class="sub">${j.blurb}</span>
+    <div class="jobs">${PATHS[k].map(id=>{const j=JOBS[id];return`<div class="job"><div class="portrait" data-art="${artOf(id)}" style="background-image:url(assets/${artOf(id)}.png)" role="img" aria-label="${j.name}"></div><span class="tag">${j.line}</span><b>${j.name}</b><span class="sub">${j.blurb}</span>
       <ul>${j.skills.map(s=>`<li>${s.n}</li>`).join('')}</ul><span class="sub">패시브: ${j.passives.map(p=>p[0]).join(', ')}</span>${btn('jobpick','이 길을 걷는다',{arg:id,pri:1})}</div>`;}).join('')}</div>
     <div class="btns">${btn('close','나중에 결정')}</div>`);
 }
