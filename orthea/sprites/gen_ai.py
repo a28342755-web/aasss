@@ -1,6 +1,6 @@
 """Orthea job illustrations in the reference style, free and local: SD-Turbo img2img on CPU,
 starting from the reference image (staff erased) and steering outfit, headgear and weapon per job.
-Usage: python gen_ai.py <reference.jpg> <jobs.json> <out dir> [id,id,...]"""
+Usage: python gen_ai.py <reference.jpg> <jobs.json> <out dir> [id,id,...] [seed offset for re-rolls]"""
 import colorsys, hashlib, json, os, sys, time
 import numpy as np, torch
 from diffusers import AutoPipelineForImage2Image
@@ -58,7 +58,7 @@ def init_image(path):
     return Image.fromarray(a.astype('uint8')).resize((512, 512), Image.LANCZOS)
 
 if __name__ == '__main__':
-    ref, jobs_path, out = sys.argv[1:4]; only = set(sys.argv[4].split(',')) if len(sys.argv) > 4 else None
+    ref, jobs_path, out = sys.argv[1:4]; only = set(sys.argv[4].split(',')) if len(sys.argv) > 4 and sys.argv[4] else None; reroll = int(sys.argv[5]) if len(sys.argv) > 5 else 0
     jobs = [j for j in json.load(open(jobs_path)) if not only or j['id'] in only]
     os.makedirs(out, exist_ok=True)
     pipe = AutoPipelineForImage2Image.from_pretrained('stabilityai/sd-turbo', torch_dtype=torch.float32); pipe.set_progress_bar_config(disable=True)
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     for k, j in enumerate(jobs):
         dst = os.path.join(out, j['id'] + '.png')
         if os.path.exists(dst): continue
-        p = prompt(j); seed = int(hashlib.md5(j['id'].encode()).hexdigest()[:8], 16)
+        p = prompt(j); seed = int(hashlib.md5(j['id'].encode()).hexdigest()[:8], 16) + reroll * 7919
         t = time.time()
         im = pipe(prompt=p, image=recolor(init, j['main'], j['glow']), strength=.64, num_inference_steps=5, guidance_scale=0.0, generator=torch.Generator().manual_seed(seed)).images[0]
         im.save(dst); meta[j['id']] = {'prompt': p, 'seed': seed}

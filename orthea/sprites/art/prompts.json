@@ -1,0 +1,927 @@
+{
+ "squire": {
+  "ko": "스콰이어",
+  "prompt": "squire holding a steel longsword and a red shield, steel half helmet, blue plate armor, light blue hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 858506493
+ },
+ "guardian": {
+  "ko": "가디언",
+  "prompt": "guardian holding a steel longsword and a blue shield, open-face steel knight helmet, blue plate armor, dark orange hair, cute face, blue cape, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3629343482
+ },
+ "ironwall": {
+  "ko": "아이언월",
+  "prompt": "ironwall holding a war hammer and a blue shield, open-face steel knight helmet, blue plate armor, orange hair, cute face, blue cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 502396692
+ },
+ "bulwark": {
+  "ko": "불워크",
+  "prompt": "bulwark holding a steel longsword and a teal shield, open-face steel knight helmet, blue plate armor, gold hair, cute face, teal cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2444634592
+ },
+ "holy-knight": {
+  "ko": "홀리 나이트",
+  "prompt": "holy knight holding a steel longsword and a light gold shield, open-face steel knight helmet, blue plate armor, purple hair, cute face, light gold cape, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2585553051
+ },
+ "templar": {
+  "ko": "템플러",
+  "prompt": "templar holding a steel longsword and a red shield, open-face steel knight helmet, blue plate armor, dark blue hair, cute face, red cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4131831977
+ },
+ "justice": {
+  "ko": "저스티스",
+  "prompt": "justice holding a war hammer and a gold shield, open-face steel knight helmet, blue plate armor, red hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2470819049
+ },
+ "vanguard": {
+  "ko": "뱅가드",
+  "prompt": "vanguard holding a steel longsword and a orange shield, steel half helmet, blue plate armor, blue hair, cute face, orange cape, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1484501355
+ },
+ "desperate-charger": {
+  "ko": "데스페레이트 차저",
+  "prompt": "desperate charger holding a steel longsword and a dark red shield, horned helmet, blue plate armor, light pink hair, cute face, dark red cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2895157435
+ },
+ "shield-master": {
+  "ko": "실드 마스터",
+  "prompt": "shield master holding a bare hands and a orange shield, open-face steel knight helmet, blue plate armor, orange hair, cute face, orange cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3820680087
+ },
+ "warrior": {
+  "ko": "워리어",
+  "prompt": "warrior holding a battle axe, orange bandana, orange tunic, light blue hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1043859045
+ },
+ "berserker": {
+  "ko": "버서커",
+  "prompt": "berserker holding a battle axe, horned helmet, dark red tunic, dark orange hair, cute face, red cape, red sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3498407068
+ },
+ "warlord": {
+  "ko": "워로드",
+  "prompt": "warlord holding a huge two-handed greatsword, horned helmet, dark red tunic, orange hair, cute face, gold cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3688002231
+ },
+ "rage-blood": {
+  "ko": "레이지 블러드",
+  "prompt": "rage blood holding a battle axe, no hat, dark red tunic, gold hair, cute face, red cape, legendary glowing aura, red sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1203641940
+ },
+ "gladiator": {
+  "ko": "글래디에이터",
+  "prompt": "gladiator holding a steel longsword, steel half helmet, orange tunic, purple hair, cute face, gold cape, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3428338989
+ },
+ "master-arena": {
+  "ko": "마스터 아레나",
+  "prompt": "master arena holding a steel longsword and a gold shield, steel half helmet, orange tunic, dark blue hair, cute face, gold cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3803414132
+ },
+ "blade-dancer": {
+  "ko": "블레이드 댄서",
+  "prompt": "blade dancer holding a katana, light pink bandana, pink tunic, red hair, cute face, light pink cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1964649305
+ },
+ "slayer": {
+  "ko": "슬레이어",
+  "prompt": "slayer holding a huge two-handed greatsword, no hat, dark gray tunic, blue hair, cute face, red cape, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 153437822
+ },
+ "destroyer": {
+  "ko": "데스트로이어",
+  "prompt": "destroyer holding a war hammer, horned helmet, dark gray tunic, light pink hair, cute face, orange cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2081453135
+ },
+ "overlord": {
+  "ko": "오버로드",
+  "prompt": "overlord holding a huge two-handed greatsword, golden crown, dark purple tunic, orange hair, cute face, purple cape, legendary glowing aura, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2454122624
+ },
+ "lanceman": {
+  "ko": "랜스맨",
+  "prompt": "lanceman holding a long spear, blue bandana, teal leather coat, light blue hair, cute face, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3605414275
+ },
+ "pikeman": {
+  "ko": "피이크맨",
+  "prompt": "pikeman holding a long spear, steel half helmet, teal plate armor, dark orange hair, cute face, green cape, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2555300474
+ },
+ "phalanx": {
+  "ko": "팔랑크스",
+  "prompt": "phalanx holding a long spear and a orange shield, open-face steel knight helmet, teal plate armor, orange hair, cute face, orange cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1330418976
+ },
+ "guard-spear": {
+  "ko": "가드 스피어",
+  "prompt": "guard spear holding a long spear, steel half helmet, teal plate armor, gold hair, cute face, green cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 962933162
+ },
+ "lancer": {
+  "ko": "랜서",
+  "prompt": "lancer holding a long spear, steel half helmet, blue leather coat, purple hair, cute face, white cape, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3088752122
+ },
+ "charger": {
+  "ko": "차저",
+  "prompt": "charger holding a long spear, steel half helmet, blue leather coat, dark blue hair, cute face, orange cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3015027075
+ },
+ "tempest-lancer": {
+  "ko": "템페스트 랜서",
+  "prompt": "tempest lancer holding a long spear, steel half helmet, blue leather coat, red hair, cute face, light teal cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3298684053
+ },
+ "dragoon": {
+  "ko": "드라군",
+  "prompt": "dragoon holding a long spear, horned helmet, dark blue plate armor, blue hair, cute face, purple cape, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4097162090
+ },
+ "high-dragoon": {
+  "ko": "하이 드라군",
+  "prompt": "high dragoon holding a long spear, horned helmet, dark blue plate armor, light pink hair, cute face, purple cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3359310502
+ },
+ "sky-spear": {
+  "ko": "스카이 스피어",
+  "prompt": "sky spear holding a long spear, horned helmet, teal plate armor, orange hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3440543481
+ },
+ "archer": {
+  "ko": "아처",
+  "prompt": "archer holding a wooden longbow, feathered cap, green tunic, light blue hair, cute face, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2549866338
+ },
+ "hunter": {
+  "ko": "헌터",
+  "prompt": "hunter holding a wooden longbow, hood, dark green tunic, dark orange hair, cute face, orange cape, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1796945611
+ },
+ "trapper": {
+  "ko": "트래퍼",
+  "prompt": "trapper holding a crossbow, hood, dark green tunic, orange hair, cute face, orange cape, legendary glowing aura, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1239946384
+ },
+ "beast-master": {
+  "ko": "비스트 마스터",
+  "prompt": "beast master holding a wooden longbow, hood, dark orange tunic, gold hair, cute face, orange cape, legendary glowing aura, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2297959451
+ },
+ "ranger": {
+  "ko": "레인저",
+  "prompt": "ranger holding a wooden longbow, wide-brim leather hat, dark green tunic, purple hair, cute face, orange cape, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2912053577
+ },
+ "scout": {
+  "ko": "스카우트",
+  "prompt": "scout holding a wooden longbow, hood, dark green tunic, dark blue hair, cute face, green cape, legendary glowing aura, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1798625035
+ },
+ "bound-archer": {
+  "ko": "바운드 아처",
+  "prompt": "bound archer holding a wooden longbow, orange bandana, green tunic, red hair, cute face, orange cape, legendary glowing aura, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3592547867
+ },
+ "sharpshooter": {
+  "ko": "샤프슈터",
+  "prompt": "sharpshooter holding a wooden longbow, feathered cap, dark blue tunic, blue hair, cute face, silver cape, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2226868653
+ },
+ "sniper": {
+  "ko": "스나이퍼",
+  "prompt": "sniper holding a crossbow, hood, dark blue tunic, light pink hair, cute face, dark gray cape, legendary glowing aura, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 472352496
+ },
+ "storm-archer": {
+  "ko": "스톰 아처",
+  "prompt": "storm archer holding a wooden longbow, feathered cap, blue tunic, orange hair, cute face, light blue cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4270156702
+ },
+ "rogue": {
+  "ko": "로그",
+  "prompt": "rogue holding a twin daggers, cloth mask over the mouth, dark purple tunic, light blue hair, cute face, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1152147737
+ },
+ "assassin": {
+  "ko": "어쌔신",
+  "prompt": "assassin holding a twin daggers, hood, dark purple tunic, dark orange hair, cute face, red cape, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2913992483
+ },
+ "phantom": {
+  "ko": "팬텀",
+  "prompt": "phantom holding a twin daggers, hood, dark blue tunic, orange hair, cute face, purple cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 252105576
+ },
+ "sickler": {
+  "ko": "시클러",
+  "prompt": "sickler holding a large scythe, hood, dark green tunic, gold hair, cute face, green cape, legendary glowing aura, green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1733210642
+ },
+ "thief": {
+  "ko": "시프",
+  "prompt": "thief holding a twin daggers, orange bandana, dark gray tunic, purple hair, cute face, orange cape, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1339898347
+ },
+ "bandit-king": {
+  "ko": "밴디트 킹",
+  "prompt": "bandit king holding a twin daggers, wide-brim leather hat, dark red tunic, dark blue hair, cute face, gold cape, legendary glowing aura, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 713649102
+ },
+ "phantom-thief": {
+  "ko": "팬텀 시프",
+  "prompt": "phantom thief holding a twin daggers, black top hat, black tunic, red hair, cute face, red cape, legendary glowing aura, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3161863845
+ },
+ "shadow-blade": {
+  "ko": "섀도우 블레이드",
+  "prompt": "shadow blade holding a katana, hood, dark blue tunic, blue hair, cute face, blue cape, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2312767841
+ },
+ "nightmare": {
+  "ko": "나이트메어",
+  "prompt": "nightmare holding a katana, hood, black tunic, light pink hair, cute face, purple cape, legendary glowing aura, purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2893367859
+ },
+ "abyss-stalker": {
+  "ko": "어비스 스토커",
+  "prompt": "abyss stalker holding a twin daggers, hood, black tunic, orange hair, cute face, blue cape, legendary glowing aura, blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2888494652
+ },
+ "mage": {
+  "ko": "메이지",
+  "prompt": "mage holding a magic staff with a glowing crystal, pointed wizard hat with gold band, long dark blue robe coat with gold trim, light blue hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2589039119
+ },
+ "wizard": {
+  "ko": "위자드",
+  "prompt": "wizard holding a magic staff with a glowing crystal, pointed wizard hat with gold band, long dark blue robe coat with gold trim, light blue hair, cute face, blue cape, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3637747739
+ },
+ "archmage": {
+  "ko": "아크메이지",
+  "prompt": "archmage holding a magic staff with a glowing crystal, pointed wizard hat with gold band, long dark blue robe coat with gold trim, light blue hair, cute face, purple cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 210145976
+ },
+ "elementalist": {
+  "ko": "엘리멘탈리스트",
+  "prompt": "elementalist holding a magic staff with a glowing crystal, pointed wizard hat with gold band, long dark red robe coat with gold trim, light blue hair, cute face, orange cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 97040559
+ },
+ "warlock": {
+  "ko": "워록",
+  "prompt": "warlock holding a magic staff with a glowing crystal, hood, long dark purple robe coat with gold trim, light blue hair, cute face, dark purple cape, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 865651526
+ },
+ "soul-taker": {
+  "ko": "소울 테이커",
+  "prompt": "soul taker holding a large scythe, hood, long black robe coat with gold trim, light blue hair, cute face, purple cape, legendary glowing aura, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1592949884
+ },
+ "plague-lord": {
+  "ko": "플라그 로드",
+  "prompt": "plague lord holding a skull-topped staff, hood, long black robe coat with gold trim, light blue hair, cute face, dark green cape, legendary glowing aura, green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2894692941
+ },
+ "sage": {
+  "ko": "세이지",
+  "prompt": "sage holding a spell book, golden circlet with a gem, long dark blue robe coat with gold trim, light blue hair, cute face, gold cape, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1789632184
+ },
+ "chronomancer": {
+  "ko": "크로노맨서",
+  "prompt": "chronomancer holding a magic staff with a glowing crystal, golden circlet with a gem, long dark purple robe coat with gold trim, light blue hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 111493412
+ },
+ "dimension-rift": {
+  "ko": "디멘션 리프트",
+  "prompt": "dimension rift holding a magic staff with a glowing crystal, pointed wizard hat with gold band, long dark purple robe coat with gold trim, light blue hair, cute face, pink cape, legendary glowing aura, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1559710703
+ },
+ "summoner": {
+  "ko": "서머너",
+  "prompt": "summoner holding a spell book, hood, long dark purple robe coat with gold trim, light blue hair, cute face, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 484927625
+ },
+ "elemental-summoner": {
+  "ko": "정령술사",
+  "prompt": "elemental summoner holding a magic staff with a glowing crystal, golden circlet with a gem, long dark blue robe coat with gold trim, dark orange hair, cute face, blue cape, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 688996148
+ },
+ "spirit-kings-master": {
+  "ko": "정령왕의 주인",
+  "prompt": "spirit kings master holding a magic staff with a glowing crystal, golden crown, long dark blue robe coat with gold trim, orange hair, cute face, gold cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4109114333
+ },
+ "nature-guardian": {
+  "ko": "네이처 가디언",
+  "prompt": "nature guardian holding a magic staff with a glowing crystal, golden circlet with a gem, long dark green robe coat with gold trim, gold hair, cute face, green cape, legendary glowing aura, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 606478728
+ },
+ "necromancer": {
+  "ko": "네크로맨서",
+  "prompt": "necromancer holding a skull-topped staff, hood, long black robe coat with gold trim, purple hair, cute face, dark gray cape, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1412783296
+ },
+ "lich-lord": {
+  "ko": "리치 로드",
+  "prompt": "lich lord holding a skull-topped staff, golden crown, long black robe coat with gold trim, dark blue hair, cute face, blue cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1706788641
+ },
+ "bone-architect": {
+  "ko": "본 아키텍트",
+  "prompt": "bone architect holding a war hammer, hood, long dark gray robe coat with gold trim, red hair, cute face, light gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3020617028
+ },
+ "beast-tamer": {
+  "ko": "비스트 테이머",
+  "prompt": "beast tamer holding a whip, orange bandana, dark orange leather coat, blue hair, cute face, orange cape, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2081254797
+ },
+ "alpha-predator": {
+  "ko": "알파 프레데터",
+  "prompt": "alpha predator holding a whip, horned helmet, dark orange leather coat, light pink hair, cute face, orange cape, legendary glowing aura, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4031236562
+ },
+ "menagerie": {
+  "ko": "메너저리",
+  "prompt": "menagerie holding a whip, wide-brim leather hat, dark gold leather coat, orange hair, cute face, gold cape, legendary glowing aura, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2940118457
+ },
+ "cleric": {
+  "ko": "클레릭",
+  "prompt": "cleric holding a spell book, hood, long light gold robe coat with gold trim, light blue hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2977030489
+ },
+ "priest": {
+  "ko": "프리스트",
+  "prompt": "priest holding a magic staff with a glowing crystal, tall white bishop mitre, long light gold robe coat with gold trim, dark orange hair, cute face, gold cape, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2139268058
+ },
+ "saint": {
+  "ko": "세인트",
+  "prompt": "saint holding a magic staff with a glowing crystal, golden circlet with a gem, long light gold robe coat with gold trim, orange hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 709631851
+ },
+ "oracle": {
+  "ko": "오라클",
+  "prompt": "oracle holding a spell book, white veil hood, long light blue robe coat with gold trim, gold hair, cute face, blue cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2710160947
+ },
+ "paladin": {
+  "ko": "팔라딘",
+  "prompt": "paladin holding a war hammer and a gold shield, open-face steel knight helmet, light gold plate armor, purple hair, cute face, gold cape, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1694313083
+ },
+ "crusader": {
+  "ko": "크루세이더",
+  "prompt": "crusader holding a banner flag on a pole and a red shield, open-face steel knight helmet, light gold plate armor, dark blue hair, cute face, red cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3894011490
+ },
+ "divine-knight": {
+  "ko": "디바인 나이트",
+  "prompt": "divine knight holding a steel longsword, steel half helmet, light gold plate armor, red hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1107295789
+ },
+ "exorcist": {
+  "ko": "엑소시스트",
+  "prompt": "exorcist holding a spell book, hood, long dark gray robe coat with gold trim, blue hair, cute face, light gold cape, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 439190903
+ },
+ "inquisitor": {
+  "ko": "인퀴지터",
+  "prompt": "inquisitor holding a whip, wide-brim leather hat, long dark gray robe coat with gold trim, light pink hair, cute face, red cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1576987713
+ },
+ "purifier": {
+  "ko": "퓨리파이어",
+  "prompt": "purifier holding a glowing lantern, hood, long light gold robe coat with gold trim, orange hair, cute face, orange cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4272592951
+ },
+ "fighter": {
+  "ko": "파이터",
+  "prompt": "fighter holding a glowing gauntlet fists, red bandana, orange tunic, light blue hair, cute face, gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3595771445
+ },
+ "monk": {
+  "ko": "몽크",
+  "prompt": "monk holding a glowing gauntlet fists, no hat, orange tunic, dark orange hair, cute face, red cape, gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 387672993
+ },
+ "grand-master": {
+  "ko": "그랜드 마스터",
+  "prompt": "grand master holding a glowing gauntlet fists, no hat, gold tunic, orange hair, cute face, orange cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 348725542
+ },
+ "asura": {
+  "ko": "아수라",
+  "prompt": "asura holding a glowing gauntlet fists, no hat, red tunic, gold hair, cute face, gold cape, legendary glowing aura, red sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2833745044
+ },
+ "grappler": {
+  "ko": "그래플러",
+  "prompt": "grappler holding a glowing gauntlet fists, no hat, blue tunic, purple hair, cute face, white cape, gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3061471983
+ },
+ "titan-breaker": {
+  "ko": "타이탄 브레이커",
+  "prompt": "titan breaker holding a glowing gauntlet fists, horned helmet, dark orange tunic, dark blue hair, cute face, orange cape, legendary glowing aura, gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 113161233
+ },
+ "ring-master": {
+  "ko": "링 마스터",
+  "prompt": "ring master holding a glowing gauntlet fists, cloth mask over the mouth, dark pink tunic, red hair, cute face, gold cape, legendary glowing aura, gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3074594431
+ },
+ "striker": {
+  "ko": "스트라이커",
+  "prompt": "striker holding a glowing gauntlet fists, red bandana, dark gray tunic, blue hair, cute face, red cape, gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3923797576
+ },
+ "counter-puncher": {
+  "ko": "카운터 펀처",
+  "prompt": "counter puncher holding a glowing gauntlet fists, light blue bandana, dark blue tunic, light pink hair, cute face, light blue cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2524193368
+ },
+ "blaze-kicker": {
+  "ko": "블레이즈 키커",
+  "prompt": "blaze kicker holding a glowing gauntlet fists, orange bandana, red tunic, orange hair, cute face, orange cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1108356379
+ },
+ "tracker": {
+  "ko": "트래커",
+  "prompt": "tracker holding a crossbow, wide-brim leather hat, dark gold leather coat, light blue hair, cute face, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2922048403
+ },
+ "monster-slayer": {
+  "ko": "몬스터 슬레이어",
+  "prompt": "monster slayer holding a huge two-handed greatsword, steel half helmet, dark gray leather coat, dark orange hair, cute face, red cape, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 987213244
+ },
+ "dragon-slayer": {
+  "ko": "드래곤 슬레이어",
+  "prompt": "dragon slayer holding a long spear, horned helmet, dark gold plate armor, orange hair, cute face, red cape, legendary glowing aura, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3087770529
+ },
+ "behemoth-hunter": {
+  "ko": "베히모스 헌터",
+  "prompt": "behemoth hunter holding a war hammer, horned helmet, dark orange leather coat, gold hair, cute face, orange cape, legendary glowing aura, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 989207917
+ },
+ "survivalist": {
+  "ko": "서바이벌리스트",
+  "prompt": "survivalist holding a battle axe, hood, gold leather coat, purple hair, cute face, light gold cape, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1566619663
+ },
+ "pathfinder": {
+  "ko": "패스파인더",
+  "prompt": "pathfinder holding a glowing lantern, wide-brim leather hat, green leather coat, dark blue hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3539544709
+ },
+ "alchemy-hunter": {
+  "ko": "알케미 헌터",
+  "prompt": "alchemy hunter holding a glowing potion flask, brass goggles on the forehead, dark green leather coat, red hair, cute face, green cape, legendary glowing aura, green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 944879108
+ },
+ "bounty-hunter": {
+  "ko": "바운티 헌터",
+  "prompt": "bounty hunter holding a crossbow, wide-brim leather hat, dark orange leather coat, blue hair, cute face, dark gray cape, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1511095020
+ },
+ "manhunter": {
+  "ko": "맨헌터",
+  "prompt": "manhunter holding a whip, cloth mask over the mouth, dark gray leather coat, light pink hair, cute face, orange cape, legendary glowing aura, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1186557892
+ },
+ "death-dealer": {
+  "ko": "데스 디럴",
+  "prompt": "death dealer holding a flintlock musket, wide-brim leather hat, black leather coat, orange hair, cute face, red cape, legendary glowing aura, light orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4226108406
+ },
+ "swordsman": {
+  "ko": "소드맨",
+  "prompt": "swordsman holding a steel longsword, no hat, dark blue leather coat, light blue hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1270074490
+ },
+ "blade-master": {
+  "ko": "블레이드 마스터",
+  "prompt": "blade master holding a katana, red bandana, dark blue leather coat, dark orange hair, cute face, red cape, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2369106646
+ },
+ "sword-saint": {
+  "ko": "소드 세인트",
+  "prompt": "sword saint holding a katana, no hat, light gold leather coat, orange hair, cute face, blue cape, legendary glowing aura, white sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 983237131
+ },
+ "weapon-master": {
+  "ko": "웨폰 마스터",
+  "prompt": "weapon master holding a huge two-handed greatsword, no hat, dark gray leather coat, gold hair, cute face, gold cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2744569219
+ },
+ "duelist": {
+  "ko": "듀얼리스트",
+  "prompt": "duelist holding a rapier, feathered cap, dark red leather coat, purple hair, cute face, gold cape, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2173879192
+ },
+ "tempest-blade": {
+  "ko": "템페스트 블레이드",
+  "prompt": "tempest blade holding a steel longsword, no hat, dark blue leather coat, dark blue hair, cute face, light teal cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 154791466
+ },
+ "fencing-master": {
+  "ko": "펜싱 마스터",
+  "prompt": "fencing master holding a rapier, feathered cap, light gold leather coat, red hair, cute face, dark blue cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1807577623
+ },
+ "spellblade": {
+  "ko": "스펠블레이드",
+  "prompt": "spellblade holding a steel longsword, golden circlet with a gem, dark blue leather coat, blue hair, cute face, blue cape, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1228661494
+ },
+ "arcane-slasher": {
+  "ko": "아케인 슬래셔",
+  "prompt": "arcane slasher holding a steel longsword, golden circlet with a gem, dark purple leather coat, light pink hair, cute face, purple cape, legendary glowing aura, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 531147824
+ },
+ "void-cutter": {
+  "ko": "보이드 커터",
+  "prompt": "void cutter holding a katana, no hat, black leather coat, orange hair, cute face, purple cape, legendary glowing aura, purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 444142069
+ },
+ "strategist": {
+  "ko": "스트래티지스트",
+  "prompt": "strategist holding a spell book, feathered cap, dark blue leather coat, light blue hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3509752945
+ },
+ "commander": {
+  "ko": "커맨더",
+  "prompt": "commander holding a conductor baton, military officer cap, dark blue leather coat, dark orange hair, cute face, gold cape, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4155276770
+ },
+ "grand-marshal": {
+  "ko": "그랜드 마샬",
+  "prompt": "grand marshal holding a conductor baton, military officer cap, dark blue leather coat, orange hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3869563915
+ },
+ "vanguard-captain": {
+  "ko": "뱅가드 캡틴",
+  "prompt": "vanguard captain holding a banner flag on a pole, steel half helmet, dark blue leather coat, gold hair, cute face, red cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4082645921
+ },
+ "engineer": {
+  "ko": "엔지니어",
+  "prompt": "engineer holding a big wrench, brass goggles on the forehead, dark orange leather coat, purple hair, cute face, orange cape, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2635235315
+ },
+ "siege-architect": {
+  "ko": "시즈 아키텍트",
+  "prompt": "siege architect holding a war hammer, brass goggles on the forehead, dark gray leather coat, dark blue hair, cute face, orange cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 384434961
+ },
+ "automaton-master": {
+  "ko": "오토마톤 마스터",
+  "prompt": "automaton master holding a big wrench, brass goggles on the forehead, dark blue leather coat, red hair, cute face, teal cape, legendary glowing aura, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1077973359
+ },
+ "inspector": {
+  "ko": "인스펙터",
+  "prompt": "inspector holding a spell book, wide-brim leather hat, dark orange leather coat, blue hair, cute face, gold cape, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2392244731
+ },
+ "weakness-exploiter": {
+  "ko": "약점 간파자",
+  "prompt": "weakness exploiter holding a brass telescope, feathered cap, dark gray leather coat, light pink hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 957584520
+ },
+ "illusion-trickster": {
+  "ko": "일루전 트릭스터",
+  "prompt": "illusion trickster holding a fan of playing cards, black top hat, dark purple leather coat, orange hair, cute face, pink cape, legendary glowing aura, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2681949014
+ },
+ "farmer": {
+  "ko": "파머",
+  "prompt": "farmer holding a pitchfork, wide-brim leather hat, green tunic, light blue hair, cute face, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2549707912
+ },
+ "shepherd": {
+  "ko": "셰퍼드",
+  "prompt": "shepherd holding a shepherd's crook, hood, light gold tunic, dark orange hair, cute face, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3993219772
+ },
+ "gardener": {
+  "ko": "가드너",
+  "prompt": "gardener holding a glowing potion flask, wide-brim leather hat, green tunic, orange hair, cute face, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1010746215
+ },
+ "forester": {
+  "ko": "포레스터",
+  "prompt": "forester holding a battle axe, feathered cap, dark green tunic, gold hair, cute face, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4056192496
+ },
+ "eco-lord": {
+  "ko": "에코 로드",
+  "prompt": "eco lord holding a magic staff with a glowing crystal, golden circlet with a gem, long dark green robe coat with gold trim, purple hair, cute face, green cape, legendary glowing aura, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3890730637
+ },
+ "blacksmith": {
+  "ko": "블랙스미스",
+  "prompt": "blacksmith holding a war hammer, orange bandana, dark orange leather coat, dark blue hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3259139969
+ },
+ "armorer": {
+  "ko": "아머러",
+  "prompt": "armorer holding a war hammer and a orange shield, steel half helmet, dark orange plate armor, red hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 346231677
+ },
+ "alchemist": {
+  "ko": "알케미스트",
+  "prompt": "alchemist holding a glowing potion flask, brass goggles on the forehead, dark green leather coat, blue hair, cute face, light green sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 321590074
+ },
+ "jeweler": {
+  "ko": "주얼러",
+  "prompt": "jeweler holding a bag of gold coins, golden circlet with a gem, dark purple leather coat, light pink hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4026941906
+ },
+ "tanner": {
+  "ko": "태너",
+  "prompt": "tanner holding a twin daggers, orange bandana, dark orange leather coat, orange hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2548495616
+ },
+ "woodworker": {
+  "ko": "우드워커",
+  "prompt": "woodworker holding a battle axe, feathered cap, orange leather coat, light blue hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1872518131
+ },
+ "chef": {
+  "ko": "셰프",
+  "prompt": "chef holding a big ladle, white chef hat, light gold leather coat, dark orange hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3417593883
+ },
+ "toysmith": {
+  "ko": "토이스미스",
+  "prompt": "toysmith holding a big wrench, brass goggles on the forehead, orange leather coat, orange hair, cute face, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2618383750
+ },
+ "master-architect": {
+  "ko": "마스터 아키텍트",
+  "prompt": "master architect holding a rolled scroll, feathered cap, dark blue leather coat, gold hair, cute face, gold cape, legendary glowing aura, orange sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3564749787
+ },
+ "legendary-craftsman": {
+  "ko": "레전더리 크래프트맨",
+  "prompt": "legendary craftsman holding a war hammer, gold bandana, dark orange leather coat, purple hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 900840623
+ },
+ "banker": {
+  "ko": "뱅커",
+  "prompt": "banker holding a bag of gold coins, black top hat, dark blue leather coat, dark blue hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 845986499
+ },
+ "trader": {
+  "ko": "트레이더",
+  "prompt": "trader holding a bag of gold coins, wide-brim leather hat, dark orange leather coat, red hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 91881707
+ },
+ "auctioneer": {
+  "ko": "옥셔니어",
+  "prompt": "auctioneer holding a war hammer, black top hat, dark pink leather coat, blue hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1752731656
+ },
+ "financier": {
+  "ko": "파이낸시어",
+  "prompt": "financier holding a spell book, black top hat, dark blue leather coat, light pink hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3612525356
+ },
+ "broker": {
+  "ko": "브로커",
+  "prompt": "broker holding a twin daggers, hood, dark gray leather coat, orange hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3821650803
+ },
+ "appraiser": {
+  "ko": "앱레이저",
+  "prompt": "appraiser holding a spell book, golden circlet with a gem, dark gray leather coat, light blue hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2136673314
+ },
+ "sharpener": {
+  "ko": "샤프너",
+  "prompt": "sharpener holding a steel longsword, orange bandana, dark gray leather coat, dark orange hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2944797345
+ },
+ "muskrat": {
+  "ko": "머스크랫",
+  "prompt": "muskrat holding a twin daggers, hood, dark orange leather coat, orange hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1334218428
+ },
+ "hotelier": {
+  "ko": "호텔리어",
+  "prompt": "hotelier holding a glowing lantern, feathered cap, dark red leather coat, gold hair, cute face, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1401882439
+ },
+ "tycoon": {
+  "ko": "타이쿤",
+  "prompt": "tycoon holding a bag of gold coins, golden crown, dark purple leather coat, purple hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2708460575
+ },
+ "scholar": {
+  "ko": "스콜라",
+  "prompt": "scholar holding a spell book, feathered cap, long dark blue robe coat with gold trim, dark blue hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 326175282
+ },
+ "archivist": {
+  "ko": "아르키비스트",
+  "prompt": "archivist holding a rolled scroll, hood, long dark orange robe coat with gold trim, red hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1592054085
+ },
+ "runic-decipherer": {
+  "ko": "루닉 디사이퍼러",
+  "prompt": "runic decipherer holding a spell book, golden circlet with a gem, long dark blue robe coat with gold trim, blue hair, cute face, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1887679876
+ },
+ "astronomer": {
+  "ko": "아스트로노머",
+  "prompt": "astronomer holding a brass telescope, pointed wizard hat with gold band, long dark blue robe coat with gold trim, light pink hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 442645062
+ },
+ "geographer": {
+  "ko": "지오그래퍼",
+  "prompt": "geographer holding a rolled scroll, wide-brim leather hat, dark gold leather coat, orange hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4109489079
+ },
+ "cartographer": {
+  "ko": "카토그래퍼",
+  "prompt": "cartographer holding a rolled scroll, feathered cap, dark blue leather coat, light blue hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 823327476
+ },
+ "lore-logician": {
+  "ko": "루어 로지션",
+  "prompt": "lore logician holding a spell book, golden circlet with a gem, long dark purple robe coat with gold trim, dark orange hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 127220030
+ },
+ "fossil-researcher": {
+  "ko": "포실 리서처",
+  "prompt": "fossil researcher holding a war hammer, wide-brim leather hat, gold leather coat, orange hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1700876679
+ },
+ "linguist": {
+  "ko": "링귀스트",
+  "prompt": "linguist holding a giant feather quill, feathered cap, long dark gray robe coat with gold trim, gold hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1106252015
+ },
+ "sage-of-orthea": {
+  "ko": "세이지 오브 오르테아",
+  "prompt": "sage of orthea holding a magic staff with a glowing crystal, pointed wizard hat with gold band, long dark blue robe coat with gold trim, light blue hair, cute face, gold cape, legendary glowing aura, light gold sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3077888802
+ },
+ "bard": {
+  "ko": "바드",
+  "prompt": "bard holding a lute, feathered cap, dark teal tunic, dark blue hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 992611884
+ },
+ "painter": {
+  "ko": "페인터",
+  "prompt": "painter holding a giant paintbrush, orange beret, pink tunic, red hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 195161150
+ },
+ "sculptor": {
+  "ko": "스컬프터",
+  "prompt": "sculptor holding a war hammer, blue bandana, dark gray tunic, blue hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1124032279
+ },
+ "dancer": {
+  "ko": "댄서",
+  "prompt": "dancer holding a banner flag on a pole, golden circlet with a gem, pink tunic, light pink hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1796849386
+ },
+ "jongleur": {
+  "ko": "조니어",
+  "prompt": "jongleur holding a fan of playing cards, feathered cap, red tunic, orange hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 623970473
+ },
+ "playwright": {
+  "ko": "극작가",
+  "prompt": "playwright holding a giant feather quill, orange beret, dark purple tunic, light blue hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1258941777
+ },
+ "artisan": {
+  "ko": "아티산",
+  "prompt": "artisan holding a giant paintbrush, orange bandana, dark gold tunic, dark orange hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2369133838
+ },
+ "music-master": {
+  "ko": "뮤직 마스터",
+  "prompt": "music master holding a conductor baton, black top hat, black tunic, orange hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2994996791
+ },
+ "fashion-designer": {
+  "ko": "패션 디자이너",
+  "prompt": "fashion designer holding a giant feather quill, dark blue beret, pink tunic, gold hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 4125610017
+ },
+ "master-prima-donna": {
+  "ko": "마스터 프리마돈나",
+  "prompt": "master prima donna holding a conductor baton, golden crown, pink tunic, purple hair, cute face, gold cape, legendary glowing aura, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1784308596
+ },
+ "administrator": {
+  "ko": "행정관",
+  "prompt": "administrator holding a rolled scroll, feathered cap, dark blue leather coat, dark blue hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 537717542
+ },
+ "constable": {
+  "ko": "치안관",
+  "prompt": "constable holding a conductor baton, military officer cap, dark blue leather coat, red hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1447997712
+ },
+ "nurse": {
+  "ko": "너스",
+  "prompt": "nurse holding a glowing potion flask, feathered cap, white leather coat, blue hair, cute face, light red sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 117549617
+ },
+ "firefighter": {
+  "ko": "소방관",
+  "prompt": "firefighter holding a battle axe, steel half helmet, red leather coat, light pink hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1342024653
+ },
+ "postman": {
+  "ko": "우체부",
+  "prompt": "postman holding a rolled scroll, feathered cap, blue leather coat, orange hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 64255622
+ },
+ "cleaner": {
+  "ko": "클리너",
+  "prompt": "cleaner holding a mop, white bandana, blue leather coat, light blue hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1940864190
+ },
+ "librarian": {
+  "ko": "사서",
+  "prompt": "librarian holding a spell book, no hat, dark red leather coat, dark orange hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 905583563
+ },
+ "guide": {
+  "ko": "안내원",
+  "prompt": "guide holding a banner flag on a pole, wide-brim leather hat, dark green leather coat, orange hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2697171420
+ },
+ "counselor": {
+  "ko": "카운슬러",
+  "prompt": "counselor holding a spell book, no hat, blue leather coat, gold hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1722366628
+ },
+ "mayor": {
+  "ko": "시장",
+  "prompt": "mayor holding a conductor baton, black top hat, dark purple leather coat, purple hair, cute face, gold cape, legendary glowing aura, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2691190963
+ },
+ "mimic": {
+  "ko": "미믹",
+  "prompt": "mimic holding a bare hands, treasure chest worn as a helmet, dark orange leather coat, dark blue hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1361527219
+ },
+ "dreamwalker": {
+  "ko": "몽중인",
+  "prompt": "dreamwalker holding a glowing lantern, long sleeping nightcap with pompom, long blue robe coat with gold trim, red hair, cute face, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2820327000
+ },
+ "glitch-artist": {
+  "ko": "글리치 아티스트",
+  "prompt": "glitch artist holding a giant paintbrush, hood, black leather coat, blue hair, cute face, pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2409891246
+ },
+ "shadow-puppeteer": {
+  "ko": "셰도우 퍼펫티어",
+  "prompt": "shadow puppeteer holding a whip, black top hat, black leather coat, light pink hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2362528186
+ },
+ "gambler": {
+  "ko": "갬블러",
+  "prompt": "gambler holding a fan of playing cards, black top hat, dark green leather coat, orange hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 1489376649
+ },
+ "memory-eater": {
+  "ko": "메모리 이터",
+  "prompt": "memory eater holding a spell book, hood, dark blue leather coat, light blue hair, cute face, light purple sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2842678517
+ },
+ "echo-locator": {
+  "ko": "에코 로케이터",
+  "prompt": "echo locator holding a lute, brass goggles on the forehead, dark blue leather coat, dark orange hair, cute face, light teal sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 3440349985
+ },
+ "soul-bounder": {
+  "ko": "소울 바운더",
+  "prompt": "soul bounder holding a whip, golden circlet with a gem, dark blue leather coat, orange hair, cute face, light blue sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2555104759
+ },
+ "nomad-archive": {
+  "ko": "노마드 아카이브",
+  "prompt": "nomad archive holding a spell book, wide-brim leather hat, dark gold leather coat, gold hair, cute face, light pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2570732356
+ },
+ "chaos-waker": {
+  "ko": "카오스 웨이커",
+  "prompt": "chaos waker holding a magic staff with a glowing crystal, horned helmet, long black robe coat with gold trim, purple hair, cute face, pink cape, legendary glowing aura, pink sparkles, chibi pixel art, big eyes, gold trim, dark starry background, full body",
+  "seed": 2995523050
+ }
+}
