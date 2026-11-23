@@ -423,7 +423,7 @@ const NIGHT=WINTER;
 // (the P1 GT: the hypercar's chassis under the user's P1 model, with the P1's own drivetrain: the twin-turbo V8 hybrid,
 // rear-wheel drive, a 7-speed dual clutch; the Revuelto's: the V12 and a gearbox motor on the rear wheels through an
 // 8-speed dual clutch, its front wheels driven by two motors of their own)
-const GTP1=VEH==='p1',HC=VEH==='hypercar'||GTP1,SC=VEH==='supercar'||HC;
+const GTP1=VEH==='p1',HC=VEH==='hypercar'||GTP1,SC=HC;   // (SC: the supercar's chassis, which both run on)
 const HCP=[];   // the hypercar body's paint materials (they follow the paint swatches)
 const HCW={on:false,dy:[0,0],model:false};   // a Blender model's body is on; its own wheels turn (dy: their height on the axle)
 // where the supercar's driver sits relative to the 4x4's: further forward, lower
@@ -885,8 +885,6 @@ const alpsMask=(x,z,o)=>{const N=1024,S=10240;let u=(x+S)/(2*S)*N-0.5,v=(z+S)/(2
   const i=u|0,j=v|0,fu=u-i,fv=v-j,k=(i+j*N)*4,w00=(1-fu)*(1-fv),w10=fu*(1-fv),w01=(1-fu)*fv,w11=fu*fv,E=N*4;
   for(let c=0;c<3;c++){o[c]=(ALPS_A0[k+c]*w00+ALPS_A0[k+4+c]*w10+ALPS_A0[k+E+c]*w01+ALPS_A0[k+E+4+c]*w11)/255;
     o[3+c]=(ALPS_B0[k+c]*w00+ALPS_B0[k+4+c]*w10+ALPS_B0[k+E+c]*w01+ALPS_B0[k+E+4+c]*w11)/255;}return o;};
-// the quality is always the highest: no lighter mode, not even after a GPU context loss
-const LOWQ=false;
 /* ================= TERRAIN ================= */
 const WORLD=1024,SEG=1024,CELL=WORLD/SEG,HALF=WORLD/2,NV=SEG+1;
 const WATER_Y=-0.25,ALT0=412;
@@ -1665,7 +1663,7 @@ function rcRuns(H,SP,RG){let n=0,end=-1;const S=H.s,C=H.c,f=H.far,cx=camera.posi
   H.n=n;H.ok=true;}
 // with a reversed depth buffer "nearer" is a larger depth, so decals' polygon offsets change sign
 const POFF=renderer.reversedDepthBuffer?-1:1;
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,LOWQ?1:1.5,Math.max(0.75,Math.sqrt(4.5e6/Math.max(1,innerWidth*innerHeight)))));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5,Math.max(0.75,Math.sqrt(4.5e6/Math.max(1,innerWidth*innerHeight)))));
 renderer.setSize(app.clientWidth,app.clientHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=NIGHT?1.75:DESERT?0.86:1.02;   // (the night: eyes used to the dark)
@@ -1964,8 +1962,8 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
         const a=texture(T,pu.mul(sc)).grad(gx.mul(sc),gy.mul(sc)).rgb,r=a.toVar();
         If(PHOTO.hi.greaterThan(0.5),()=>{r.assign(mix(a,texture(T,ru.mul(s2)).grad(hx.mul(s2),hy.mul(s2)).rgb,bl));});
         out.addAssign(r.div(vec3(M[0],M[1],M[2])).sub(1).mul(w.mul(con)));});};
-      add('grass',0.625,0.62,lw.x);add('dirt',0.385,0.8,lw.y.mul(dryK.oneMinus()).add(mudW.mul(0.9)));add('dry',0.455,0.75,lw.y.mul(dryK));
-      add('gravel',0.5,1.3,lw.z);add('sand',0.556,0.55,lw.w);});
+      add('grass',0.625,0.62,lw.x);add('dirt',0.385,0.8,lw.y.mul(dryK.oneMinus()).add(mudW.mul(0.9)));add('dry',0.455,DESERT?0.55:0.75,lw.y.mul(dryK));
+      add('gravel',0.5,1.3,lw.z);add('sand',0.556,DESERT?0.35:0.55,lw.w);});
     return out;})();
   // the photos' relief (normal maps baked from them offline, gravel's own): read like the colour, the rotated sample's
   // tangent frame turned back to the world's
@@ -2058,7 +2056,7 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
   let nw=normalize(wn.sub(vec3(g.x,0,g.y).mul(one.sub(mudW.mul(0.7))).mul(one.sub(wet.mul(0.6))).mul(one.sub(rk)).mul(one.sub(smoothstep(0.12,0.3,slopeK)))));
   nw=select(rk.greaterThan(0.01),perturbH(wp,nw,rkH),nw);
   // (the scans' relief at 2.2x: stones and clods stand out against the low sun; kept on sloping ground until the rock takes over)
-  {const pN=pNR.xy.mul(2.2).mul(near).mul(one.sub(rk)).mul(one.sub(wet.mul(0.5))).mul(one.sub(smoothstep(0.3,0.55,slopeK)));nw=normalize(nw.add(vec3(pN.x,0,pN.y.negate())));}
+  {const pN=pNR.xy.mul(DESERT?1.1:2.2).mul(near).mul(one.sub(rk)).mul(one.sub(wet.mul(0.5))).mul(one.sub(smoothstep(0.3,0.55,slopeK)));nw=normalize(nw.add(vec3(pN.x,0,pN.y.negate())));}
   const rp=puddle.yz;
   nw=normalize(mix(nw,vec3(rp.x.mul(0.05),1,rp.y.mul(0.05)),pud));
   // desert: wind ripples on the sand, as the wind leaves them: ~0.8 m apart on coordinates warped by smooth noise (over
@@ -2066,8 +2064,9 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
   // train at another angle and spacing taking over in places, and forks: in each 6 m cell (seven in ten) a pair of
   // opposite phase defects 0.5-1 m apart, where an extra crest starts and ends (their branch cuts lie on the segment
   // between them, a 2pi jump the sine never shows, and a window flat over the segment fades the pair out inside its
-  // cell). Patchy and broken along the crests, sharp-crested with a steeper lee, 2.4 cm high; none on rock, trails or
-  // steep ground, gone by 60 m and wherever they would alias. The height bends the normal (perturbH)
+  // cell). Patchy and broken along the crests, a steeper lee, 2.4 cm high; none on rock, trails or steep ground. Their
+  // slope is worked out exactly (screen-space derivatives of the height are blocky per pixel quad and crackle under the
+  // TAA's jitter), and they show only where a ripple spans 16 pixels or more (gone by 6), within 45 m
   if(DESERT){const {cos,atan,mod}=TSL,q=wp.xz,TP=Math.PI*2;
     const h2=v=>fract(sin(dot(mod(v,289),vec2(127.1,311.7))).mul(43758.5453));
     const vn=v=>{const i=floor(v),f0=fract(v),f=f0.mul(f0).mul(float(3).sub(f0.mul(2)));
@@ -2080,14 +2079,15 @@ const terrMat=(()=>{const {Fn,If,float,vec2,vec3,vec4,attribute,texture,position
     const th=v=>atan(v.y.mul(u.x).sub(v.x.mul(u.y)).negate(),dot(v,u).negate());   // the angle from -u: its cut runs along +u
     const dv=q.sub(cc),a1=dv.add(u.mul(dd)),a2=dv.sub(u.mul(dd)),wd=smoothstep(R1,1.6,length(dv)).mul(step(r4,0.7));
     const ph0=dot(P,K0).mul(TP/LAM),phd=th(a1).sub(th(a2)).mul(wd),ph=ph0.add(phd),ph2=dot(P,K1).mul(TP/(LAM*1.22)).add(phd);
-    const prof=v=>sin(v.add(sin(v).mul(0.55)));
+    const dprof=v=>cos(v.add(sin(v).mul(0.35))).mul(cos(v).mul(0.35).add(1));   // (the slope of sin(v + 0.35 sin v))
     const m=clamp(vn(q.div(14).add(vec2(5.5,2.2))).sub(0.5).mul(4).add(0.5),0,1);
     const amp=clamp(vn(q.div(60).add(vec2(8.1,4.4))).sub(0.3).mul(2.2),0,1).mul(vn(q.div(9).add(vec2(2.7,6.6))).mul(0.45).add(0.55));
     const brk=clamp(vn(vec2(dot(P,vec2(-0.6,0.8)).mul(0.3).add(3.3),ph0.mul(1.1*LAM/TP).add(9.1))).sub(0.3).mul(3.3),0,1);
     const core=mix(float(1),smoothstep(0.05,0.35,min(length(a1),length(a2))),wd);   // (the crest fades where it ends)
-    const fade=lw.w.mul(one.sub(rk)).mul(one.sub(smoothstep(0.1,0.25,slopeK))).mul(smoothstep(60,25,length(positionView))).mul(clamp(float(1.3).sub(fwidth(ph0).mul(0.5)),0,1));
-    const rh=mix(prof(ph),prof(ph2),m).mul(amp).mul(brk.mul(0.65).add(0.35)).mul(core).mul(fade).mul(0.012);
-    nw=perturbH(wp,nw,rh);}
+    const fade=lw.w.mul(one.sub(rk)).mul(one.sub(smoothstep(0.1,0.25,slopeK))).mul(smoothstep(45,15,length(positionView))).mul(smoothstep(1,0.4,fwidth(ph0)));
+    const A=amp.mul(brk.mul(0.65).add(0.35)).mul(core).mul(fade).mul(0.012);
+    const g=K0.mul(dprof(ph).mul(m.oneMinus()).mul(TP/LAM)).add(K1.mul(dprof(ph2).mul(m).mul(TP/(LAM*1.22)))).mul(A);
+    nw=normalize(nw.sub(vec3(g.x,0,g.y)));}
   // winter: snow on everything gentle enough to hold it (it slides off past ~40 degrees, thinner on steep shoulders),
   // its surface smooth over the ground's fine relief, the puddles frozen and buried under it
   const snW=WINTER?smoothstep(0.62,0.86,wn.y).mul(det.mul(0.3).add(0.82)).clamp(0,1).toVar():float(0);
@@ -2390,7 +2390,7 @@ const tgIdx=(x,z)=>Math.floor((x+OHALF)/TG)+Math.floor((z+OHALF)/TG)*TGN;
   treeGrid[tgIdx(x,z)].push(t);
 }})();
 // forests and hedgerows on the outer land: kept clear of the roads, the river, the fields and the village
-(()=>{for(let tries=0,n0=trees.length;trees.length<n0+(LOWQ?9000:16000)&&tries<900000;tries++){
+(()=>{for(let tries=0,n0=trees.length;trees.length<n0+16000&&tries<900000;tries++){
   const x=(R()*2-1)*(OHALF-20),z=(R()*2-1)*(OHALF-20);if(inValley(x,z))continue;const mid=inMid(x,z),j=mid?oIdx(x,z):fIdx(x,z);
   const wr=mid?OwR[j]:FwR[j],ht=mid?OHT[j]:FHT[j],sl=mid?OSL[j]:FSL[j],ws=mid?OwS[j]:FwS[j],sf=mid?OSF[j]:FSF[j];
   if(wr>0.02||ht<WATER_Y+0.7||sl>0.6||ws>0.4||ht>270||sf===S_MUD||inPaddy(x,z)||Math.hypot(x-VIL_C[0],z-VIL_C[1])<(sf===S_DIRT?440:190))continue;
@@ -2401,7 +2401,7 @@ const tgIdx=(x,z)=>Math.floor((x+OHALF)/TG)+Math.floor((z+OHALF)/TG)*TGN;
   const t={x,z,y:terrainH(x,z),r:broad?0.26:0.3,s:0.8+R()*0.6,rot:R()*TAU,shade:0.8+R()*0.35,broad};trees.push(t);treeGrid[tgIdx(x,z)].push(t);
 }})();
 // spruce stands over the outer hills (mostly spruce, some broadleaf low down), each a real tree to drive into
-(()=>{{const RF=rng(4711),G=LOWQ?13:9,W0=Math.floor((OHALF-24)/G);
+(()=>{{const RF=rng(4711),G=9,W0=Math.floor((OHALF-24)/G);
   for(let gz=-W0;gz<=W0;gz++)for(let gx=-W0;gx<=W0;gx++){const x=(gx+RF())*G,z=(gz+RF())*G;if(inValley(x,z))continue;
     const f=forestAt(x,z);if(f<0.02||RF()>f*0.97)continue;
     const mid=inMid(x,z),j=mid?oIdx(x,z):fIdx(x,z),wr=mid?OwR[j]:FwR[j],ht=mid?OHT[j]:FHT[j],sl=mid?OSL[j]:FSL[j],ws=mid?OwS[j]:FwS[j],sf=mid?OSF[j]:FSF[j];
@@ -2466,7 +2466,7 @@ addSp(RB_C[0],RB_C[1],1,1.45,4);(()=>{for(let k=0;k<10;k++){const a=k/10*TAU+0.2
 (()=>{{const px=LK2[0]-(LK2R+30)*0.72,pz=LK2[1]-(LK2R+30)*0.69;let n=0;
   for(let k=0;k<1500&&n<90;k++){const a=R()*TAU,d=14+Math.sqrt(R())*150,x=px+Math.cos(a)*d,z=pz+Math.sin(a)*d;if(spOK(x,z,2.5)&&addSp(x,z,2,0.85+R()*0.4,7.5))n++;}}})();
 // wild cherries in bloom among the woods of the eastern and northern hills
-(()=>{{let n=0;for(let k=0;k<60000&&n<(LOWQ?160:360);k++){const x=(R()*2-1)*(OHALF-60),z=(R()*2-1)*(OHALF-60);if(inValley(x,z)||Math.hypot(x,z)<1400)continue;
+(()=>{{let n=0;for(let k=0;k<60000&&n<360;k++){const x=(R()*2-1)*(OHALF-60),z=(R()*2-1)*(OHALF-60);if(inValley(x,z)||Math.hypot(x,z)<1400)continue;
   const pref=Math.min(1,smooth(-400,700,x)+smooth(800,1900,-z));if(R()>0.2+0.8*pref)continue;
   const mid=inMid(x,z),j=mid?oIdx(x,z):fIdx(x,z),ht=mid?OHT[j]:FHT[j],sf=mid?OSF[j]:FSF[j];
   if(ht<WATER_Y+2||ht>230||sf===S_MUD||sf===S_WATER||badAt(x,z)>0.2||!spOK(x,z,5))continue;if(addSp(x,z,2,0.8+R()*0.45,10))n++;}}})();
@@ -2737,7 +2737,7 @@ let SHRUB=null;
   const lit=t=>0.62+0.38*sunTerrainAt(t.x,t.z);
   // cards and impostors carry real colour, so the per-tree tint is only a light shade/hue shift
   const tint=(t,c,warm)=>{const k=(t.rot*5.3)%1;c.setRGB(0.92+0.16*k*warm,0.95+0.1*((t.rot*3.1)%1),0.9+0.12*(1-k)).multiplyScalar(t.shade*lit(t));};
-  const NEAR_T=LOWQ?-1e9:45;
+  const NEAR_T=45;
   // hand-over distance between the crossed impostors and the far billboards (per tree, dithered over 40 m): past the
   // map's edge, so the impostors carry every tree to the horizon
   const FARF=[],FAR0=1e6;
@@ -2977,7 +2977,7 @@ const tuftGeo=(n,w,h)=>{const planes=[];for(let k=0;k<n;k++){const q=new THREE.P
   const dryTint=C('#c9b27a');
   cellInstanced(SHRUB.geo,SHRUB.mat,DESERT?shrubs.filter((o,i)=>i%3===0):shrubs,(o,M,c)=>{
     q.setFromEuler(new THREE.Euler(o.a*0.3,o.b,o.c*0.3));M.compose(p.set(o.x,o.y+o.r*0.15,o.z),q,s.set(o.r*1.3,o.r*0.75,o.r*1.2));c.setRGB(1,1,1).lerp(dryTint,DESERT?0.55+o.k*0.35:o.k*0.35).multiplyScalar(0.62+0.38*SUNV[vIdx(o.x,o.z)]);},
-    {cast:true,h:3,far:1e9,near:LOWQ?-1e9:120,lo:shrubG,loMat:windy(new THREE.MeshStandardNodeMaterial({color:C(DESERT?'#8a835c':'#556633'),roughness:1,map:foliageTex}),0.05,false),depth:SHRUB.depth});
+    {cast:true,h:3,far:1e9,near:120,lo:shrubG,loMat:windy(new THREE.MeshStandardNodeMaterial({color:C(DESERT?'#8a835c':'#556633'),roughness:1,map:foliageTex}),0.05,false),depth:SHRUB.depth});
   if(!WINTER&&!DESERT)cellInstanced(tuftGeo(2,1.2,0.65),fadeNear(windy(new THREE.MeshStandardNodeMaterial({color:0xffffff,map:bladeTex,alphaTest:0.4,roughness:1,envMapIntensity:0.55}),0.1,true)),grass,(o,M,c)=>{
     q.setFromAxisAngle(new V3(0,1,0),o.rot);M.compose(p.set(o.x,o.y-0.04,o.z),q,s.set(o.s,o.s*(0.8+o.k*0.6),o.s));c.copy(gA).lerp(gB,clamp(o.dry*0.8+o.k*0.3,0,1)).multiplyScalar(0.6+0.4*SUNV[vIdx(o.x,o.z)]);},{h:2,far:350});
 }})();
@@ -3105,7 +3105,7 @@ const pebT=(()=>{
     for(const[cx,cy,cz,cd]of pc){const e=x*cx+y*cy+z*cz-cd;if(e>0){x-=cx*e;y-=cy*e;z-=cz*e;}}
     let yy=y*0.62;if(yy<-0.1)yy=-0.1+(yy+0.1)*0.3;p.setXYZ(i,x,yy,z);const ao=0.55+0.45*smooth(-0.1,0.45,yy);cl.push(ao,ao,ao);}
   g.setAttribute('color',new THREE.Float32BufferAttribute(cl,3));g.computeVertexNormals();
-  const PR=DESERT?[0.75,0.6,0.02,0.9,0.04,0.45,0.7,0]:[0.14,0.55,0.08,0.9,0.18,0.45,0.55,0],base=C(DESERT?'#6f5b49':'#817c73'),warm=C(DESERT?'#8a6f55':'#86725f'),red=C(DESERT?'#8e5a40':'#8e6a55');
+  const PR=DESERT?[0.3,0.5,0.02,0.9,0.04,0.45,0.45,0]:[0.14,0.55,0.08,0.9,0.18,0.45,0.55,0],base=C(DESERT?'#6f5b49':'#817c73'),warm=C(DESERT?'#8a6f55':'#86725f'),red=C(DESERT?'#8e5a40':'#8e6a55');
   return makeTiler({size:10,radius:7,per:150,seed:7,geo:g,mat:tileCull(new THREE.MeshStandardNodeMaterial({vertexColors:true,roughness:0.85,map:detailTex,flatShading:true}),ip=>aheadOf(ip,1.5)),
     place(x,z,a,b,c,M,col){const g=gInfo(x,z);if(c>PR[g.sf]*(1-g.wm)*(1-g.tw*0.7))return false;
       const s=0.035+Math.pow(b,2.4)*0.2;_gE.set(a*0.6,a*TAU*3,b*0.5);_gQ.setFromEuler(_gE);M.compose(_gP.set(x,terrainH(x,z)-s*0.12,z),_gQ,_gS.set(s*(0.8+a*0.5),s,s*(0.8+c*0.5)));
@@ -3115,7 +3115,6 @@ const pebT=(()=>{
 // deep green to straw, darker at the root. Normals lean toward the sky so a meadow shades softly instead of flickering
 // blade by blade. They shrink into the ground 11-15 m out, where the card grass has faded in.
 const bladeT=(()=>{
-  if(LOWQ)return{update(){},reset(){},setRadius(){},mesh:null};
   const r=rng(606),P=[],N=[],Cc=[],I=[];let vi=0;
   const G1=[0.09,0.14,0.035],G2=[0.16,0.19,0.055],DRY=[0.34,0.29,0.13],ROOT=[0.04,0.052,0.02];
   const mixv=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
@@ -3375,7 +3374,7 @@ const PETALS=(()=>{
     x.beginPath();x.moveTo(32,62);x.bezierCurveTo(4,44,4,12,22,4);x.lineTo(32,13);x.lineTo(42,4);x.bezierCurveTo(60,12,60,44,32,62);x.fill();});
   const lt=mk(x=>{x.strokeStyle='#a8812a';x.lineWidth=3;x.beginPath();x.moveTo(32,63);x.lineTo(32,50);x.stroke();const g=x.createRadialGradient(32,50,4,32,50,46);g.addColorStop(0,'#d8a82a');g.addColorStop(1,'#f4cc48');x.fillStyle=g;
     x.beginPath();x.moveTo(32,50);x.arc(32,50,46,-Math.PI/2-1.05,-Math.PI/2+1.05);x.closePath();x.fill();x.fillStyle='rgba(0,0,0,0.35)';x.beginPath();x.moveTo(32,24);x.lineTo(29,5);x.lineTo(35,5);x.fill();});
-  const N=LOWQ?260:800,sets=[{sp:2,size:0.05,tex:pt,fall:0.75,swing:0.35,crown:[2.2,6.2],cr:4.3},{sp:1,size:0.08,tex:lt,fall:1.1,swing:0.55,crown:[2.8,11],cr:3}];
+  const N=800,sets=[{sp:2,size:0.05,tex:pt,fall:0.75,swing:0.35,crown:[2.2,6.2],cr:4.3},{sp:1,size:0.08,tex:lt,fall:1.1,swing:0.55,crown:[2.8,11],cr:3}];
   for(const S of sets){S.m=W(new THREE.InstancedMesh(new THREE.PlaneGeometry(S.size,S.size),new THREE.MeshStandardNodeMaterial({map:S.tex,alphaTest:0.4,side:THREE.DoubleSide,roughness:0.7}),N));
     S.m.frustumCulled=false;S.m.castShadow=false;S.m.receiveShadow=true;S.m.count=0;scene.add(S.m);S.P=Array.from({length:N},()=>({h:null,t0:0,dur:0,x:0,y:0,z:0,gy:0,ph:Math.random()*TAU,sp:0.5+Math.random()}));S.H=[];S.HS=new Set();}
   const M=new THREE.Matrix4(),q=new QT(),e=new THREE.Euler(),p=new V3(),one=new V3(1,1,1);let T=0,hostT=0,wx=0.55,wz=0.3;
@@ -3404,7 +3403,7 @@ function updateCells(){windTick();PETALS.tick();if(SNOWFALL)SNOWFALL.userData.ti
   for(const c of FARCELLS){const d=Math.hypot(c.x-camera.position.x,c.z-camera.position.z);c.m.visible=d>110&&d<FAR_MAX;}}
 
 /* ================= VEHICLE PHYSICS SETUP ================= */
-const MASS=GTP1?1550:HC?1770:SC?1690:2560,IX=SC?2300:4440,IY=SC?2650:4890,IZ=SC?560:1310;   // (4x4: a G 63's kerb weight)
+const MASS=GTP1?1550:HC?1770:2560,IX=SC?2300:4440,IY=SC?2650:4890,IZ=SC?560:1310;   // (4x4: a G 63's kerb weight)
 // (the 4x4 is the off-road model's: its 35" mud terrains, 0.4495 m)
 const RAD=SC?0.352:0.4495,WHEEL_I=SC?1.25:2.5,SUSP=SC?0.15:0.52,MOUNT_Y=SC?-0.03:-0.33,STATIC=SC?0.075:0.22;
 // unsprung mass per corner (wheel, 35" tyre, hub, brake, share of the solid axle); the body carries the rest
@@ -3503,11 +3502,11 @@ const T_AMB=22,KCAM=0.08;
 const RAYS=[-0.95,-0.62,-0.3,0,0.3,0.62,0.95].map(a=>[Math.cos(a),Math.sin(a)]),_slb=[0,0,0];
 const BRAKE_F=SC?2600:3650,BRAKE_R=SC?1600:2400,HAND=SC?2400:5900;
 // 4.4 L twin-turbo V8, torque converter (K-factor, lock-up clutch), 8-speed automatic
-const IDLE=SC?950:700,LIMIT=GTP1?8500:HC?9500:SC?8700:6300,VMAX=SC?97:52,REV_VMAX=SC?8:7;
+const IDLE=SC?950:700,LIMIT=GTP1?8500:HC?9500:6300,VMAX=SC?97:52,REV_VMAX=SC?8:7;
 const IE=SC?0.21:0.32,KTC=95,KTC_R=118,TC_LU=SC?120:45;
 // (the hypercars' dual-clutch boxes: the Revuelto's 8 speeds, 1st to ~100 km/h, 7th its top speed at 9,250 rpm, 8th a
 // long cruise; the P1's 7, the 12C's ratios on a 3.31 final)
-const GEARS=GTP1?[0,3.98,2.61,1.91,1.48,1.16,0.91,0.69]:HC?[0,3.15,2.27,1.77,1.45,1.22,1.04,0.89,0.73]:SC?[0,3.91,2.44,1.81,1.46,1.19,0.97,0.86]:[0,4.70,3.14,2.10,1.67,1.29,1.00,0.84,0.67],NG=GTP1?7:HC?8:SC?7:8,REV=SC?2.9:3.3,FINAL=GTP1?3.31:HC?3.94:SC?2.86:4.30,LOW=SC?1:2.93,EFF=SC?0.92:0.9;   // (4x4 low range as the G-Class's transfer case: 59:1 crawl)
+const GEARS=GTP1?[0,3.98,2.61,1.91,1.48,1.16,0.91,0.69]:HC?[0,3.15,2.27,1.77,1.45,1.22,1.04,0.89,0.73]:[0,4.70,3.14,2.10,1.67,1.29,1.00,0.84,0.67],NG=GTP1?7:HC?8:8,REV=SC?2.9:3.3,FINAL=GTP1?3.31:HC?3.94:4.30,LOW=SC?1:2.93,EFF=SC?0.92:0.9;   // (4x4 low range as the G-Class's transfer case: 59:1 crawl)
 // low range: highest gear the gearbox will use (about 60 km/h), fastest the transfer case can be shifted into 4L,
 // hill-descent target speed; steering: the cornering load a held steering key asks for at speed
 const LOW_TOP=4,LOW_VMAX=4300*TAU/60/(GEARS[4]*FINAL*LOW)*RAD,LOW_SHIFT_V=3,HDC_V=1.5,STEER_G=SC?9.5:5.2,MAXLOCK=SC?0.5:0.6;
@@ -6287,9 +6286,9 @@ const SC_START=SC?(()=>{let best=1e18,bx=startX,bz=startZ,yaw=0;for(const r of r
 function setWorld(v){scene.children.forEach(o=>{if(o.userData.world)o.visible=v;});}
 function computeSpecs(){
   if(SC){const g=suspStatic(),clr=Math.round((RAD-(SUSP-STATIC)+MOUNT_Y+0.335)*1000);
-    return[['엔진',GTP1?'3.8 L V8 트윈터보 + 전기 모터 1기 · 미드십 하이브리드':HC?'6.5 L V12 자연흡기 + 전기 모터 3기 (앞 2기 · 변속기 1기)':'6.5 L V12 자연흡기 · 미드십'],
-      ['최고출력',`${Math.round(SYS_KW)} kW (${Math.round(SYS_KW*1.36)} PS)${EAXLE?' 시스템':''} @ ${PEAK.rpm}`],['최대토크',GTP1?'900 N·m (엔진 + 모터)':HC?'725 N·m @ 6,750 (V12) + 전기 모터':`${Math.max(...TQ.map(t=>t[1]))} N·m @ 6,750`],
-      ['변속기',HC&&!GTP1?'8단 듀얼 클러치':'7단 듀얼 클러치'],['구동',GTP1?'후륜 구동 · 후륜 LSD':HC?'상시 4륜 · 앞 전기 모터 2기 + 뒤 V12 · 후륜 LSD':'상시 4륜 · 전자식 센터 커플링 · 후륜 LSD'],
+    return[['엔진',GTP1?'3.8 L V8 트윈터보 + 전기 모터 1기 · 미드십 하이브리드':'6.5 L V12 자연흡기 + 전기 모터 3기 (앞 2기 · 변속기 1기)'],
+      ['최고출력',`${Math.round(SYS_KW)} kW (${Math.round(SYS_KW*1.36)} PS)${EAXLE?' 시스템':''} @ ${PEAK.rpm}`],['최대토크',GTP1?'900 N·m (엔진 + 모터)':'725 N·m @ 6,750 (V12) + 전기 모터'],
+      ['변속기',HC&&!GTP1?'8단 듀얼 클러치':'7단 듀얼 클러치'],['구동',GTP1?'후륜 구동 · 후륜 LSD':'상시 4륜 · 앞 전기 모터 2기 + 뒤 V12 · 후륜 LSD'],
       ['차량 중량',`${MASS.toLocaleString()} kg · 앞뒤 ${GTP1?'42:58':'43:57'}`],['타이어',GTP1?'앞 245/35 ZR19 · 뒤 315/30 ZR20 · 세미 슬릭':'앞 255/30 ZR20 · 뒤 355/25 ZR21'],
       ['서스펜션','앞뒤 더블 위시본 · 푸시로드 · 스태빌라이저'],['지오메트리',`캠버 ${(SCK.cam0[0]*DEG).toFixed(1)}° / ${(SCK.cam0[1]*DEG).toFixed(1)}° · 앤티 다이브 ${g.ad}% · 앤티 스쿼트 ${g.as}%`],
       ['롤 센터 앞 / 뒤',`${g.rcF} / ${g.rcR} mm`],['공력','액티브 리어 윙 · 에어 브레이크 · 다운포스'],['브레이크','카본 세라믹 · ABS'],['최저 지상고',`${clr} mm`]];}
@@ -6304,7 +6303,7 @@ function computeSpecs(){
     ['서스펜션','앞뒤 솔리드 액슬 · 4링크 · 트랙바'],['링크 지오메트리',(g=>`앤티 다이브 ${g.ad}% · 앤티 스쿼트 ${g.as}%`)(suspStatic())],['롤 센터 앞 / 뒤',(g=>`${g.rcF} / ${g.rcR} mm`)(suspStatic())],['쇽 업소버','질소 충전 · 바이패스 · 유압 범프 스톱'],['주행 보조','오토 홀드 · HDC · 4L 크롤 트랙션'],['서스펜션 스트로크',`${Math.round(SUSP*1000)} mm`],['액슬 굴절 한계',`±${(Math.atan(SUSP/(2*SPR_Y))*DEG).toFixed(0)}°`],['최저 지상고',`${Math.round(clr)} mm`],['접근각 / 이탈각',`${approach.toFixed(0)}° / ${depart.toFixed(0)}°`],['램프각',`${brk.toFixed(0)}°`]];
 }
 $('gSpec').innerHTML=computeSpecs().map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('');
-$('introSpec').innerHTML=[['그래픽',RENDER_API],['물리','<i id="physApi" style="font-style:normal">'+JP.api+'</i> · TMeasy'],['지도','6 km × 6 km'],['초파리 뇌','뉴런 6,865'],...(GTP1?[['엔진',`V8 트윈터보 하이브리드 ${Math.round(SYS_KW)} kW`],['최대 토크','900 N·m'],['구동','후륜'],['변속기','7단 DCT']]:HC?[['엔진',`V12 하이브리드 ${Math.round(SYS_KW)} kW`],['최대 토크','725 N·m + 모터'],['구동','사륜 (앞 전기 모터)'],['변속기','8단 DCT']]:SC?[['엔진',`V12 ${Math.round(PEAK.kw)} kW`],['최대 토크','720 N·m'],['변속기','7단 DCT'],['서스펜션','더블 위시본']]:[['엔진',`V8 ${Math.round(PEAK.kw)} kW`],['최대 토크','850 N·m'],['저속 기어비','2.93 : 1'],['서스펜션','520 mm']])].map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join('');
+$('introSpec').innerHTML=[['그래픽',RENDER_API],['물리','<i id="physApi" style="font-style:normal">'+JP.api+'</i> · TMeasy'],['지도','6 km × 6 km'],['초파리 뇌','뉴런 6,865'],...(GTP1?[['엔진',`V8 트윈터보 하이브리드 ${Math.round(SYS_KW)} kW`],['최대 토크','900 N·m'],['구동','후륜'],['변속기','7단 DCT']]:HC?[['엔진',`V12 하이브리드 ${Math.round(SYS_KW)} kW`],['최대 토크','725 N·m + 모터'],['구동','사륜 (앞 전기 모터)'],['변속기','8단 DCT']]:[['엔진',`V8 ${Math.round(PEAK.kw)} kW`],['최대 토크','850 N·m'],['저속 기어비','2.93 : 1'],['서스펜션','520 mm']])].map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join('');
 $('swatches').innerHTML=PAINTS.map(([n,h],i)=>`<button type="button" aria-label="${n}" title="${n}" aria-pressed="${i===0}" style="background:${h}"></button>`).join('');
 document.querySelectorAll('#swatches button').forEach((b,i)=>b.addEventListener('click',()=>setPaint(i)));
 const pressT=(id,key)=>{const b=$(id);b.addEventListener('click',()=>{garage[key]=!garage[key];b.setAttribute('aria-pressed',String(garage[key]));});};
@@ -6403,7 +6402,7 @@ const cam={mode:0,pos:new V3(),look:new V3(),flat:new V3(0,0,1),yaw:2.4,pitch:0.
 function toggleOrbit(){if(cam.mode===3){cam.mode=cam.prev===3?0:cam.prev;}else{cam.prev=cam.mode;cam.mode=3;cam.dragT=0;}cam.init=false;toast(CAMS[cam.mode]);}
 function cycleCam(){cam.mode=(cam.mode+1)%CAMS.length;cam.init=false;toast(cam.mode===1&&FD.G.visible?'조수석 시점 · 운전하는 초파리':CAMS[cam.mode]);}
 function toggleHelp(){$('help').hidden=!$('help').hidden;if(!$('help').hidden&&tele.on)toggleTele();}
-function start(){if(garage.on)exitGarage();if(drive.started)return;drive.started=true;if(WINTER)setTimeout(()=>toast('혹한기 겨울밤 · 영하 24°C · 전조등 켬 · 눈길과 빙판, 접지력이 절반 · 강과 호수는 얼어 있어 위로 달릴 수 있습니다'),2800);if(DESERT)setTimeout(()=>toast('사막 · 41°C · 모래에서는 바퀴가 빠지니 탄력을 유지하세요, 자갈 평원은 단단합니다 · 강과 호수는 말라붙어 바닥으로 달릴 수 있습니다'),2800);drive.we=IDLE*TAU/60;snd.crankT=0.75;$('intro').hidden=true;initAudio();renderer.domElement.focus();toast(`시동 ON · ${GTP1?'V8 트윈터보 하이브리드':HC?'V12 하이브리드':SC?'V12':'V8'} ${Math.round(SYS_KW)} kW${HC&&CIRC.on?' · 하이퍼카 서킷 그리드':''}`);setTimeout(()=>{try{flyLoad();}catch(_){}},2500);}
+function start(){if(garage.on)exitGarage();if(drive.started)return;drive.started=true;if(WINTER)setTimeout(()=>toast('혹한기 겨울밤 · 영하 24°C · 전조등 켬 · 눈길과 빙판, 접지력이 절반 · 강과 호수는 얼어 있어 위로 달릴 수 있습니다'),2800);if(DESERT)setTimeout(()=>toast('사막 · 41°C · 모래에서는 바퀴가 빠지니 탄력을 유지하세요, 자갈 평원은 단단합니다 · 강과 호수는 말라붙어 바닥으로 달릴 수 있습니다'),2800);drive.we=IDLE*TAU/60;snd.crankT=0.75;$('intro').hidden=true;initAudio();renderer.domElement.focus();toast(`시동 ON · ${GTP1?'V8 트윈터보 하이브리드':HC?'V12 하이브리드':'V8'} ${Math.round(SYS_KW)} kW${HC&&CIRC.on?' · 하이퍼카 서킷 그리드':''}`);setTimeout(()=>{try{flyLoad();}catch(_){}},2500);}
 function toggleGarage(){if(garage.on){if(garage.fromIntro&&!drive.started)start();else exitGarage();}else enterGarage();}
 addEventListener('keydown',e=>{
   if(e.target&&e.target.tagName==='INPUT')return;
@@ -6871,13 +6870,13 @@ function updateAudio(dt,sp,slipSum,loose,splash){
 }
 
 /* ================= HUD ================= */
-const RPM_MAX=GTP1?9000:HC?10000:SC?9000:7000;
+const RPM_MAX=GTP1?9000:HC?10000:7000;
 const hud={zone:$('zone'),hdg:$('hdg'),alt:$('alt'),surf:$('surf'),wade:$('wade'),psi:$('psi'),artic:$('artic'),shock:$('shock'),tcv:$('tcv'),hdcv:$('hdcv'),odo:$('odo'),spd:$('spd'),gear:$('gear'),rpm:$('rpmTxt'),arc:$('arcVal'),thr:$('thrBar'),brk:$('brkBar'),lock:$('lockChip'),chips:[...document.querySelectorAll('.chip[data-m]')],hint:$('hint'),toast:$('toast')};
 (()=>{{
   const cx=100,cy=100,r=78,a0=150*Math.PI/180,sweep=240*Math.PI/180,nt=RPM_MAX/1000;
   const pt=(a,rr)=>[cx+rr*Math.cos(a),cy+rr*Math.sin(a)];
   const arc=(f0,f1)=>{const s=pt(a0+sweep*f0,r),e=pt(a0+sweep*f1,r);return`M${s[0].toFixed(2)} ${s[1].toFixed(2)} A${r} ${r} 0 ${(f1-f0)*sweep>Math.PI?1:0} 1 ${e[0].toFixed(2)} ${e[1].toFixed(2)}`;};
-  $('arcBg').setAttribute('d',arc(0,1));$('arcVal').setAttribute('d',arc(0,1));$('arcRed').setAttribute('d',arc((GTP1?8000:HC?9000:SC?8500:6000)/RPM_MAX,1));
+  $('arcBg').setAttribute('d',arc(0,1));$('arcVal').setAttribute('d',arc(0,1));$('arcRed').setAttribute('d',arc((GTP1?8000:HC?9000:6000)/RPM_MAX,1));
   let s='';for(let k=0;k<=nt;k++){const a=a0+sweep*k/nt,[x,y]=pt(a,60),[x1,y1]=pt(a,r-5),[x2,y2]=pt(a,r+4);
     s+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="rgba(236,230,210,.5)" stroke-width="1.5"/><text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle">${k}</text>`;}
   $('ticks').innerHTML=s;
@@ -6934,7 +6933,7 @@ function drawWheels(){
   c.fillStyle=DIM;c.font='600 9px "Chakra Petch",sans-serif';c.textAlign='center';c.fillText('FRONT',cx,10);
 }
 const mapCv=$('map'),mapCtx=mapCv.getContext('2d'),MAPRES=1536,MAPK=MAPRES/(2*OHALF);let mapImg,mapRoads=null,mapView=420,mapOverlay=null;
-const OV={E:26000,N:LOWQ?1000:1300,img:null,ready:false,peaks:[],list:[
+const OV={E:26000,N:1300,img:null,ready:false,peaks:[],list:[
   {name:'몽블랑',lat:45.8326,lon:6.8652,alt:4808,rank:0},{name:'몽모디',lat:45.8492,lon:6.8761,alt:4465,rank:2},
   {name:'돔 뒤 구테',lat:45.8428,lon:6.8392,alt:4304,rank:2},{name:'그랑드조라스',lat:45.8689,lon:6.9869,alt:4208,rank:1},
   {name:'에귀 베르트',lat:45.9347,lon:6.9706,alt:4122,rank:1},{name:'에귀 드 비오나세',lat:45.8358,lon:6.8183,alt:4052,rank:2},
@@ -7358,7 +7357,7 @@ const PFX=(()=>{
   const {Fn,Loop,float,vec2,vec3,vec4,uniform,pass,uv,screenCoordinate,rtt,getViewPosition,perspectiveDepthToViewZ,logarithmicDepthToViewZ,viewZToPerspectiveDepth,cameraNear,cameraFar,cameraProjectionMatrixInverse,
     dot,cross,normalize,abs,sign,cos,sin,select,mix,smoothstep,exp,exp2,log2,pow,max,min,clamp,fract,length,step,convertToTexture,renderOutput}=TSL;
   // occlusion, shafts, bloom and the scene's multisampling: all on (the quality is always the highest)
-  const P={level:2,ao:0.9,bloom:0.2,shaft:0.42,grade:1,dbg:0,dof:0,useAO:!LOWQ,useSh:!LOWQ,useBl:true,msaa:LOWQ?2:4};
+  const P={level:2,ao:0.9,bloom:0.2,shaft:0.42,grade:1,dbg:0,dof:0,useAO:true,useSh:true,useBl:true,msaa:4};
   const scenePass=pass(scene,camera,{samples:P.msaa});
   // motion vectors for the temporal anti-aliasing, written beside the colour
   // (and, for the global illumination, each pixel's normal and albedo: blended by the surface's coverage - 1 for
@@ -8749,7 +8748,7 @@ try{
   const TAP=dTex(new Uint8Array(ap.buffer),PW,PH),TBP=dTex(new Uint8Array(bp.buffer),PW,PH);
   // ring: warped onto the map's square edge, rings spaced in proportion to their radius out to 40 km; none of it where
   // the patch lies (a 300 m overlap at the patch's edge, where both surfaces are the same ground)
-  const NA=LOWQ?512:1024,NR=LOWQ?170:330,RO=40000,pos=new Float32Array(NA*(NR+1)*3),idx=[],inP=new Uint8Array(NA*(NR+1));
+  const NA=1024,NR=330,RO=40000,pos=new Float32Array(NA*(NR+1)*3),idx=[],inP=new Uint8Array(NA*(NR+1));
   for(let a=0;a<NA;a++){const t=a/NA*TAU,c=Math.cos(t),sn=Math.sin(t),ri=SQ/Math.max(Math.abs(c),Math.abs(sn));
     for(let j=0;j<NR;j++){const r=ri*Math.pow(RO/ri,j/(NR-1)),x=c*r,z=sn*r,q=a*(NR+1)+j+1,k=q*3;pos[k]=x;pos[k+1]=hAtR(x,z);pos[k+2]=z;const [pa,pb]=pab(x,z);inP[q]=pEdge(pa,pb)>300?1:0;}
     const k=a*(NR+1)*3,k1=k+3;pos[k]=pos[k1];pos[k+1]=pos[k1+1]-40;pos[k+2]=pos[k1+2];}   // skirt under the seam
@@ -8758,7 +8757,7 @@ try{
   const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setIndex(idx);
   geo.boundingSphere=new THREE.Sphere(new V3(0,1500,0),60000);
   // patch: every other height sample, with a skirt hanging from its edge
-  const st=LOWQ?3:2,GA=Math.floor(PW/st),GB=Math.floor(PH/st),VA=GA+2,VB=GB+2,pp=new Float32Array(VA*VB*3),pidx=new Uint32Array((VA-1)*(VB-1)*6);
+  const st=2,GA=Math.floor(PW/st),GB=Math.floor(PH/st),VA=GA+2,VB=GB+2,pp=new Float32Array(VA*VB*3),pidx=new Uint32Array((VA-1)*(VB-1)*6);
   for(let j=0;j<VB;j++)for(let i=0;i<VA;i++){const ci=clamp(i-1,0,GA-1),cj=clamp(j-1,0,GB-1),a=P.a0+(ci*st+st*0.5)*PA/PW,b=P.b0+(cj*st+st*0.5)*PB/PH,k=(i+j*VA)*3;
     pp[k]=P.O[0]+a*P.u[0]+b*P.v[0];pp[k+2]=P.O[1]+a*P.u[1]+b*P.v[1];pp[k+1]=pbil(a,b)-(i===0||j===0||i===VA-1||j===VB-1?150:0);}
   {let o=0;for(let j=0;j<VB-1;j++)for(let i=0;i<VA-1;i++){const p0=i+j*VA,p1=p0+1,p2=p0+VA,p3=p2+1;pidx[o++]=p0;pidx[o++]=p2;pidx[o++]=p1;pidx[o++]=p1;pidx[o++]=p2;pidx[o++]=p3;}}
@@ -9123,11 +9122,11 @@ const nearTrack=(x,z,r)=>{if(!AP.trk)return false;const ci=Math.floor(x/4),cj=Ma
   // the Alpine forest round the truck: the valley's spruces (impostors, and the full models near the camera), each one
   // an obstacle for the truck, Jolt and the fly's eyes; placed from the land cover on a jittered 10 m grid, the same
   // trees every time a spot comes back into range
-  if(CONI){const cap=LOWQ?6000:12000,ig=new THREE.BufferGeometry();for(const nm in CONI.impGeo.attributes)ig.setAttribute(nm,CONI.impGeo.attributes[nm]);ig.setIndex(CONI.impGeo.index);
+  if(CONI){const cap=12000,ig=new THREE.BufferGeometry();for(const nm in CONI.impGeo.attributes)ig.setAttribute(nm,CONI.impGeo.attributes[nm]);ig.setIndex(CONI.impGeo.index);
     const IPA=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3);ig.setAttribute('ipos',IPA);
     const im=W(new THREE.InstancedMesh(ig,CONI.impMat,cap));im.count=0;im.frustumCulled=false;im.castShadow=false;im.receiveShadow=true;
     im.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3);im.visible=false;scene.add(im);AP.treeMesh=im;
-    const near=LOWQ?null:(()=>{const NC=1600,IP2=new Float32Array(NC*3),ipa2=new THREE.InstancedBufferAttribute(IP2,3);
+    const near=(()=>{const NC=1600,IP2=new Float32Array(NC*3),ipa2=new THREE.InstancedBufferAttribute(IP2,3);
       const ms=CONI.parts.map(([geo,mat])=>{const gg=new THREE.BufferGeometry();for(const nm in geo.attributes)gg.setAttribute(nm,geo.attributes[nm]);if(geo.index)gg.setIndex(geo.index);gg.setAttribute('ipos',ipa2);
         const m=staticInst(W(new THREE.InstancedMesh(gg,mat,NC)));m.count=0;m.frustumCulled=false;m.castShadow=true;m.receiveShadow=true;
         m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(NC*3),3);scene.add(m);return m;});
