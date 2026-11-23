@@ -366,7 +366,8 @@ vec2 tg = smoothstep(vec2(GW) - tfw, vec2(GW) + tfw, ted);
 float tMask = mix(tg.x * tg.y, 0.82, tfar);
 float trnd = hash12(tid + (tPool ? 17.0 : 0.0) + (tCeil ? 41.0 : 0.0));
 vec3 tcol = diffuseColor.rgb;
-if (min(tcol.r, min(tcol.g, tcol.b)) > 0.985) {
+if (min(tcol.r, min(tcol.g, tcol.b)) > 0.6) {            // near-white vertex colour = per-room tint over the palette
+  vec3 tint = tcol;
   if (tPool) tcol = mix(vec3(0.2, 0.62, 0.63), vec3(0.06, 0.33, 0.4), smoothstep(0.3, 4.0, -hRel));
   else if (tCeil) tcol = vec3(0.78, 0.82, 0.81);
   else if (tFloor) tcol = vec3(0.85, 0.88, 0.87);
@@ -375,6 +376,7 @@ if (min(tcol.r, min(tcol.g, tcol.b)) > 0.985) {
     if (tid.y < 0.5 || abs(tid.y - 7.0) < 0.5) tcol = vec3(0.12, 0.5, 0.52);
     else if (abs(tid.y - 8.0) < 0.5) tcol = vec3(0.05, 0.26, 0.29);
   }
+  tcol *= tint;
 }
 tcol *= 0.92 + 0.14 * trnd;
 vec3 tgrout = tPool ? vec3(0.13, 0.32, 0.34) : vec3(0.45, 0.48, 0.47);
@@ -901,109 +903,285 @@ function reachable(D) {                                                // self-c
   const cells = [...seen].map((k) => [(Math.floor(k / 1000) - 200) * C, (k % 1000 - 200) * C]);
   return D.rooms.every((rm) => rm.shaft || cells.some(([x, z]) => x > rm.x0 && x < rm.x1 && z > rm.z0 && z < rm.z1));
 }
+// ---- per-room variety: every generated room rolls its own kind, size, ceiling, tile tint, light colour and dead panels
+const TINT = [WHITE, WHITE, WHITE, [0.78, 0.9, 1], [0.8, 1, 0.86], [1, 0.9, 0.74], [1, 0.8, 0.84], [0.66, 0.7, 0.74], [0.86, 0.8, 1]];
+const PTINT = [WHITE, WHITE, [0.7, 0.82, 1], [0.78, 1, 0.72], [0.62, 0.66, 0.9], [1, 0.8, 0.82], [0.88, 0.95, 0.86]];
+const LCOL = [0xe6f4ff, 0xe6f4ff, 0xdcefff, 0xffe2c4, 0xd8ffe6, 0xfff1d6];
+// kind: [min width, max width, min depth, max depth, weight, leaf (nothing opens off it)]
+const KINDS = {
+  lane: [12, 18, 22, 32, 3], deep: [14, 20, 14, 20, 2], lpool: [16, 24, 16, 24, 2], flood: [14, 26, 14, 26, 2], steps: [14, 22, 16, 24, 2, 1],
+  drained: [14, 22, 14, 22, 1], twin: [16, 24, 14, 22, 2], island: [16, 22, 16, 22, 2], tubs: [10, 16, 10, 16, 2], pillars: [12, 22, 12, 22, 2], nook: [6, 9, 6, 9, 2, 1],
+};
+const OPP = { n: 's', s: 'n', e: 'w', w: 'e' }, FACE = { n: '-z', s: '+z', e: '-x', w: '+x' };
+// a room seen from one wall: u runs along the wall, v into the room; ry turns a prop to face into the room
+function wallFrame(rm, side) {
+  const w = rm.x1 - rm.x0, d = rm.z1 - rm.z0;
+  if (side === 's') return { len: w, dep: d, ry: 0, P: (u, v) => [rm.x0 + u, rm.z0 + v] };
+  if (side === 'n') return { len: w, dep: d, ry: Math.PI, P: (u, v) => [rm.x1 - u, rm.z1 - v] };
+  if (side === 'w') return { len: d, dep: w, ry: Math.PI / 2, P: (u, v) => [rm.x0 + v, rm.z1 - u] };
+  return { len: d, dep: w, ry: -Math.PI / 2, P: (u, v) => [rm.x1 - v, rm.z0 + u] };
+}
+const toU = (rm, side, a) => (side === 's' ? a - rm.x0 : side === 'n' ? rm.x1 - a : side === 'w' ? rm.z1 - a : a - rm.z0);
+const wrect = (F, u0, v0, u1, v1) => { const [a, b] = F.P(u0, v0), [c, d] = F.P(u1, v1); return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)]; };
+
 function makeFloor(f, r, plain = false) {
   const q = (v) => Math.round(v * 4) / 4, span = (a, b) => a + r() * (b - a), pick = (a) => a[Math.floor(r() * a.length)];
-  const deep = Math.abs(f), props = [], sideOpen = {};
+  const deep = Math.abs(f), props = [], main = [], passes = [];
   const D = {
     rooms: [SHAFT(3.8), R(-3, 1.25, 3, 5, 3.8, { lobby: true })], holes: [], pools: [], steps: [], wins: [], lights: [], extra: [],
-    waterY: -0.15, caus: 0.75, beam: 0.12 + r() * 0.06, fog: 0.032 + Math.min(0.03, deep * 0.0012),
+    waterY: -0.15, caus: 0.7, beam: 0.12 + r() * 0.06, fog: 0.032 + Math.min(0.03, deep * 0.0012),
     panelOff: Math.min(0.45, 0.06 + deep * 0.01), panelFlick: 0.04 + r() * 0.1,
   };
-  const z0 = q(span(7, 10)), W = q(span(9, 15)) * 2, z1 = z0 + q(span(16, 28)), H = q(span(5, 8)), x0 = -W / 2, x1 = W / 2;
-  D.rooms.push(R(-1.25, 5, 1.25, z0, 3.8), R(x0, z0, x1, z1, H));     // rooms[2] corridor, rooms[3] main hall
-  const type = plain ? 'plain' : pick(['lane', 'lane', 'deep', 'deep', 'flood', 'steps', 'drained', 'twin']);
-  const pool = (a, b, c, d, bottom, o = {}) => D.pools.push({ rects: [[a, b, c, d]], bottom, water: D.waterY, ...o });
-  const tag = 'X' + ((deep * 7 + 3) % 10), dry = type === 'flood';    // flooded halls have no dry deck for furniture
-  let sideLo = z0 + 2, sideHi = z1 - 2;
-  if (type === 'lane') {
-    const px0 = x0 + 3.5, px1 = x1 - 3.5, pz0 = z0 + 3, pz1 = z1 - 3, b = -q(span(1.4, 2)), ropes = [], kick = r() < 0.5;
-    pool(px0, pz0, px1, pz1, b);
-    for (let zc = pz0 + 1; zc < pz1 - 0.5; zc += 2) {
-      D.extra.push([px0 + 1.5, b, zc - 0.125, px1 - 1.5, b + 0.005, zc + 0.125]);
-      if (zc + 1 < pz1 - 0.5) ropes.push(zc + 1);
+  const cz = q(span(6.5, 12)), corridor = R(-1.25, 5, 1.25, cz, 3.8);
+  D.rooms.push(corridor);
+
+  // ---- layout: the first room opens off the corridor, each later one off a random earlier non-leaf room,
+  //      wall to wall (a wide arch) or through a short or long passage
+  const hit = (a, skip) => a.x0 < -38 || a.x1 > 38 || a.z0 < -8 || a.z1 > 68 ||
+    D.rooms.some((b) => b !== skip && a.x0 < b.x1 + 0.5 && b.x0 < a.x1 + 0.5 && a.z0 < b.z1 + 0.5 && b.z0 < a.z1 + 0.5);
+  const kinds = Object.keys(KINDS), wsum = kinds.reduce((s, k) => s + KINDS[k][4], 0);
+  const roll = (leafOk) => { for (;;) { let t = r() * wsum; const k = kinds.find((k) => (t -= KINDS[k][4]) < 0) || 'pillars'; if (leafOk || !KINDS[k][5]) return k; } };
+  const want = plain ? 1 : 2 + Math.floor(r() * 4);
+  for (let tries = 0; main.length < want && tries < 120; tries++) {
+    const kind = plain ? 'pillars' : roll(main.length > 0), K = KINDS[kind], first = !main.length;
+    let w = q(span(K[0], K[1])), d = q(span(K[2], K[3]));
+    if (r() < 0.5) [w, d] = [d, w];
+    const parent = first ? corridor : pick(main.filter((m) => !KINDS[m.kind][5]));
+    const side = first ? 'n' : pick(['n', 'n', 'e', 'w', 's']), ns = side === 'n' || side === 's';
+    const pw = first ? 2.5 : pick([2, 2.5, 2.5, 3]), hw = pw / 2, t = r(), L = first || t < 0.2 ? 0 : t < 0.6 ? q(span(1.5, 3)) : q(span(5, 12));
+    const lo = ns ? parent.x0 : parent.z0, hi = ns ? parent.x1 : parent.z1, along = ns ? w : d;
+    const c = first ? 0 : q(span(lo + hw + 1.5, hi - hw - 1.5));
+    if (!first && parent.doors.some((dr) => dr.side === side && c - hw - 1.5 < dr.hi && c + hw + 1.5 > dr.lo)) continue;
+    const a0 = q(span(c + hw + 1.5 - along, c - hw - 1.5)), near = { n: parent.z1 + L, s: parent.z0 - L - d, e: parent.x1 + L, w: parent.x0 - L - w }[side];
+    const h = q(Math.min(9, Math.max(3.8, span(0.28, 0.5) * Math.min(w, d) + 1.5)));
+    const nr = ns ? R(a0, near, a0 + w, near + d, h) : R(near, a0, near + w, a0 + d, h);
+    const ph = Math.min(pick([3.4, 3.8, 3.8, 4.2]), h, parent.h), p0 = { n: parent.z1, s: parent.z0 - L, e: parent.x1, w: parent.x0 - L }[side];
+    const pr = L > 0 && (ns ? R(c - hw, p0, c + hw, p0 + L, ph, { pass: true }) : R(p0, c - hw, p0 + L, c + hw, ph, { pass: true }));
+    if (pr ? hit(pr, parent) || hit(nr, null) : hit(nr, parent)) continue;
+    const dark = r() < 0.1 + Math.min(0.15, deep * 0.004);
+    Object.assign(nr, { kind, ent: OPP[side], doors: [], tint: pick(TINT), ptint: pick(PTINT), lc: pick(LCOL), bright: dark ? 0.3 : span(0.7, 1.15),
+      po: dark ? 0.85 : Math.min(0.7, Math.max(0, D.panelOff + span(-0.05, 0.2))), pf: D.panelFlick * span(0.4, 2) });
+    const door = { lo: L ? c - hw : Math.max(lo, a0), hi: L ? c + hw : Math.min(hi, a0 + along) };
+    if (!first) parent.doors.push({ side, ...door });
+    nr.doors.push({ side: OPP[side], ...door });
+    if (pr) { D.rooms.push(pr); passes.push(pr); }
+    D.rooms.push(nr); main.push(nr);
+  }
+
+  // ---- placement helpers (pools stay >= 2.5 m off walls with doors, so every doorway lands on deck)
+  const pool = (rm, rects, bottom, o = {}) => D.pools.push({ rects, bottom, water: D.waterY, tint: rm.ptint, ...o });
+  const inR = (x, z, rc, m) => x > rc[0] - m && x < rc[2] + m && z > rc[1] - m && z < rc[3] + m;
+  const inDoor = (rm, x, z, rad) => rm.doors.some(({ side, lo, hi }) => {
+    const a = side === 'n' || side === 's' ? x : z, v = { s: z - rm.z0, n: rm.z1 - z, w: x - rm.x0, e: rm.x1 - x }[side];
+    return a > lo - 0.6 - rad && a < hi + 0.6 + rad && v < 2.2 + rad;
+  });
+  const placed = [], hungAt = [];
+  const free = (rm, x, z, rad) => x > rm.x0 && x < rm.x1 && z > rm.z0 && z < rm.z1 && !inDoor(rm, x, z, rad) &&
+    !D.pools.some((p) => p.rects.some((rc) => inR(x, z, rc, rad + 0.3))) && !D.holes.some((rc) => inR(x, z, rc, rad + 0.15)) &&
+    !placed.some(([a, b, rr]) => Math.hypot(a - x, b - z) < rr + rad);
+  const columns = (rm, sp, cs) => {                                    // a centred grid of square columns, none in a doorway
+    const nx = Math.floor((rm.x1 - rm.x0 - 6) / sp) + 1, nz = Math.floor((rm.z1 - rm.z0 - 6) / sp) + 1;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+      const x = q((rm.x0 + rm.x1) / 2 + (i - (nx - 1) / 2) * sp), z = q((rm.z0 + rm.z1) / 2 + (j - (nz - 1) / 2) * sp);
+      if (!inDoor(rm, x, z, 0.9)) D.holes.push([x - cs, z - cs, x + cs, z + cs]);
     }
-    props.push((fi) => {
-      laneRopes(fi, ropes, px0, px1, D.waterY + 0.01);
-      ladder(fi, px0 + 1.5, pz0, 0, -b); ladder(fi, px1 - 1.5, pz0, 0, -b);
-      if (kick) kickboard(fi, px0 + 4, D.waterY, pz0 + 1.6);
-      decal(fi, tag, (px0 + px1) / 2, b, (pz0 + pz1) / 2, 'up', 2.2, false, Math.PI);
-    });
-  } else if (type === 'deep') {
-    const s = Math.max(6, q(Math.min(W, z1 - z0) - 8)), cz = q((z0 + z1) / 2), flam = r() < 0.35;
-    pool(-s / 2, cz - s / 2, s / 2, cz + s / 2, -4.5);
-    props.push((fi) => {
-      ladder(fi, s / 2, cz + 1.5, -Math.PI / 2, 4.5);
-      if (flam) flamingo(fi, 0, cz, D.waterY); else buoyFloat(fi, 1.2, D.waterY, cz - 1);
-      decal(fi, tag, 0, -4.5, cz, 'up', 2.6, false, Math.PI);
-    });
-  } else if (type === 'flood') {
-    pool(x0, z0, x1, z1, -0.36, { walk: true });
-    D.steps.push([-1.25, z0 - 0.75, 1.25, z0, -0.18, 1]);
-    if (W >= 18) for (let z = z0 + 4; z < z1 - 2.5; z += 6) for (const cx of [-q(W / 4), q(W / 4)]) D.holes.push([cx - 0.5, z - 0.5, cx + 0.5, z + 0.5]);
-    D.caus = 0.45; D.fog += 0.008;
-    props.push((fi) => { buoyFloat(fi, x0 + 4, D.waterY, (z0 + z1) / 2); decal(fi, tag, 0, -0.36, z1 - 4, 'up', 1.8, false, Math.PI); });
-  } else if (type === 'steps') {
-    const ps = z0 + 6;
-    D.waterY = -0.25; D.caus = 0.6; sideHi = ps - 1.5;
-    pool(x0, ps, x1, z1, -3.2);
-    for (let k = 0; k < 9; k++) D.steps.push([x0, ps + k * 0.5, x1, ps + 0.5 + k * 0.5, -0.15 - k * 0.35, k === 0 ? 1 : 0]);
-    props.push((fi) => {
-      for (const x of [-2.5, 2.5]) {
-        rail(fi, x, [[ps - 0.7, 0], [ps - 0.7, 0.88], [ps - 0.35, 0.98], [ps + 0.25, 0.72], [ps + 2.25, -0.68], [ps + 4.25, -2.08]], [[ps + 1.25, -0.85, 0]]);
-        floorData[fi].walk.push({ x0: x - 0.06, z0: ps - 0.8, x1: x + 0.06, z1: ps + 0.5, block: true });
-      }
-      decal(fi, tag, 0, -3.2, (ps + z1) / 2 + 2, 'up', 3, false, Math.PI);
-    });
-  } else if (type === 'drained') {
-    const px0 = x0 + 4, px1 = x1 - 4, pz0 = z0 + 3.5, pz1 = z1 - 3;
-    D.waterY = -1.95; D.caus = 0.4; D.fog += 0.01; D.panelOff = Math.min(0.5, D.panelOff + 0.1);
-    pool(px0, pz0, px1, pz1, -2, { water: null, walk: true });
-    pool(px0, pz1 - 4, px1, pz1, -2, { walk: true });                  // water left in the deep end
-    for (let k = 0; k < 4; k++) D.steps.push([px0, pz0 + k * 0.5, px0 + 3, pz0 + 0.5 + k * 0.5, -0.4 * (k + 1), 1]);
-    props.push((fi) => { ladder(fi, px1 - 1.5, pz1, Math.PI, 2.0); chair(fi, (px0 + px1) / 2, pz0 + 3, 0.7, 1, -2.0); decal(fi, tag, px0 + 6, -2.0, pz0 + 3, 'up', 1.8, false, Math.PI); });
-  } else if (type === 'twin') {
-    const b1 = -q(span(1.2, 1.6)), b2 = -q(span(2, 3));
-    pool(x0 + 3, z0 + 3, -1.5, z1 - 3, b1);
-    pool(1.5, z0 + 3, x1 - 3, z1 - 3, b2);
-    props.push((fi) => { ladder(fi, x0 + 4.5, z0 + 3, 0, -b1); ladder(fi, x1 - 4.5, z0 + 3, 0, -b2); decal(fi, tag, (x1 + 1.5) / 2 - 1.5, b2, (z0 + z1) / 2, 'up', 2, false, Math.PI); });
-  }
-  // up to two side rooms through short passages in the hall's side walls
-  for (const side of ['e', 'w']) {
-    if (plain || r() < 0.4 || sideHi < sideLo) continue;
-    const zc = q(span(sideLo, sideHi)), rw = q(span(7, 12)), rd = q(span(7, 11)), rh = q(span(3.8, 5));
-    const rx0 = side === 'e' ? x1 + 2 : x0 - 2 - rw, rz0 = q(zc - rd / 2), rcx = rx0 + rw / 2, rcz = rz0 + rd / 2, kind = pick(['tub', 'tub', 'empty', 'crt']);
-    D.rooms.push(side === 'e' ? R(x1, zc - 1.25, x1 + 2, zc + 1.25, 3.8) : R(x0 - 2, zc - 1.25, x0, zc + 1.25, 3.8), R(rx0, rz0, rx0 + rw, rz0 + rd, rh));
-    sideOpen[side] = true;
-    D.lights.push([rcx, rh - 0.3, rcz, 12, 0xdcefff, r() < 0.25 ? 1 : 0]);
-    if (r() < 0.6) D.wins.push([D.rooms.length - 1, side, q(rcz), 2.0, 1.4, Math.min(rh - 1.6, 2.6), 38, 0]);
-    if (kind === 'tub' && D.waterY > -1) {
-      pool(q(rcx - 1.5), q(rcz - 1.5), q(rcx + 1.5), q(rcz + 1.5), -0.55);
-      props.push((fi) => ladder(fi, q(rcx - 1.5), q(rcz), Math.PI / 2, 0.55, true));
-    } else if (kind === 'crt') {
-      const cx = side === 'e' ? rx0 + rw - 0.8 : rx0 + 0.8;
-      props.push((fi) => crt(fi, cx, rcz, side === 'e' ? -Math.PI / 2 : Math.PI / 2, CRT_GEN(f)));
-    }
-  }
-  // arched windows on the far wall and any side wall without a passage
-  const nw = Math.max(1, Math.min(4, Math.floor(W / 7))), wh = Math.min(H - 1.9, 4.4), el = q(span(30, 42));
-  for (let i = 0; i < nw; i++) D.wins.push([3, 'n', q(x0 + (i + 0.5) * W / nw), 2.4, type === 'steps' ? 2.2 : 1.5, wh, el, (r() - 0.5) * 0.3]);
-  for (const side of ['e', 'w']) if (!sideOpen[side] && r() < 0.5) D.wins.push([3, side, q((z0 + z1) / 2), 2.4, 1.6, wh, el + 4, (r() - 0.5) * 0.3]);
-  // lights: lobby, corridor, a grid over the hall (flicker grows with depth)
-  D.lights.push([0, 3.5, 3.1, 9, 0xdcefff], [0, 3.5, (5 + z0) / 2, 5, 0xdcefff, r() < 0.3 ? 1 : 0]);
-  const nx = W > 22 ? 2 : 1, nz = z1 - z0 > 20 ? 2 : 1;
-  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
-    D.lights.push([q(x0 + (i + 0.5) * W / nx), H - 0.3, q(z0 + (j + 0.5) * (z1 - z0) / nz), 30 + r() * 10, 0xe6f4ff, r() < 0.15 + deep * 0.005 ? 1 : 0]);
-  }
-  // furniture along the entrance wall, kept clear of every doorway
-  const towel = r() < 0.3, clockMode = r() < 0.45 ? pick(['real', 'stuck', 'reverse']) : null, monitor = !dry && r() < 0.3;
-  D.props = (fi) => {
-    decal(fi, 'X' + deep, -2.99, 1.75, 2.6, '+x', 1.2);
-    buoyWall(fi, x0 + 6, 1.7, z0 + 0.04, 0);
-    if (clockMode) clock(fi, 0, Math.min(H - 0.8, 4.6), z0, 0, clockMode);
-    if (!dry) { bench(fi, x0 + 3, z0 + 0.45, 0, 2.2, towel); bench(fi, x1 - 3, z0 + 0.45, 0, 2.2); chair(fi, x1 - 2.2, z0 + 2.2, Math.PI * 0.75); chair(fi, x1 - 3.0, z0 + 1.9, Math.PI * 0.9); }
-    if (monitor) crt(fi, x0 + 0.8, z0 + 2.3, Math.PI / 2, CRT_GEN(f));
-    for (const p of props) p(fi);
   };
+
+  // ---- what each room holds (all random choices are made here, the prop closures only replay them)
+  for (const rm of main) {
+    const { x0, z0, x1, z1 } = rm, W = x1 - x0, Dp = z1 - z0, mx = q((x0 + x1) / 2), mz = q((z0 + z1) / 2), E = wallFrame(rm, rm.ent);
+    const tag = 'X' + Math.floor(r() * 10);
+    if (rm.kind === 'lane') {                                          // lanes run along the pool's long side
+      const m = q(span(2.5, 4)), b = -q(span(1.3, 2.2)), rc = [x0 + m, z0 + m, x1 - m, z1 - m], ax = rc[2] - rc[0] >= rc[3] - rc[1], rp = [];
+      const [a0, a1, c0, c1] = ax ? [rc[0], rc[2], rc[1], rc[3]] : [rc[1], rc[3], rc[0], rc[2]];
+      pool(rm, [rc], b);
+      for (let cc = c0 + 1; cc < c1 - 0.5; cc += 2) {
+        D.extra.push(ax ? [a0 + 1.5, b, cc - 0.125, a1 - 1.5, b + 0.005, cc + 0.125] : [cc - 0.125, b, a0 + 1.5, cc + 0.125, b + 0.005, a1 - 1.5]);
+        if (cc + 1 < c1 - 0.5) rp.push(cc + 1);
+      }
+      const e = r() < 0.5, ce = e ? c0 : c1, ry = (ax ? 0 : Math.PI / 2) + (e ? 0 : Math.PI), kick = r() < 0.5;
+      props.push((fi) => {
+        laneRopes(fi, rp, a0, a1, D.waterY + 0.01, !ax);
+        for (const a of [a0 + 1.5, a1 - 1.5]) { if (ax) ladder(fi, a, ce, ry, -b); else ladder(fi, ce, a, ry, -b); }
+        if (kick) kickboard(fi, ax ? a0 + 4 : c0 + 1.6, D.waterY, ax ? c0 + 1.6 : a0 + 4);
+        decal(fi, tag, (rc[0] + rc[2]) / 2, b, (rc[1] + rc[3]) / 2, 'up', 2.2, false, ax ? Math.PI : Math.PI / 2);
+      });
+    } else if (rm.kind === 'deep') {                                   // one square, very deep pool somewhere off-centre
+      const s = Math.max(5, q(Math.min(W, Dp) - span(6, 9))), b = -q(span(3.5, 5)), what = pick(['flamingo', 'buoy', 'none']);
+      const px = q(mx - s / 2 + span(-1, 1) * Math.max(0, (W - s) / 2 - 3)), pz = q(mz - s / 2 + span(-1, 1) * Math.max(0, (Dp - s) / 2 - 3));
+      pool(rm, [[px, pz, px + s, pz + s]], b);
+      props.push((fi) => {
+        ladder(fi, px + s, pz + 1.5, -Math.PI / 2, -b);
+        if (what === 'flamingo') flamingo(fi, px + s / 2, pz + s / 2, D.waterY); else if (what === 'buoy') buoyFloat(fi, px + s / 2 + 1, D.waterY, pz + s / 2 - 1);
+        decal(fi, tag, px + s / 2, b, pz + s / 2, 'up', 2.6, false, Math.PI);
+      });
+    } else if (rm.kind === 'lpool') {                                  // L-shaped pool wrapping a random corner
+      const aw = q(span(3.5, 5)), b = -q(span(1.2, 1.8)), ix0 = x0 + 3, iz0 = z0 + 3, ix1 = x1 - 3, iz1 = z1 - 3, sx = r() < 0.5, sz = r() < 0.5;
+      const A = sz ? [ix0, iz0, ix1, iz0 + aw] : [ix0, iz1 - aw, ix1, iz1], Bv = sx ? [ix0, iz0, ix0 + aw, iz1] : [ix1 - aw, iz0, ix1, iz1];
+      pool(rm, [A, Bv], b);
+      props.push((fi) => {
+        ladder(fi, sx ? ix1 - 1.5 : ix0 + 1.5, sz ? iz0 + aw : iz1 - aw, sz ? Math.PI : 0, -b);
+        buoyFloat(fi, sx ? ix0 + aw / 2 : ix1 - aw / 2, D.waterY, sz ? iz0 + aw / 2 : iz1 - aw / 2);
+        decal(fi, tag, (ix0 + ix1) / 2, b, (A[1] + A[3]) / 2, 'up', 1.8, false, Math.PI);
+      });
+    } else if (rm.kind === 'flood') {                                  // ankle-deep water wall to wall, maybe a colonnade
+      pool(rm, [[x0, z0, x1, z1]], -0.36, { walk: true });
+      for (const dr of rm.doors) {
+        D.steps.push(dr.side === 'n' ? [dr.lo, z1 - 0.75, dr.hi, z1, -0.18, 1] : dr.side === 's' ? [dr.lo, z0, dr.hi, z0 + 0.75, -0.18, 1]
+          : dr.side === 'e' ? [x1 - 0.75, dr.lo, x1, dr.hi, -0.18, 1] : [x0, dr.lo, x0 + 0.75, dr.hi, -0.18, 1]);
+      }
+      if (Math.min(W, Dp) >= 14 && r() < 0.75) columns(rm, q(span(4.5, 6.5)), pick([0.25, 0.5, 0.5]));
+      props.push((fi) => { buoyFloat(fi, x0 + 1.5, D.waterY, mz); kickboard(fi, x1 - 1.5, D.waterY, mz + 1); decal(fi, tag, mx, -0.36, z1 - 4, 'up', 1.8, false, Math.PI); });
+    } else if (rm.kind === 'steps') {                                  // wide steps walking down into deep water, away from the door
+      const ps = q(span(5, 7)), alongX = rm.ent === 'e' || rm.ent === 'w', us = E.len >= 9 ? [E.len / 2 - 2.5, E.len / 2 + 2.5] : [E.len / 2];
+      pool(rm, [wrect(E, 0, ps, E.len, E.dep)], -3.2);
+      for (let k = 0; k < 9; k++) D.steps.push([...wrect(E, 0, ps + k * 0.5, E.len, ps + 0.5 + k * 0.5), -0.05 - k * 0.35, k === 0 ? 1 : 0]);
+      const [dx, dz] = E.P(E.len / 2, (ps + E.dep) / 2 + 1);
+      props.push((fi) => {
+        for (const u of us) {
+          const run = (v) => E.P(u, v)[alongX ? 0 : 1];
+          rail(fi, E.P(u, 0)[alongX ? 1 : 0], [[ps - 0.7, 0], [ps - 0.7, 0.88], [ps - 0.35, 0.98], [ps + 0.25, 0.72], [ps + 2.25, -0.58], [ps + 4.25, -1.98]].map(([v, y]) => [run(v), y]),
+            [[run(ps + 1.25), -0.75, 0.1]], alongX);
+          const [bx0, bz0, bx1, bz1] = wrect(E, u - 0.06, ps - 0.8, u + 0.06, ps + 0.5);
+          floorData[fi].walk.push({ x0: bx0, z0: bz0, x1: bx1, z1: bz1, block: true });
+        }
+        decal(fi, tag, dx, -3.2, dz, 'up', 3, false, Math.PI + E.ry);
+      });
+    } else if (rm.kind === 'drained') {                                // an emptied pool with steps in one corner
+      const m = q(span(3, 4)), rc = [x0 + m, z0 + m, x1 - m, z1 - m], sx = r() < 0.5, sz = r() < 0.5, sx0 = sx ? rc[0] : rc[2] - 3;
+      pool(rm, [rc], -2, { water: null, walk: true });
+      for (let k = 0; k < 4; k++) { const za = sz ? rc[1] + k * 0.5 : rc[3] - 0.5 - k * 0.5; D.steps.push([sx0, za, sx0 + 3, za + 0.5, -0.4 * (k + 1), 1]); }
+      props.push((fi) => {
+        ladder(fi, sx ? rc[2] - 1.5 : rc[0] + 1.5, sz ? rc[3] : rc[1], sz ? Math.PI : 0, 2.0);
+        chair(fi, (rc[0] + rc[2]) / 2 + 1, (rc[1] + rc[3]) / 2, 0.7, 1, -2.0);
+        decal(fi, tag, (rc[0] + rc[2]) / 2 - 2, -2.0, (rc[1] + rc[3]) / 2 + 1, 'up', 1.8, false, Math.PI);
+      });
+    } else if (rm.kind === 'twin') {                                   // two pools of different depth and colour, a walkway between
+      const b1 = -q(span(1.2, 1.6)), b2 = -q(span(2, 3)), ax = W >= Dp;
+      const P1 = ax ? [x0 + 3, z0 + 3, mx - 1.5, z1 - 3] : [x0 + 3, z0 + 3, x1 - 3, mz - 1.5], P2 = ax ? [mx + 1.5, z0 + 3, x1 - 3, z1 - 3] : [x0 + 3, mz + 1.5, x1 - 3, z1 - 3];
+      pool(rm, [P1], b1); pool(rm, [P2], b2, { tint: pick(PTINT) });
+      props.push((fi) => {
+        ladder(fi, P1[0] + 1.5, P1[1], 0, -b1); ladder(fi, P2[2] - 1.5, P2[1], 0, -b2);
+        decal(fi, tag, (P2[0] + P2[2]) / 2, b2, (P2[1] + P2[3]) / 2, 'up', 2, false, Math.PI);
+      });
+    } else if (rm.kind === 'island') {                                 // a ring of water round a dry island, one bridge facing the door
+      const O = [x0 + 3, z0 + 3, x1 - 3, z1 - 3], rw = q(Math.min(span(2.5, 4), (Math.min(O[2] - O[0], O[3] - O[1]) - 3) / 2)), b = -q(span(1.4, 2.5));
+      const I = [O[0] + rw, O[1] + rw, O[2] - rw, O[3] - rw], gx = q((I[0] + I[2]) / 2), gz = q((I[1] + I[3]) / 2), rects = [];
+      const strips = { s: [O[0], O[1], O[2], I[1]], n: [O[0], I[3], O[2], O[3]], w: [O[0], I[1], I[0], I[3]], e: [I[2], I[1], O[2], I[3]] };
+      for (const [sd, s] of Object.entries(strips)) {
+        if (sd !== rm.ent) rects.push(s);
+        else if (sd === 's' || sd === 'n') rects.push([s[0], s[1], gx - 1.25, s[3]], [gx + 1.25, s[1], s[2], s[3]]);
+        else rects.push([s[0], s[1], s[2], gz - 1.25], [s[0], gz + 1.25, s[2], s[3]]);
+      }
+      pool(rm, rects, b);
+      const far = strips[OPP[rm.ent]], fx = (far[0] + far[2]) / 2, fz = (far[1] + far[3]) / 2, what = pick(['crt', 'chair', 'bench', 'none']), face = E.ry + Math.PI;
+      placed.push([gx, gz, 1.2]);
+      props.push((fi) => {
+        if (what === 'crt') crt(fi, gx, gz, face, CRT_GEN(f)); else if (what === 'chair') chair(fi, gx, gz, face); else if (what === 'bench') bench(fi, gx, gz, E.ry, 2.2);
+        buoyFloat(fi, fx, D.waterY, fz);
+        decal(fi, tag, fx, b, fz, 'up', Math.min(2, rw - 0.4), false, Math.PI + E.ry);
+      });
+    } else if (rm.kind === 'tubs') {                                   // a few hot tubs on a grid, often under warm light
+      const ts = pick([2.5, 3]), nx = Math.max(1, Math.floor((W - 2.5) / (ts + 2.5))), nz = Math.max(1, Math.floor((Dp - 2.5) / (ts + 2.5))), cells = [];
+      for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) cells.push([i, j]);
+      for (let k = Math.min(cells.length, 2 + Math.floor(r() * 3)); k > 0; k--) {
+        const [i, j] = cells.splice(Math.floor(r() * cells.length), 1)[0];
+        const tx = q(mx - (nx * ts + (nx - 1) * 2.5) / 2 + i * (ts + 2.5)), tz = q(mz - (nz * ts + (nz - 1) * 2.5) / 2 + j * (ts + 2.5));
+        pool(rm, [[tx, tz, tx + ts, tz + ts]], -0.55);
+        D.steps.push([tx, tz, tx + ts, tz + 0.5, -0.32, 0]);
+        props.push((fi) => ladder(fi, tx, tz + ts / 2, Math.PI / 2, 0.55, true));
+      }
+      if (r() < 0.6) rm.lc = 0xffe0c0;
+    } else if (rm.kind === 'pillars') {                                // a dry colonnade
+      columns(rm, q(span(3.5, 6)), pick([0.25, 0.5, 0.5]));
+    } else if (rm.kind === 'nook') {                                   // a small dim room with one thing in it
+      const what = pick(['crt', 'crt', 'chair', 'clock', 'tub']), Bk = wallFrame(rm, OPP[rm.ent]);
+      rm.bright *= 0.7;
+      if (what === 'tub' && Math.min(W, Dp) >= 7) { pool(rm, [[mx - 1.25, mz - 1.25, mx + 1.25, mz + 1.25]], -0.55); props.push((fi) => ladder(fi, mx - 1.25, mz, Math.PI / 2, 0.55, true)); }
+      else if (what === 'crt') { const [x, z] = Bk.P(Bk.len / 2, 0.8); placed.push([x, z, 0.6]); props.push((fi) => crt(fi, x, z, Bk.ry, CRT_GEN(f))); }
+      else if (what === 'chair') { const ry = r() * Math.PI * 2; placed.push([mx, mz, 0.5]); props.push((fi) => chair(fi, mx, mz, ry)); }
+      else { const [x, z] = Bk.P(Bk.len / 2, 0), y = Math.min(rm.h - 0.8, 2.6), mode = pick(['stuck', 'reverse']); hungAt.push([x, z]); props.push((fi) => clock(fi, x, y, z, Bk.ry, mode)); }
+    }
+  }
+
+  // ---- arched windows on stretches of wall clear of doorways; the beam must land on this room's floor
+  for (const rm of main) {
+    rm.winU = [];
+    if (rm.h < 4.4) continue;
+    const el = q(span(30, 46)), tn = Math.tan(el * Math.PI / 180), ww = pick([2, 2.4, 2.4, 2.6]), sk = (r() - 0.5) * 0.3;
+    for (const side of ['n', 'e', 'w', 's']) {
+      if (D.wins.length >= MAX_WIN || r() < (side === rm.ent ? 0.8 : 0.45)) continue;
+      const F = wallFrame(rm, side), sill = q(span(1.4, rm.kind === 'steps' ? 2.4 : 1.9)), wh = q(Math.min(4.4, rm.h - sill - 0.6, (F.dep - 0.5) * tn - sill));
+      if (wh < 2) continue;
+      let segs = [[1, F.len - 1]];
+      for (const dr of rm.doors) if (dr.side === side) {
+        const a = toU(rm, side, dr.lo), b = toU(rm, side, dr.hi), u0 = Math.min(a, b) - 1.2, u1 = Math.max(a, b) + 1.2;
+        segs = segs.flatMap(([s0, s1]) => [[s0, Math.min(s1, u0)], [Math.max(s0, u1), s1]]);
+      }
+      for (const [s0, s1] of segs) {
+        const n = Math.min(4, Math.floor((s1 - s0) / (ww + 2.5)), MAX_WIN - D.wins.length);
+        for (let i = 0; i < n; i++) {
+          const u = q(s0 + (i + 0.5) * (s1 - s0) / n), [x, z] = F.P(u, 0);
+          D.wins.push([D.rooms.indexOf(rm), side, side === 'n' || side === 's' ? x : z, ww, sill, wh, el, i % 2 ? -sk : sk]);
+          rm.winU.push([side, u - ww / 2 - 0.4, u + ww / 2 + 0.4]);
+        }
+      }
+    }
+  }
+
+  // ---- loose furniture and things hung on walls, rolled per room; anything landing in water, a doorway or another prop is dropped
+  const SIDES = ['n', 'e', 'w', 's'];
+  const spot = (rm, v, rad, hung = false) => {
+    for (let k = 0; k < 8; k++) {
+      const side = pick(SIDES), F = wallFrame(rm, side), u = q(span(rad + 0.6, F.len - rad - 0.6)), [x, z] = F.P(u, v);
+      const ok = hung ? !inDoor(rm, x, z, rad) && !rm.winU.some(([s, a, b]) => s === side && u + rad > a && u - rad < b) && !hungAt.some(([a, b]) => Math.hypot(a - x, b - z) < rad + 0.8)
+        : free(rm, x, z, rad);
+      if (F.len > 2 * rad + 1.2 && ok) return { x, z, ry: F.ry, side };
+    }
+    return null;
+  };
+  for (const rm of main) {
+    const wet = rm.kind === 'flood';                                   // flooded rooms get only what hangs on the walls
+    for (let i = pick([0, 1, 1, 2]); i > 0 && !wet; i--) {
+      const s = spot(rm, 0.45, 1.15), towel = r() < 0.3;
+      if (s) { placed.push([s.x, s.z, 1.15]); props.push((fi) => bench(fi, s.x, s.z, s.ry, 2.2, towel)); }
+    }
+    for (let i = pick([0, 1, 2, 3]); i > 0 && !wet; i--) {
+      const x = q(span(rm.x0 + 0.6, rm.x1 - 0.6)), z = q(span(rm.z0 + 0.6, rm.z1 - 0.6)), ry = r() * Math.PI * 2, tip = r() < 0.12 ? 1 : 0;
+      if (free(rm, x, z, 0.4)) { placed.push([x, z, 0.4]); props.push((fi) => chair(fi, x, z, ry, tip)); }
+    }
+    if (!wet && rm.kind !== 'nook' && r() < 0.15) { const s = spot(rm, 0.8, 0.5); if (s) { placed.push([s.x, s.z, 0.5]); props.push((fi) => crt(fi, s.x, s.z, s.ry, CRT_GEN(f))); } }
+    if (!wet && r() < 0.2) {
+      const x = q(span(rm.x0 + 1, rm.x1 - 1)), z = q(span(rm.z0 + 1, rm.z1 - 1)), ry = r() * Math.PI * 2;
+      if (free(rm, x, z, 0.3)) { placed.push([x, z, 0.3]); props.push((fi) => flipflops(fi, x, z, ry)); }
+    }
+    if (r() < 0.5) { const s = spot(rm, 0.04, 0.4, true); if (s) { hungAt.push([s.x, s.z]); props.push((fi) => buoyWall(fi, s.x, 1.7, s.z, s.ry)); } }
+    if (r() < 0.35) {
+      const s = spot(rm, 0, 0.4, true), y = Math.min(rm.h - 0.8, q(span(3, 4.6))), mode = pick(['real', 'stuck', 'reverse']);
+      if (s) { hungAt.push([s.x, s.z]); props.push((fi) => clock(fi, s.x, y, s.z, s.ry, mode)); }
+    }
+    if (r() < 0.45) {
+      const s = spot(rm, 0, 0.8, true), lab = 'X' + Math.floor(r() * 10), y = q(span(1.5, 2.4)), sz = q(span(1, 1.6));
+      if (s) { hungAt.push([s.x, s.z]); props.push((fi) => decal(fi, lab, s.x, y, s.z, FACE[s.side], sz)); }
+    }
+  }
+
+  // ---- lights: lobby, corridor, one per room in its own colour; big rooms get a second and long passages a dim one while the ten last
+  D.lights.push([0, 3.5, 3.1, 9, 0xdcefff], [0, 3.5, (5 + cz) / 2, 5, 0xdcefff, r() < 0.3 ? 1 : 0]);
+  let spare = 10 - D.lights.length - main.length;
+  const nL = main.map(() => 1);
+  main.map((rm, i) => [(rm.x1 - rm.x0) * (rm.z1 - rm.z0), i]).sort((a, b) => b[0] - a[0]).forEach(([area, i]) => { if (area > 200 && spare > 0) { nL[i] = 2; spare--; } });
+  main.forEach((rm, i) => {
+    const W = rm.x1 - rm.x0, Dp = rm.z1 - rm.z0, n = nL[i], I = Math.min(44, Math.max(9, 1.7 * rm.h + 0.09 * W * Dp / n)) * rm.bright;
+    for (let k = 0; k < n; k++) {
+      const t = n === 1 ? 0.5 : 0.25 + 0.5 * k;
+      D.lights.push([q(W >= Dp ? rm.x0 + t * W : (rm.x0 + rm.x1) / 2), rm.h - 0.3, q(W >= Dp ? (rm.z0 + rm.z1) / 2 : rm.z0 + t * Dp), I, rm.lc,
+        r() < 0.12 + deep * 0.005 + (rm.bright < 0.5 ? 0.3 : 0) ? 1 : 0]);
+    }
+  });
+  for (const p of passes) if (spare > 0 && Math.max(p.x1 - p.x0, p.z1 - p.z0) >= 5) { spare--; D.lights.push([(p.x0 + p.x1) / 2, p.h - 0.3, (p.z0 + p.z1) / 2, 4, 0xdcefff, r() < 0.4 ? 1 : 0]); }
+
+  D.props = (fi) => { decal(fi, 'X' + deep, -2.99, 1.75, 2.6, '+x', 1.2); for (const p of props) p(fi); };
   return D;
 }
 
@@ -1051,28 +1229,31 @@ function buildFloor(fi) {
   const geos = [];
 
   // solid floor columns (deck / pool bottoms / steps) — their side faces become the pool walls
-  const fkey = new Array(N * N).fill(null);
+  const fkey = new Array(N * N).fill(null), tints = [WHITE], tIdx = (t = WHITE) => { const k = tints.indexOf(t); return k < 0 ? tints.push(t) - 1 : k; };
   for (let j = 2; j < N - 2; j++) for (let i = 2; i < N - 2; i++) {
     const c = j * N + i; if (!open(c)) continue;
-    let type = 'p';
+    let type = 'p', t = pool[c] >= 0 ? D.pools[pool[c]].tint : D.rooms[room[c]].tint;
     if (pool[c] < 0 && isNaN(step[c])) {
       type = 'd';
-      near: for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) if (pool[c + b * N + a] >= 0) { type = 'c'; break near; }
+      near: for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) { const p = pool[c + b * N + a]; if (p >= 0) { type = 'c'; t = D.pools[p].tint; break near; } }
     }
-    fkey[c] = top(c) + '|' + type;
+    fkey[c] = top(c) + '|' + type + '|' + tIdx(t);
   }
-  for (const r of greedy(fkey, N)) { const [t, type] = r.key.split('|'); tbox(geos, r.x0, B - 5, r.z0, r.x1, B + parseFloat(t), r.z1, type === 'c' ? COPING : WHITE); }
+  for (const r of greedy(fkey, N)) {
+    const [t, type, ti] = r.key.split('|'), tc = tints[ti];
+    tbox(geos, r.x0, B - 5, r.z0, r.x1, B + parseFloat(t), r.z1, type === 'c' ? COPING.map((v, k) => v * tc[k]) : tc);
+  }
 
   // walls: every closed cell touching an open cell, as tall as the tallest neighbouring room
   const wkey = new Array(N * N).fill(null);
   for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) {
     const c = j * N + i; if (room[c] >= 0) continue;
-    let h = -1;
-    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const k = room[c + b * N + a]; if (k >= 0) h = Math.max(h, D.rooms[k].h); }
-    if (h > 0) wkey[c] = String(h);
+    let h = -1, t;
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const k = room[c + b * N + a]; if (k >= 0 && D.rooms[k].h > h) { h = D.rooms[k].h; t = D.rooms[k].tint; } }
+    if (h > 0) wkey[c] = h + '|' + tIdx(t);
   }
-  for (const r of greedy(wkey, N)) tbox(geos, r.x0, B - 5, r.z0, r.x1, B + parseFloat(r.key) + 0.3, r.z1);
-  D.rooms.forEach((r) => { if (!r.shaft) tbox(geos, r.x0, B + r.h, r.z0, r.x1, B + r.h + 0.3, r.z1); });
+  for (const r of greedy(wkey, N)) { const [h, ti] = r.key.split('|'); tbox(geos, r.x0, B - 5, r.z0, r.x1, B + parseFloat(h) + 0.3, r.z1, tints[ti]); }
+  D.rooms.forEach((r) => { if (!r.shaft) tbox(geos, r.x0, B + r.h, r.z0, r.x1, B + r.h + 0.3, r.z1, r.tint); });
 
   // arched doorways wherever two rooms touch (slab sits in the lower room, flush with the taller room's wall)
   const rs = D.rooms;
@@ -1086,7 +1267,7 @@ function buildFloor(fi) {
     const g = new THREE.ExtrudeGeometry(archShape(w, 2.3, Math.min(w / 2, low.h - 0.15 - 2.3), tall.h + 0.3), { depth: CELL, bevelEnabled: false, curveSegments: 24 });
     if (line.ax === 'z') g.translate(line.lo, B, low.z0 === line.c ? line.c : line.c - CELL);
     else { g.rotateY(-Math.PI / 2); g.translate(low.x0 === line.c ? line.c + CELL : line.c, B, line.lo); }
-    geos.push(prepTile(g, WHITE));
+    geos.push(prepTile(g, tall.tint || WHITE));
   }
   // elevator landing wall with door opening
   const lobby = rs.find((r) => r.lobby);
@@ -1151,12 +1332,13 @@ function buildFloor(fi) {
       const nx = Math.max(1, Math.round(w / 4.4)), nz = Math.max(1, Math.round(d / 4.4));
       for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) pts.push([Rr.x0 + (i + 0.5) * w / nx, Rr.z0 + (j + 0.5) * d / nz]);
     }
+    const po = Rr.po ?? D.panelOff, pf = Rr.pf ?? D.panelFlick;
     for (const [px, pz] of pts) {
       const m = mtx(px, B + Rr.h, pz, alongX ? 0 : Math.PI / 2);
       put(fi, M.panelFrame, new THREE.BoxGeometry(1.32, 0.05, 0.68).translate(0, -0.025, 0), m);
       const q = pr(), pg = new THREE.BoxGeometry(1.2, 0.02, 0.58).translate(0, -0.06, 0);
-      if (q < D.panelOff) put(fi, M.panelOff, pg, m);
-      else if (q < D.panelOff + D.panelFlick) { const mat = M.panelOn.clone(); group.add(new THREE.Mesh(pg.applyMatrix4(m), mat)); flickers.push({ mat, base: mat.color.clone(), seed: pr() * 100, fi }); }
+      if (q < po) put(fi, M.panelOff, pg, m);
+      else if (q < po + pf) { const mat = M.panelOn.clone(); group.add(new THREE.Mesh(pg.applyMatrix4(m), mat)); flickers.push({ mat, base: mat.color.clone(), seed: pr() * 100, fi }); }
       else put(fi, M.panelOn, pg, m);
     }
   });
@@ -1197,10 +1379,10 @@ function ladder(fi, x, z, ry, depth, single = false) {
   if (!single) for (let y = -0.28; y > -d + 0.05; y -= 0.3) put(fi, M.chrome, new THREE.BoxGeometry(0.5, 0.025, 0.08).translate(0, y, 0.14), m);
   blockRot(fi, x, z, ry, single ? 0.06 : 0.3, 0.06);
 }
-function rail(fi, x, pts, posts) {
-  const B = 0;
-  put(fi, M.chrome, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(([zz, yy]) => V3(x, B + yy, zz)), false, 'catmullrom', 0.2), 60, 0.025, 8, false));
-  for (const [zz, y0, y1] of posts) put(fi, M.chrome, new THREE.CylinderGeometry(0.02, 0.02, y1 - y0, 8).translate(x, B + (y0 + y1) / 2, zz));
+function rail(fi, x, pts, posts, alongX = false) {                   // pts/posts run along z at this x (or along x at this z)
+  const P = (a, y) => (alongX ? V3(a, y, x) : V3(x, y, a));
+  put(fi, M.chrome, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(([a, y]) => P(a, y)), false, 'catmullrom', 0.2), 60, 0.025, 8, false));
+  for (const [a, y0, y1] of posts) { const c = P(a, (y0 + y1) / 2); put(fi, M.chrome, new THREE.CylinderGeometry(0.02, 0.02, y1 - y0, 8).translate(c.x, c.y, c.z)); }
 }
 const buoyWall = (fi, x, y, z, ry) => put(fi, M.buoy, new THREE.TorusGeometry(0.3, 0.075, 12, 32), mtx(x, y, z, ry));
 function floater(fi, obj, x, y, z, drift = 0) {
@@ -1242,13 +1424,14 @@ function flamingo(fi, x, z, waterY) {
   g.scale.setScalar(1.25);
   floater(fi, g, x, waterY + 0.13, z, 1.0);
 }
-function laneRopes(fi, zs, x0, x1, y) {
-  const n = Math.floor((x1 - x0) / 0.13), im = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.055, 0.055, 0.11, 10).rotateZ(Math.PI / 2), M.rope, n * zs.length);
+function laneRopes(fi, zs, x0, x1, y, alongZ = false) {              // ropes along x at each z (or along z at each x)
+  const n = Math.floor((x1 - x0) / 0.13), cyl = new THREE.CylinderGeometry(0.055, 0.055, 0.11, 10);
+  const im = new THREE.InstancedMesh(alongZ ? cyl.rotateX(Math.PI / 2) : cyl.rotateZ(Math.PI / 2), M.rope, n * zs.length);
   const m = new THREE.Matrix4(), col = new THREE.Color();
   let k = 0;
   for (const z of zs) for (let i = 0; i < n; i++) {
     const x = x0 + (i + 0.5) * (x1 - x0) / n;
-    im.setMatrixAt(k, m.makeTranslation(x, y, z));
+    im.setMatrixAt(k, alongZ ? m.makeTranslation(z, y, x) : m.makeTranslation(x, y, z));
     im.setColorAt(k++, col.set(Math.min(x - x0, x1 - x) < 5 ? 0xd62828 : (i % 2 ? 0xf2f2f2 : 0x1d4fbf)));
   }
   im.userData.fi = fi; floorGroups[fi].add(im); ropes.push(im);
@@ -1528,7 +1711,8 @@ function updatePlayer(dt, input) {
   const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
   let tx = fx * f + rx * s, tz = fz * f + rz * s;
   const l = Math.hypot(tx, tz);
-  const wet = player.gy < floorData[player.floor].D.waterY - 0.05 && !player.inCab;
+  const wade = floorData[player.floor].D.pools.findLast((p) => p.rects.some((q) => player.x > q[0] && player.x < q[2] && player.z > q[1] && player.z < q[3]));
+  const wet = !player.inCab && !!wade && wade.water !== null && player.gy < wade.water - 0.05;
   const speed = (keys.ShiftLeft || keys.ShiftRight ? 2.5 : 1.5) * (wet ? 0.7 : 1);
   if (l > 0) { tx = tx / l * speed; tz = tz / l * speed; }
   const k = 1 - Math.exp(-dt * 4.5);                       // heavy, slow-to-respond walk
@@ -1804,7 +1988,7 @@ requestAnimationFrame(frame);
 // small handle for automated checks / debugging from the console
 window.__pr = { player, elev, crts, setFloor, elevRequest, simulate, interact: doInteract, U, scene, floorGroups, camera,
   tp(fi, x, z, yaw = player.yaw, pitch = 0) { ensureFloor(fi); setFloor(fi); Object.assign(player, { x, z, yaw, pitch, gy: groundAt(x, z) ?? 0, vx: 0, vz: 0 }); },
-  aimed: () => aimed && aimed.label(), setActive: (v) => { active = v; }, keys, groundAt };
+  aimed: () => aimed && aimed.label(), setActive: (v) => { active = v; }, keys, groundAt, genFloor, reachable };
 </script>
 <script type="module">
 // =====================================================================================
