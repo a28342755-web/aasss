@@ -1,5 +1,7 @@
-// The pistol in all three modes: 1 draws it; a shot lands on the wall that is drawn where it was aimed (within 3 cm, facing back);
-// the magazine runs dry and reloads itself; the Backrooms creature staggers and the hard-mode entity dissolves when hit.
+// The guns in all three modes: 1 draws the pistol; a shot lands on the wall that is drawn where it was aimed (within 3 cm, facing
+// back); the magazine runs dry and reloads itself; 2 swaps to the rifle, which fires on its own while the trigger is held, with both
+// gloves on it (each hand within 1 mm of where it belongs on the gun); the Backrooms creature staggers and the hard-mode entity
+// dissolves when hit.
 // Exits 1 on any failure.
 // Run from anywhere: node poolrooms/test/gun.mjs   (needs Playwright: npm i -D playwright && npx playwright install chromium)
 import { chromium } from 'playwright';
@@ -25,20 +27,29 @@ async function open(card, hook) {
     pr.setActive(true); pr.setView(false);
     const step = (s) => { for (let i = 0; i < Math.round(s * 60); i++) { pr.simulate(1 / 60); g.update(1 / 60); } };
     pr.tp(1, 2, 5, -Math.PI / 2, 0);                                     // in the lobby, facing +x
-    g.st.want = true; step(0.5);
+    g.toggle('pistol'); step(0.5);
     const cam = pr.camera; cam.position.set(2, 1.62, 5); cam.rotation.set(0, -Math.PI / 2, 0); cam.updateMatrixWorld();
     const rc = new T.Raycaster(); rc.setFromCamera(new T.Vector2(0, 0), cam);   // what is really drawn straight ahead
     out.wall = rc.intersectObjects(pr.floorGroups[1].children, true).find((h) => h.distance > 0.2)?.distance;
     out.fired = g.fire(); out.hit = g.st.hit && Math.hypot(g.st.hit.p[0] - 2, g.st.hit.p[1] - 1.62, g.st.hit.p[2] - 5); out.n = g.st.hit && g.st.hit.n;
     for (let i = 0; i < 12; i++) { step(0.2); g.fire(); }                // 8 rounds, then a dry click starts the reload
-    out.reloading = g.st.reload >= 0; step(1.8); out.ammo = g.st.ammo;
+    out.reloading = g.st.reload >= 0; step(2.2); out.ammo = g.st.ammo.pistol;
+    // the rifle: swap, hold the trigger for a second; both hands where they belong on it
+    g.toggle('rifle'); step(1.0); out.rifle = g.cur;
+    const B = pr.me.body.B, gun = pr.scene.getObjectByName('rifle'), hands = {};
+    for (const [s, h] of [['Right', [0.03, -0.0463, 0.071]], ['Left', [-0.054, 0.0852, -0.258]]]) hands[s] = B[s + 'Hand'].getWorldPosition(new T.Vector3()).distanceTo(gun.localToWorld(new T.Vector3(...h)));
+    out.hands = hands; const a0 = g.st.ammo.rifle; g.trigger(true); step(1.0); g.trigger(false); out.burst = a0 - g.st.ammo.rifle;
     return out;
   });
   if (!r.fired) bad.push('poolrooms: the drawn gun did not fire');
   else if (!r.hit || Math.abs(r.hit - r.wall) > 0.03) bad.push(`poolrooms: shot landed ${r.hit && r.hit.toFixed(3)} m ahead, the drawn wall is at ${r.wall && r.wall.toFixed(3)} m`);
   else if (r.n[0] !== -1) bad.push(`poolrooms: bullet hole faces ${r.n}`);
   if (!r.reloading || r.ammo !== 8) bad.push(`poolrooms: empty magazine reloading ${r.reloading}, ammo after ${r.ammo}`);
-  console.log(`poolrooms: shot landed ${r.hit && r.hit.toFixed(3)} m ahead, wall drawn at ${r.wall && r.wall.toFixed(3)} m, reload ok ${r.reloading && r.ammo === 8}`);
+  if (r.rifle !== 'rifle') bad.push(`poolrooms: key 2 left ${r.rifle} in hand`);
+  for (const s in r.hands || {}) if (!(r.hands[s] < 0.001)) bad.push(`poolrooms: ${s.toLowerCase()} glove ${(r.hands[s] * 100).toFixed(1)} cm off the rifle`);
+  if (!(r.burst >= 9)) bad.push(`poolrooms: holding the trigger fired ${r.burst} rifle rounds in a second`);
+  console.log(`poolrooms: shot landed ${r.hit && r.hit.toFixed(3)} m ahead, wall drawn at ${r.wall && r.wall.toFixed(3)} m, reload ok ${r.reloading && r.ammo === 8}, ` +
+    `rifle burst ${r.burst} rounds, gloves off the rifle by ${Object.values(r.hands || {}).map((d) => (d * 1000).toFixed(2) + ' mm').join(' / ')}`);
   await page.close();
 }
 
