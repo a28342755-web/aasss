@@ -941,7 +941,6 @@ scene.add(new THREE.HemisphereLight(0x8fc9c4, 0x050a0a, 0.14));
 const CRT_GEN = (f) => ['FETCHING DATA_', 'LOADING...', '', `> FLOOR ${flab(f)} ........ UNMAPPED`, '> WATER LEVEL ...... RISING',
   '> EXIT ............. NOT FOUND', '', 'THE ELEVATOR GOES FURTHER THAN THE BUILDING.', 'KEEP COUNTING THE FLOORS.', '', 'SIGNAL LOST_'];
 const genCache = new Map();
-const floorDef = genFloor;
 function genFloor(f) {
   if (!genCache.has(f)) {
     let D = null;
@@ -1365,7 +1364,7 @@ function disposeFloor(fi) {
 }
 
 function buildFloor(fi) {
-  const D = floorDef(fi), B = 0, N = GN;                // built in floor-local space; the group sits at base(fi)
+  const D = genFloor(fi), B = 0, N = GN;                // built in floor-local space; the group sits at base(fi)
   const group = new THREE.Group(); group.position.y = base(fi); scene.add(group); floorGroups[fi] = group;
   const room = new Int16Array(N * N).fill(-1), pool = new Int16Array(N * N).fill(-1), step = new Float32Array(N * N).fill(NaN);
   const I = (x) => Math.round((x - PLAN.x0) / CELL), J = (z) => Math.round((z - PLAN.z0) / CELL);
@@ -1540,11 +1539,9 @@ function floater(fi, obj, x, y, z, drift = 0) {
   floaters.push({ obj, x, y, z, drift, seed: x * 1.7 + z, fi });
 }
 const buoyFloat = (fi, x, y, z) => floater(fi, new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.075, 12, 32).rotateX(Math.PI / 2), M.buoy), x, y + 0.02, z, 0.25);
-const decalMats = {};
 function decal(fi, label, x, y, z, face, size = 1.4, drips = true, spin = 0) {
-  const key = label + drips, make = () => new THREE.MeshStandardMaterial({ map: decalTex(label, drips), transparent: true, depthWrite: false, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-  const shared = fi >= 0 && fi <= 3, mat = shared ? decalMats[key] || (decalMats[key] = make()) : make();
-  if (!shared) mat.map.userData.own = true;                          // generated floors free their decals with the floor
+  const mat = new THREE.MeshStandardMaterial({ map: decalTex(label, drips), transparent: true, depthWrite: false, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  mat.map.userData.own = true;                                       // freed with its floor
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size * 0.5), mat);
   const n = { '+x': [1, 0, 0], '-x': [-1, 0, 0], '+z': [0, 0, 1], '-z': [0, 0, -1], up: [0, 1, 0] }[face];
   mesh.position.set(x + n[0] * 0.006, y + n[1] * 0.006, z + n[2] * 0.006);
@@ -2032,25 +2029,13 @@ const groundOn = (fi, x, z) => { const W = floorData[fi].walk; for (let k = W.le
 const deckOK = (fi, x, z, rad) => RING.every(([a, b]) => groundOn(fi, x + a * rad, z + b * rad) === 0);   // dry deck under the whole body
 const angTo = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
-async function embeddedGLB(id) {                                       // a gzipped GLB stored as base64 in a <script type="text/plain"> tag
-  const bin = atob($(id).textContent.trim()), raw = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
-  const glb = await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
-  return new GLTFLoader().parseAsync(glb, '');
-}
+const embeddedGLB = (id) => window.__unpackGLB(id).then((glb) => new GLTFLoader().parseAsync(glb, ''));   // a gzipped GLB stored as base64 in a <script type="text/plain"> tag
 (async () => {
   try {
     const gltf = await embeddedGLB('pr-hazmat');
-    const root = new THREE.Group(); root.add(gltf.scene);                // (rig() turns off culling: the stride swings the limbs outside the bind-pose bounds)
-    const rig = (obj) => {                                               // bones by name, gloves half closed (the clips leave the fingers alone), a mixer
-      const sk = obj.getObjectByProperty('type', 'SkinnedMesh'), B = Object.fromEntries(sk.skeleton.bones.map((b) => [b.name, b]));
-      sk.frustumCulled = false;
-      for (const [s, k] of [['Left', -1], ['Right', 1]]) { B[s + 'Fingers1'].rotation.set(0, 0, k * 0.35); B[s + 'Fingers2'].rotation.set(0, 0, k * 0.45); B[s + 'Thumb1'].rotation.set(0.15, 0, k * 0.25); }
-      const mixer = new THREE.AnimationMixer(obj), act = (n) => mixer.clipAction(gltf.animations.find((c) => c.name === n)).play();
-      return { B, mixer, act };
-    };
-    const n = rig(gltf.scene);
-    Object.assign(npc, { root, B: n.B, mixer: n.mixer, idle: n.act('idle'), walk: n.act('walk') });
+    const n = window.__hazmatBody(THREE, gltf, gltf.scene, 1.5, 2.5);   // the NPC: the shared suit setup; it sets its own walk weight and speed every frame
+    n.run.stop();
+    Object.assign(npc, { root: n.root, B: n.B, mixer: n.mixer, idle: n.idle, walk: n.walk });
     me.body = window.__hazmatBody(THREE, gltf, cloneRig(gltf.scene), 1.5, 2.5);   // the player's own body for the third-person view
     me.body.root.visible = false; scene.add(me.body.root);
     npcSetup(player.floor);
@@ -2158,8 +2143,8 @@ try {
   resize();
   setFloor(1);
 
-  // self-checks: handmade and sample generated floors are fully walkable from the elevator; the spawn is free
-  for (const f of [0, 1, 2, 3, 4, 7, 12, 57, -1, -9]) console.assert(reachable(floorDef(f)), `floor ${flab(f)} has a room you cannot walk to`);
+  // self-checks: sample floors are fully walkable from the elevator; the spawn is free
+  for (const f of [0, 1, 2, 3, 4, 7, 12, 57, -1, -9]) console.assert(reachable(genFloor(f)), `floor ${flab(f)} has a room you cannot walk to`);
   console.assert(canStand(player.x, player.z, 0), 'spawn blocked');
 
   camera.layers.enableAll(); updateCamera(); renderer.compile(scene, camera); camera.layers.set(0);

@@ -27,6 +27,18 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Check the chat renderer
+        run: node --test app/src/test/js/markdown.test.mjs
+
+      # One fixed signing key for every build, so a new APK installs over the old one and the saved chats survive.
+      # Without the DEBUG_KEYSTORE_B64 secret, Gradle makes a new random key on this fresh machine.
+      - name: Restore the signing key
+        env:
+          KS: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > ~/.android/debug.keystore; else echo "::warning::DEBUG_KEYSTORE_B64 is not set: this APK cannot update an installed one"; fi
+
       - name: Build installable APK
         run: |
           gradle :app:assembleDebug

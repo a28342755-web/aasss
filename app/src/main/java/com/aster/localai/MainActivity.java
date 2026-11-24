@@ -60,8 +60,6 @@ public class MainActivity extends Activity {
         webView.setBackgroundColor(Color.TRANSPARENT);
         webView.getSettings().setJavaScriptEnabled(true);
         webView.getSettings().setDomStorageEnabled(true);
-        webView.getSettings().setDatabaseEnabled(true);
-        webView.getSettings().setAllowFileAccess(true);
         webView.getSettings().setAllowContentAccess(false);
         webView.getSettings().setTextZoom(100);
         webView.setWebChromeClient(new WebChromeClient());
@@ -122,7 +120,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void checkHealth(String serverUrl) {
-            executor.execute(() -> healthCheck(serverUrl));
+            new Thread(() -> healthCheck(serverUrl)).start();   // not on the chat thread: a slow answer must not hold up the test
         }
     }
 

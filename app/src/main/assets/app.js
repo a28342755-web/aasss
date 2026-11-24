@@ -31,7 +31,7 @@ function renderMarkdown(source) {
   const close = () => { if (list) { output.push(`</${list}>`); list = null; } };
   for (const line of tokenized.split("\n")) {
     const t = line.trim(); const code = t.match(/^@@CODE_(\d+)@@$/);
-    if (code) { close(); const b = blocks[Number(code[1])]; output.push(`<div class="code-block"><div class="code-toolbar"><span>${b.language}</span><button type="button" data-code="${code[1]}">복사</button></div><pre><code>${b.code}</code></pre></div>`); continue; }
+    if (code && blocks[code[1]]) { close(); const b = blocks[Number(code[1])]; output.push(`<div class="code-block"><div class="code-toolbar"><span>${b.language}</span><button type="button" data-code="${code[1]}">복사</button></div><pre><code>${b.code}</code></pre></div>`); continue; }
     if (!t) { close(); continue; }
     const h = t.match(/^(#{1,3})\s+(.+)$/); if (h) { close(); output.push(`<h${h[1].length}>${renderInline(h[2])}</h${h[1].length}>`); continue; }
     const ul = t.match(/^[-*]\s+(.+)$/); if (ul) { if (list !== "ul") { close(); list = "ul"; output.push("<ul>"); } output.push(`<li>${renderInline(ul[1])}</li>`); continue; }
@@ -92,11 +92,16 @@ function sendMessage(raw) {
   if (!window.AsterNative) { alert("안드로이드 앱에서 실행해야 합니다."); return; }
   messages.push({ role: "user", content: text }); messages.push({ role: "assistant", content: "" }); assistantIndex = messages.length - 1;
   elements.input.value = ""; resize(); setGenerating(true); renderConversation(assistantIndex); bottom(); save();
-  window.AsterNative.sendChat(JSON.stringify({ server_url: elements.serverUrl.value.trim(), messages: messages.slice(0, -1), model: elements.model.value.trim(), system_prompt: elements.systemPrompt.value, temperature: Number(elements.temperature.value), max_tokens: Number(elements.maxTokens.value) }));
+  window.AsterNative.sendChat(JSON.stringify({ server_url: elements.serverUrl.value.trim(), messages: messages.slice(0, -1).filter((m) => !m.status), model: elements.model.value.trim(), system_prompt: elements.systemPrompt.value, temperature: Number(elements.temperature.value), max_tokens: Number(elements.maxTokens.value) }));
 }
-window.__asterOnChunk = chunk => { if (assistantIndex < 0) return; messages[assistantIndex].content += chunk; updateAssistant(true); bottom(); };
-window.__asterOnDone = cancelled => { if (assistantIndex >= 0 && !messages[assistantIndex].content.trim()) messages[assistantIndex].content = cancelled ? "생성이 중지되었습니다." : "모델이 빈 응답을 반환했습니다."; finish(); };
-window.__asterOnError = error => { if (assistantIndex >= 0) messages[assistantIndex].content = `연결 오류: ${error}\n\n설정에서 PC의 Ollama 주소와 방화벽을 확인하세요.`; finish(); };
+let drawPending = false;   // redraw at most once per frame: each redraw re-renders the whole answer
+window.__asterOnChunk = chunk => {
+  if (assistantIndex < 0) return; messages[assistantIndex].content += chunk;
+  if (!drawPending) { drawPending = true; requestAnimationFrame(() => { drawPending = false; if (assistantIndex >= 0) { updateAssistant(true); bottom(); } }); }
+};
+// status lines are the app talking, not the model: marked so they are never sent back as the model's words
+window.__asterOnDone = cancelled => { const m = messages[assistantIndex]; if (m && !m.content.trim()) Object.assign(m, { content: cancelled ? "생성이 중지되었습니다." : "모델이 빈 응답을 반환했습니다.", status: true }); finish(); };
+window.__asterOnError = error => { const m = messages[assistantIndex]; if (m) Object.assign(m, { content: `${m.content.trim() ? m.content + "\n\n" : ""}연결 오류: ${error}\n\n설정에서 PC의 Ollama 주소와 방화벽을 확인하세요.`, status: true }); finish(); };
 function finish() { updateAssistant(false); setGenerating(false); save(); assistantIndex = -1; elements.input.disabled = false; elements.input.focus(); }
 window.__asterHealthResult = raw => {
   let data; try { data = JSON.parse(raw); } catch { data = { ok: false, error: "응답 해석 실패" }; }
@@ -109,7 +114,7 @@ elements.form.onsubmit = event => { event.preventDefault(); sendMessage(elements
 elements.input.oninput = resize;
 elements.input.onkeydown = event => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendMessage(elements.input.value); } };
 elements.stop.onclick = () => { if (window.AsterNative) window.AsterNative.cancelChat(); };
-elements.newChat.onclick = () => { if (isGenerating && window.AsterNative) window.AsterNative.cancelChat(); messages = []; assistantIndex = -1; setGenerating(false); save(); renderConversation(); };
+elements.newChat.onclick = () => { if (messages.length && !confirm("현재 대화를 지울까요?")) return; if (isGenerating && window.AsterNative) window.AsterNative.cancelChat(); messages = []; assistantIndex = -1; setGenerating(false); save(); renderConversation(); };
 elements.settingsButton.onclick = openSettings; elements.closeSettings.onclick = closeSettings; elements.backdrop.onclick = closeSettings;
 elements.testConnection.onclick = () => { elements.statusDot.className = "status-dot"; elements.statusText.textContent = "연결 확인 중…"; save(); if (window.AsterNative) window.AsterNative.checkHealth(elements.serverUrl.value.trim()); };
 [elements.serverUrl, elements.model, elements.systemPrompt, elements.temperature, elements.maxTokens].forEach(control => control.oninput = () => { sync(); save(); });
