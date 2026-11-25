@@ -2,6 +2,7 @@
 // back); the magazine runs dry and reloads itself; 2 swaps to the rifle, which fires on its own while the trigger is held, with both
 // gloves on it (each hand within 1 mm of where it belongs on the gun); the Backrooms creature staggers and the hard-mode entity
 // dissolves when hit. The sounds come from the recorded sound sheet: each shot, the reload's magazine and slide, the dry click.
+// In third person the rifle sling's strap runs from swivel to swivel, with the rifle in the hands and on the back.
 // Exits 1 on any failure.
 // Run from anywhere: node poolrooms/test/gun.mjs   (needs Playwright: npm i -D playwright && npx playwright install chromium)
 import { chromium } from 'playwright';
@@ -42,6 +43,13 @@ async function open(card, hook) {
     const B = pr.me.body.B, gun = pr.scene.getObjectByName('rifle'), hands = {};
     for (const [s, h] of [['Right', [0.03, -0.0463, 0.071]], ['Left', [-0.054, 0.0852, -0.258]]]) hands[s] = B[s + 'Hand'].getWorldPosition(new T.Vector3()).distanceTo(gun.localToWorld(new T.Vector3(...h)));
     out.hands = hands; const a0 = g.st.ammo.rifle; g.trigger(true); step(1.0); g.trigger(false); out.burst = a0 - g.st.ammo.rifle;
+    pr.setView(true); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));   // third person: the camera finds its distance
+    const sling = () => {
+      const s = pr.scene.getObjectByName('rifle-sling'), p = s.geometry.attributes.position.array, n = p.length / 3, rifle = pr.scene.getObjectByName('rifle');
+      const mid = (a) => { const v = new T.Vector3(); for (let k = a; k < a + 8; k++) v.add(new T.Vector3(p[k * 3], p[k * 3 + 1], p[k * 3 + 2])); return v.multiplyScalar(1 / 8); };
+      return { shown: s.visible, nan: p.some(Number.isNaN), front: mid(0).distanceTo(rifle.localToWorld(new T.Vector3(...s.userData.ends[0]))), rear: mid(n - 8).distanceTo(rifle.localToWorld(new T.Vector3(...s.userData.ends[1]))) };
+    };
+    step(0.3); out.slingDrawn = sling(); g.toggle('rifle'); step(1.0); out.slingStowed = sling();
     return out;
   });
   if (!r.fired) bad.push('poolrooms: the drawn gun did not fire');
@@ -53,10 +61,14 @@ async function open(card, hook) {
   if (!(r.burst >= 9)) bad.push(`poolrooms: holding the trigger fired ${r.burst} rifle rounds in a second`);
   // sheet offsets (start - 10 ms): pistol takes 0.11 / 1.73, rifle 3.35 / 4.87, magazine out 7.655, in 8.548, slide 8.115, dry 8.863
   const played = (offs) => r.sfx.filter((o) => offs.some((x) => Math.abs(o - x) < 0.002)).length;
+  for (const k of ['slingDrawn', 'slingStowed']) {
+    const q = r[k];
+    if (!q.shown || q.nan || !(q.front < 0.01 && q.rear < 0.01)) bad.push(`poolrooms: ${k}: strap shown ${q.shown}, NaN ${q.nan}, ends ${(q.front * 100).toFixed(1)} / ${(q.rear * 100).toFixed(1)} cm off the swivels`);
+  }
   for (const [what, offs, n] of [['pistol shot', [0.11, 1.73], 6], ['rifle shot', [3.35, 4.87], 9], ['magazine out', [7.655], 1], ['magazine in', [8.548], 1], ['slide', [8.115], 1], ['dry click', [8.863], 1]])
     if (played(offs) < n) bad.push(`poolrooms: ${what} played ${played(offs)} times from the sound sheet (want ${n})`);
   console.log(`poolrooms: shot landed ${r.hit && r.hit.toFixed(3)} m ahead, wall drawn at ${r.wall && r.wall.toFixed(3)} m, reload ok ${r.reloading && r.ammo === 8}, ` +
-    `rifle burst ${r.burst} rounds, gloves off the rifle by ${Object.values(r.hands || {}).map((d) => (d * 1000).toFixed(2) + ' mm').join(' / ')}, ${r.sfx.length} recorded sounds`);
+    `rifle burst ${r.burst} rounds, gloves off the rifle by ${Object.values(r.hands || {}).map((d) => (d * 1000).toFixed(2) + ' mm').join(' / ')}, ${r.sfx.length} recorded sounds, sling ends ${[r.slingDrawn, r.slingStowed].map((q) => (Math.max(q.front, q.rear) * 1000).toFixed(1) + ' mm').join(' / ')}`);
   await page.close();
 }
 
