@@ -1,7 +1,7 @@
 // The guns in all three modes: 1 draws the pistol; a shot lands on the wall that is drawn where it was aimed (within 3 cm, facing
 // back); the magazine runs dry and reloads itself; 2 swaps to the rifle, which fires on its own while the trigger is held, with both
 // gloves on it (each hand within 1 mm of where it belongs on the gun); the Backrooms creature staggers and the hard-mode entity
-// dissolves when hit.
+// dissolves when hit. The sounds come from the recorded sound sheet: each shot, the reload's magazine and slide, the dry click.
 // Exits 1 on any failure.
 // Run from anywhere: node poolrooms/test/gun.mjs   (needs Playwright: npm i -D playwright && npx playwright install chromium)
 import { chromium } from 'playwright';
@@ -25,6 +25,8 @@ async function open(card, hook) {
   const r = await page.evaluate(async () => {
     const T = await import('three'), pr = window.__pr, g = pr.me.gun, out = {};
     pr.setActive(true); pr.setView(false);
+    const sfx = out.sfx = [], start0 = AudioBufferSourceNode.prototype.start;     // which part of the sound sheet each sound plays
+    AudioBufferSourceNode.prototype.start = function (t, off) { if (this.buffer && this.buffer.duration > 9) sfx.push(+(off || 0).toFixed(3)); return start0.apply(this, arguments); };
     const step = (s) => { for (let i = 0; i < Math.round(s * 60); i++) { pr.simulate(1 / 60); g.update(1 / 60); } };
     pr.tp(1, 2, 5, -Math.PI / 2, 0);                                     // in the lobby, facing +x
     g.toggle('pistol'); step(0.5);
@@ -32,6 +34,7 @@ async function open(card, hook) {
     const rc = new T.Raycaster(); rc.setFromCamera(new T.Vector2(0, 0), cam);   // what is really drawn straight ahead
     out.wall = rc.intersectObjects(pr.floorGroups[1].children, true).find((h) => h.distance > 0.2)?.distance;
     out.fired = g.fire(); out.hit = g.st.hit && Math.hypot(g.st.hit.p[0] - 2, g.st.hit.p[1] - 1.62, g.st.hit.p[2] - 5); out.n = g.st.hit && g.st.hit.n;
+    await new Promise((r) => setTimeout(r, 600));                        // the first shot starts decoding the sheet
     for (let i = 0; i < 12; i++) { step(0.2); g.fire(); }                // 8 rounds, then a dry click starts the reload
     out.reloading = g.st.reload >= 0; step(2.2); out.ammo = g.st.ammo.pistol;
     // the rifle: swap, hold the trigger for a second; both hands where they belong on it
@@ -48,8 +51,12 @@ async function open(card, hook) {
   if (r.rifle !== 'rifle') bad.push(`poolrooms: key 2 left ${r.rifle} in hand`);
   for (const s in r.hands || {}) if (!(r.hands[s] < 0.001)) bad.push(`poolrooms: ${s.toLowerCase()} glove ${(r.hands[s] * 100).toFixed(1)} cm off the rifle`);
   if (!(r.burst >= 9)) bad.push(`poolrooms: holding the trigger fired ${r.burst} rifle rounds in a second`);
+  // sheet offsets (start - 10 ms): pistol takes 0.11 / 1.73, rifle 3.35 / 4.87, magazine out 7.655, in 8.548, slide 8.115, dry 8.863
+  const played = (offs) => r.sfx.filter((o) => offs.some((x) => Math.abs(o - x) < 0.002)).length;
+  for (const [what, offs, n] of [['pistol shot', [0.11, 1.73], 6], ['rifle shot', [3.35, 4.87], 9], ['magazine out', [7.655], 1], ['magazine in', [8.548], 1], ['slide', [8.115], 1], ['dry click', [8.863], 1]])
+    if (played(offs) < n) bad.push(`poolrooms: ${what} played ${played(offs)} times from the sound sheet (want ${n})`);
   console.log(`poolrooms: shot landed ${r.hit && r.hit.toFixed(3)} m ahead, wall drawn at ${r.wall && r.wall.toFixed(3)} m, reload ok ${r.reloading && r.ammo === 8}, ` +
-    `rifle burst ${r.burst} rounds, gloves off the rifle by ${Object.values(r.hands || {}).map((d) => (d * 1000).toFixed(2) + ' mm').join(' / ')}`);
+    `rifle burst ${r.burst} rounds, gloves off the rifle by ${Object.values(r.hands || {}).map((d) => (d * 1000).toFixed(2) + ' mm').join(' / ')}, ${r.sfx.length} recorded sounds`);
   await page.close();
 }
 
